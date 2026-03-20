@@ -1,0 +1,2 @@
+rich>=13.7,<14
+prompt_toolkit>=3.0,<4
