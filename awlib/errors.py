@@ -1,0 +1,2 @@
+class TaskRunnerError(Exception):
+    pass
