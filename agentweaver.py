@@ -14,8 +14,41 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+from awlib.artifacts import (
+    READY_TO_MERGE_FILE,
+    REVIEW_FILE_RE,
+    REVIEW_REPLY_FILE_RE,
+    artifact_file,
+    design_file,
+    plan_artifacts,
+    plan_file,
+    qa_file,
+    require_artifacts,
+    task_summary_file,
+)
+from awlib.errors import TaskRunnerError
+from awlib.jira import (
+    build_jira_api_url,
+    build_jira_browse_url,
+    extract_issue_key,
+    fetch_jira_issue,
+    require_jira_task_file,
+)
+from awlib.prompts import (
+    AUTO_REVIEW_FIX_EXTRA_PROMPT,
+    IMPLEMENT_PROMPT_TEMPLATE,
+    PLAN_PROMPT_TEMPLATE,
+    REVIEW_FIX_PROMPT_TEMPLATE,
+    REVIEW_PROMPT_TEMPLATE,
+    REVIEW_REPLY_PROMPT_TEMPLATE,
+    REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
+    REVIEW_SUMMARY_PROMPT_TEMPLATE,
+    TASK_SUMMARY_PROMPT_TEMPLATE,
+    TEST_FIX_PROMPT_TEMPLATE,
+    TEST_LINTER_FIX_PROMPT_TEMPLATE,
+    format_prompt,
+)
 
 try:
     from prompt_toolkit import PromptSession
@@ -46,73 +79,14 @@ COMMANDS = (
     "auto-status",
     "auto-reset",
 )
-ISSUE_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*-[0-9]+$")
-REVIEW_FILE_RE = re.compile(r"^review-(.+)-(\d+)\.md$")
-REVIEW_REPLY_FILE_RE = re.compile(r"^review-reply-(.+)-(\d+)\.md$")
 DEFAULT_CODEX_MODEL = "gpt-5.4"
 DEFAULT_CLAUDE_REVIEW_MODEL = "opus"
 DEFAULT_CLAUDE_SUMMARY_MODEL = "haiku"
 HISTORY_FILE = Path("/home/seko/.codex/memories/agentweaver-history")
-READY_TO_MERGE_FILE = "ready-to-merge.md"
 AUTO_STATE_SCHEMA_VERSION = 1
 AUTO_MAX_REVIEW_ITERATIONS = 3
 console = Console()
 error_console = Console(stderr=True)
-
-# Prompts
-BASE_PROMPT_HEADER = "Основная задача:"
-EXTRA_PROMPT_HEADER = "Дополнительные указания:"
-PLAN_PROMPT_TEMPLATE = (
-    "Посмотри и проанализируй задачу в {jira_task_file}. "
-    "Разработай системный дизайн решения, запиши в {design_file}. "
-    "Разработай подробный план реализации и запиши его в {plan_file}. "
-    "Разработай план тестирования для QA и запиши в {qa_file}. "
-)
-IMPLEMENT_PROMPT_TEMPLATE = (
-    "Проанализируй системный дизайн {design_file}, план реализации {plan_file} и приступай к реализации по плану. "
-    "По окончании обязательно прогони вне песочницы линтер, все тесты, сгенерируй make swagger. "
-    "Исправь ошибки линтера и тестов, если будут."
-)
-REVIEW_PROMPT_TEMPLATE = (
-    "Проведи код-ревью текущих изменений. "
-    "Сверься с задачей в {jira_task_file}, дизайном {design_file} и планом {plan_file}. "
-    "Замечания и комментарии запиши в {review_file}. "
-    "Если больше нет блокеров, препятствующих merge - создай файл ready-to-merge.md."
-)
-REVIEW_REPLY_PROMPT_TEMPLATE = (
-    "Твой коллега провёл код-ревью и записал комментарии в {review_file}. "
-    "Проанализируй комментарии к код-ревью, сверься с задачей в {jira_task_file}, "
-    "дизайном {design_file}, планом {plan_file} и запиши свои комментарии в {review_reply_file}."
-)
-REVIEW_SUMMARY_PROMPT_TEMPLATE = (
-    "Посмотри в {review_file}. "
-    "Сделай краткий список комментариев без подробностей, 3-7 пунктов. "
-    "Запиши результат в {review_summary_file}."
-)
-REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE = (
-    "Посмотри в {review_reply_file}. "
-    "Сделай краткий список ответов и итоговых действий без подробностей, 3-7 пунктов. "
-    "Запиши результат в {review_reply_summary_file}."
-)
-REVIEW_FIX_PROMPT_TEMPLATE = (
-    "Проанализируй комментарии в {review_reply_file}. "
-    "Исправь то, что содержится в дополнительных указаниях, а если таковых нет - исправь все пункты. "
-    "По окончании обязательно прогони вне песочницы линтер, все тесты, сгенерируй make swagger. "
-    "Исправь ошибки линтера и тестов, если будут. "
-    "По завершении резюме запиши в {review_fix_file}."
-)
-TASK_SUMMARY_PROMPT_TEMPLATE = (
-    "Посмотри в {jira_task_file}. "
-    "Сделай краткое резюме задачи, на 1-2 абзаца, "
-    "запиши в {task_summary_file}."
-)
-TEST_FIX_PROMPT_TEMPLATE = "Прогони тесты, исправь ошибки."
-TEST_LINTER_FIX_PROMPT_TEMPLATE = "Прогони линтер, исправь замечания."
-AUTO_REVIEW_FIX_EXTRA_PROMPT = "Исправлять только блокеры, критикалы и важные"
-
-
-class TaskRunnerError(Exception):
-    pass
 
 
 @dataclass
@@ -367,26 +341,6 @@ def print_auto_phases_help() -> None:
     console.print(Panel("\n".join(phase_lines), title="Auto Phases", border_style="magenta"))
 
 
-def design_file(task_key: str) -> str:
-    return artifact_file("design", task_key, 1)
-
-
-def plan_file(task_key: str) -> str:
-    return artifact_file("plan", task_key, 1)
-
-
-def qa_file(task_key: str) -> str:
-    return artifact_file("qa", task_key, 1)
-
-
-def task_summary_file(task_key: str) -> str:
-    return artifact_file("task", task_key, 1)
-
-
-def plan_artifacts(task_key: str) -> tuple[str, ...]:
-    return (design_file(task_key), plan_file(task_key), qa_file(task_key))
-
-
 def load_env_file(env_file: Path) -> None:
     if not env_file.is_file():
         return
@@ -627,75 +581,6 @@ def resolve_docker_compose_cmd() -> list[str]:
     return ["docker", "compose"]
 
 
-def extract_issue_key(jira_ref: str) -> str:
-    normalized_ref = jira_ref.rstrip("/")
-    if "://" in normalized_ref:
-        issue_key = normalized_ref.rsplit("/", 1)[-1]
-        if "/browse/" not in normalized_ref or not issue_key:
-            raise TaskRunnerError(
-                "Expected Jira browse URL like https://jira.example.ru/browse/DEMO-3288"
-            )
-        return issue_key
-
-    issue_key = normalized_ref
-    if not ISSUE_KEY_RE.match(issue_key):
-        raise TaskRunnerError(
-            "Expected Jira issue key like DEMO-3288 or browse URL like https://jira.example.ru/browse/DEMO-3288"
-        )
-    return issue_key
-
-
-def build_jira_browse_url(jira_ref: str) -> str:
-    if "://" in jira_ref:
-        return jira_ref.rstrip("/")
-
-    base_url = os.environ.get("JIRA_BASE_URL", "").rstrip("/")
-    if not base_url:
-        raise TaskRunnerError("JIRA_BASE_URL is required when passing only a Jira issue key.")
-
-    return f"{base_url}/browse/{extract_issue_key(jira_ref)}"
-
-
-def build_jira_api_url(jira_ref: str) -> str:
-    browse_url = build_jira_browse_url(jira_ref)
-    issue_key = extract_issue_key(jira_ref)
-    base_url = browse_url.rsplit("/browse/", 1)[0]
-    return f"{base_url}/rest/api/2/issue/{issue_key}"
-
-
-def fetch_jira_issue(jira_api_url: str, jira_task_file: str) -> None:
-    jira_api_key = os.environ.get("JIRA_API_KEY")
-    if not jira_api_key:
-        raise TaskRunnerError("JIRA_API_KEY is required for plan mode.")
-
-    request = Request(
-        jira_api_url,
-        headers={
-            "Authorization": f"Bearer {jira_api_key}",
-            "Accept": "application/json",
-        },
-    )
-
-    try:
-        with urlopen(request) as response:
-            Path(jira_task_file).write_bytes(response.read())
-    except HTTPError as exc:
-        raise TaskRunnerError(f"Failed to fetch Jira issue: HTTP {exc.code}") from exc
-    except URLError as exc:
-        raise TaskRunnerError(f"Failed to fetch Jira issue: {exc.reason}") from exc
-
-
-def require_jira_task_file(jira_task_file: str) -> None:
-    if not Path(jira_task_file).is_file():
-        raise TaskRunnerError(f"Jira issue JSON not found: {jira_task_file}\nRun plan mode first to download the Jira task.")
-
-
-def require_artifacts(paths: tuple[str, ...] | list[str], message: str) -> None:
-    missing = [path for path in paths if not Path(path).is_file()]
-    if missing:
-        raise TaskRunnerError(f"{message}\nMissing files: {', '.join(missing)}")
-
-
 def next_review_iteration_for_task(workdir: Path, task_key: str) -> int:
     max_index = 0
     for entry in workdir.iterdir():
@@ -736,15 +621,6 @@ def format_duration(seconds: float) -> str:
     total_seconds = max(0, int(seconds))
     minutes, secs = divmod(total_seconds, 60)
     return f"{minutes:02d}:{secs:02d}"
-
-
-def format_prompt(base_prompt: str, extra_prompt: str | None = None) -> str:
-    sections = [f"{BASE_PROMPT_HEADER}\n{base_prompt.strip()}"]
-
-    if extra_prompt and extra_prompt.strip():
-        sections.append(f"{EXTRA_PROMPT_HEADER}\n{extra_prompt.strip()}")
-
-    return "\n\n".join(sections)
 
 
 def run_codex_in_docker(
