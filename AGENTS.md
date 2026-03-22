@@ -25,6 +25,9 @@ docker compose run --rm codex-exec   # execute Codex inside the container
 ## Coding Style & Naming Conventions
 Follow TypeScript/Node conventions: 2-space or existing-file indentation consistency, `camelCase` for functions and variables, `PascalCase` for classes/types, and `UPPER_CASE` for module-level constants. Keep imports grouped and prefer focused modules over large inline blocks when extending command handlers or TUI components.
 
+## Language For Artifacts
+Design docs, implementation plans, architecture notes, and similar project artifacts created in the repository must be written in Russian by default, unless the user explicitly asks for another language.
+
 ## Testing Guidelines
 No committed automated test suite exists yet, so every change should include at least `npm run check` and one CLI smoke test. Prefer adding tests under `tests/` for new behavior. When changing Docker execution paths, also validate the relevant `docker compose run --rm ...` flow.
 
