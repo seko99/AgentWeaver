@@ -22,3 +22,8 @@ export type FlowRunResult = {
     result: FlowStepResult;
   }>;
 };
+
+export type FlowRunOptions<TParams> = {
+  onStepStart?: (step: FlowStepDefinition<TParams>) => void | Promise<void>;
+  onStepComplete?: (step: FlowStepDefinition<TParams>, result: FlowStepResult) => void | Promise<void>;
+};

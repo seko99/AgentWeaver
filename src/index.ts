@@ -40,12 +40,13 @@ import {
   formatTemplate,
 } from "./prompts.js";
 import { createPipelineContext } from "./pipeline/context.js";
-import { runImplementFlow } from "./pipeline/flows/implement-flow.js";
-import { runPlanFlow } from "./pipeline/flows/plan-flow.js";
-import { runReviewFixFlow } from "./pipeline/flows/review-fix-flow.js";
-import { runReviewFlow } from "./pipeline/flows/review-flow.js";
+import { runFlow } from "./pipeline/flow-runner.js";
+import { implementFlowDefinition, runImplementFlow } from "./pipeline/flows/implement-flow.js";
+import { planFlowDefinition, runPlanFlow } from "./pipeline/flows/plan-flow.js";
+import { createReviewFixFlowDefinition, runReviewFixFlow } from "./pipeline/flows/review-fix-flow.js";
+import { createReviewFlowDefinition, runReviewFlow } from "./pipeline/flows/review-flow.js";
 import { runTestFixFlow } from "./pipeline/flows/test-fix-flow.js";
-import { runTestFlow } from "./pipeline/flows/test-flow.js";
+import { runTestFlow, testFlowDefinition } from "./pipeline/flows/test-flow.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
@@ -478,6 +479,140 @@ function configForAutoStep(baseConfig: Config, step: AutoStepState): Config {
   return buildPhaseConfig(baseConfig, step.command);
 }
 
+async function runAutoStepViaFlow(
+  config: Config,
+  step: AutoStepState,
+  codexCmd: string,
+  claudeCmd: string,
+  state: AutoPipelineState,
+): Promise<boolean> {
+  const context = createPipelineContext({
+    issueKey: config.taskKey,
+    jiraRef: config.jiraRef,
+    dryRun: config.dryRun,
+    verbose: config.verbose,
+    runtime: runtimeServices,
+  });
+  const onStepStart = async (flowStep: { id: string }) => {
+    state.currentStep = `${step.id}:${flowStep.id}`;
+    saveAutoPipelineState(state);
+  };
+
+  if (step.command === "plan") {
+    await runFlow(
+      planFlowDefinition,
+      context,
+      {
+        jiraApiUrl: config.jiraApiUrl,
+        jiraTaskFile: config.jiraTaskFile,
+        taskKey: config.taskKey,
+        codexCmd,
+        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
+      },
+      { onStepStart },
+    );
+    return false;
+  }
+
+  if (step.command === "implement") {
+    const implementPrompt = formatPrompt(
+      formatTemplate(IMPLEMENT_PROMPT_TEMPLATE, {
+        design_file: designFile(config.taskKey),
+        plan_file: planFile(config.taskKey),
+      }),
+      config.extraPrompt,
+    );
+    await runFlow(
+      implementFlowDefinition,
+      context,
+      {
+        dockerComposeFile: config.dockerComposeFile,
+        prompt: implementPrompt,
+        runFollowupVerify: false,
+        ...(!config.dryRun
+          ? {
+              onVerifyBuildFailure: async (output: string) => {
+                printError("Build verification failed");
+                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+              },
+            }
+          : {}),
+      },
+      { onStepStart },
+    );
+    return false;
+  }
+
+  if (step.command === "test") {
+    await runFlow(
+      testFlowDefinition,
+      context,
+      {
+        taskKey: config.taskKey,
+        dockerComposeFile: config.dockerComposeFile,
+        ...(!config.dryRun
+          ? {
+              onVerifyBuildFailure: async (output: string) => {
+                printError("Build verification failed");
+                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+              },
+            }
+          : {}),
+      },
+      { onStepStart },
+    );
+    return false;
+  }
+
+  if (step.command === "review") {
+    const iteration = step.reviewIteration ?? nextReviewIterationForTask(config.taskKey);
+    const result = await runFlow(
+      createReviewFlowDefinition(iteration),
+      context,
+      {
+        jiraTaskFile: config.jiraTaskFile,
+        taskKey: config.taskKey,
+        claudeCmd,
+        codexCmd,
+        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
+      },
+      { onStepStart },
+    );
+    return result.steps.find((candidate) => candidate.id === "check_ready_to_merge")?.result.metadata?.readyToMerge === true;
+  }
+
+  if (step.command === "review-fix") {
+    const latestIteration = step.reviewIteration ?? latestReviewReplyIteration(config.taskKey);
+    if (latestIteration === null) {
+      throw new TaskRunnerError(`Review-fix mode requires at least one review-reply-${config.taskKey}-N.md artifact.`);
+    }
+    await runFlow(
+      createReviewFixFlowDefinition(latestIteration),
+      context,
+      {
+        taskKey: config.taskKey,
+        dockerComposeFile: config.dockerComposeFile,
+        latestIteration,
+        ...(config.reviewFixPoints !== undefined ? { reviewFixPoints: config.reviewFixPoints } : {}),
+        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
+        runFollowupVerify: false,
+        ...(!config.dryRun
+          ? {
+              onVerifyBuildFailure: async (output: string) => {
+                printError("Build verification failed");
+                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+              },
+            }
+          : {}),
+      },
+      { onStepStart },
+    );
+    return false;
+  }
+
+  throw new TaskRunnerError(`Unsupported auto step command: ${step.command}`);
+}
+
 function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): void {
   const targetPhaseId = validateAutoPhaseId(phaseId);
   let phaseSeen = false;
@@ -797,21 +932,32 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
 }
 
 async function runAutoPipelineDryRun(config: Config): Promise<void> {
+  const { codexCmd, claudeCmd } = checkPrerequisites(config);
   printInfo("Dry-run auto pipeline: plan -> implement -> test -> review/review-fix/test");
-  await executeCommand(buildPhaseConfig(config, "plan"));
-  await executeCommand(buildPhaseConfig(config, "implement"), false);
-  await executeCommand(buildPhaseConfig(config, "test"));
+  const dryState = createAutoPipelineState(config);
+  await runAutoStepViaFlow(buildPhaseConfig(config, "plan"), dryState.steps[0]!, codexCmd, claudeCmd, dryState);
+  await runAutoStepViaFlow(buildPhaseConfig(config, "implement"), dryState.steps[1]!, codexCmd, claudeCmd, dryState);
+  await runAutoStepViaFlow(buildPhaseConfig(config, "test"), dryState.steps[2]!, codexCmd, claudeCmd, dryState);
   for (let iteration = 1; iteration <= AUTO_MAX_REVIEW_ITERATIONS; iteration += 1) {
     printInfo(`Dry-run auto review iteration ${iteration}/${AUTO_MAX_REVIEW_ITERATIONS}`);
-    await executeCommand(buildPhaseConfig(config, "review"));
-    await executeCommand(
+    const reviewStep = dryState.steps.find((step) => step.id === `review_${iteration}`);
+    const reviewFixStep = dryState.steps.find((step) => step.id === `review_fix_${iteration}`);
+    const testStep = dryState.steps.find((step) => step.id === `test_after_review_fix_${iteration}`);
+    if (!reviewStep || !reviewFixStep || !testStep) {
+      throw new TaskRunnerError(`Missing auto dry-run steps for iteration ${iteration}`);
+    }
+    await runAutoStepViaFlow(buildPhaseConfig(config, "review"), reviewStep, codexCmd, claudeCmd, dryState);
+    await runAutoStepViaFlow(
       {
         ...buildPhaseConfig(config, "review-fix"),
         extraPrompt: appendPromptText(config.extraPrompt, AUTO_REVIEW_FIX_EXTRA_PROMPT),
       },
-      false,
+      reviewFixStep,
+      codexCmd,
+      claudeCmd,
+      dryState,
     );
-    await executeCommand(buildPhaseConfig(config, "test"));
+    await runAutoStepViaFlow(buildPhaseConfig(config, "test"), testStep, codexCmd, claudeCmd, dryState);
   }
 }
 
@@ -821,6 +967,7 @@ async function runAutoPipeline(config: Config): Promise<void> {
     return;
   }
 
+  const { codexCmd, claudeCmd } = checkPrerequisites(config);
   let state = loadAutoPipelineState(config) ?? createAutoPipelineState(config);
   if (config.autoFromPhase) {
     rewindAutoPipelineState(state, config.autoFromPhase);
@@ -863,10 +1010,7 @@ async function runAutoPipeline(config: Config): Promise<void> {
 
     try {
       printInfo(`Running auto step: ${step.id}`);
-      const readyToMerge = await executeCommand(
-        configForAutoStep(config, step),
-        !["implement", "review-fix"].includes(step.command),
-      );
+      const readyToMerge = await runAutoStepViaFlow(configForAutoStep(config, step), step, codexCmd, claudeCmd, state);
       step.status = "done";
       step.finishedAt = nowIso8601();
       step.returnCode = 0;

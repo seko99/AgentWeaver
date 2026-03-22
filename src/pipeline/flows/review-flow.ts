@@ -41,18 +41,8 @@ export type ReviewFlowParams = {
   codexCmd: string;
 };
 
-async function runReviewFlowInternal(
-  context: PipelineContext,
-  params: ReviewFlowParams,
-  iteration: number,
-): Promise<{ readyToMerge: boolean }> {
-  requireArtifacts(planArtifacts(params.taskKey), "Review mode requires plan artifacts from the planning phase.");
-  const reviewFile = artifactFile("review", params.taskKey, iteration);
-  const reviewSummaryFile = artifactFile("review-summary", params.taskKey, iteration);
-  const reviewReplyFile = artifactFile("review-reply", params.taskKey, iteration);
-  const reviewReplySummaryFile = artifactFile("review-reply-summary", params.taskKey, iteration);
-  let readyToMerge = false;
-  const reviewFlowDefinition: FlowDefinition<ReviewFlowParams> = {
+export function createReviewFlowDefinition(iteration: number): FlowDefinition<ReviewFlowParams> {
+  return {
     kind: "review-flow",
     version: 1,
     steps: [
@@ -72,6 +62,8 @@ async function runReviewFlowInternal(
       {
         id: "summarize_review",
         async run(stepContext, stepParams) {
+          const reviewFile = artifactFile("review", stepParams.taskKey, iteration);
+          const reviewSummaryFile = artifactFile("review-summary", stepParams.taskKey, iteration);
           if (stepContext.dryRun) {
             return { completed: true, metadata: { skipped: true } };
           }
@@ -104,6 +96,8 @@ async function runReviewFlowInternal(
       {
         id: "summarize_review_reply",
         async run(stepContext, stepParams) {
+          const reviewReplyFile = artifactFile("review-reply", stepParams.taskKey, iteration);
+          const reviewReplySummaryFile = artifactFile("review-reply-summary", stepParams.taskKey, iteration);
           if (stepContext.dryRun) {
             return { completed: true, metadata: { skipped: true } };
           }
@@ -123,17 +117,26 @@ async function runReviewFlowInternal(
       {
         id: "check_ready_to_merge",
         async run(stepContext) {
-          if (!stepContext.dryRun && existsSync(READY_TO_MERGE_FILE)) {
+          const readyToMerge = !stepContext.dryRun && existsSync(READY_TO_MERGE_FILE);
+          if (readyToMerge) {
             printPanel("Ready To Merge", "Изменения готовы к merge\nФайл ready-to-merge.md создан.", "green");
-            readyToMerge = true;
           }
           return { completed: true, metadata: { readyToMerge } };
         },
       },
     ],
   };
+}
 
-  await runFlow(reviewFlowDefinition, context, params);
+async function runReviewFlowInternal(
+  context: PipelineContext,
+  params: ReviewFlowParams,
+  iteration: number,
+): Promise<{ readyToMerge: boolean }> {
+  requireArtifacts(planArtifacts(params.taskKey), "Review mode requires plan artifacts from the planning phase.");
+  const result = await runFlow(createReviewFlowDefinition(iteration), context, params);
+  const readyToMerge =
+    result.steps.find((step) => step.id === "check_ready_to_merge")?.result.metadata?.readyToMerge === true;
   return { readyToMerge };
 }
 
