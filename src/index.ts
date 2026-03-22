@@ -44,6 +44,8 @@ import {
   formatPrompt,
   formatTemplate,
 } from "./prompts.js";
+import { createPipelineContext } from "./pipeline/context.js";
+import { runPlanFlow } from "./pipeline/flows/plan-flow.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
@@ -669,16 +671,6 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
   process.env.JIRA_API_URL = config.jiraApiUrl;
   process.env.JIRA_TASK_FILE = config.jiraTaskFile;
 
-  const planPrompt = formatPrompt(
-    formatTemplate(PLAN_PROMPT_TEMPLATE, {
-      jira_task_file: config.jiraTaskFile,
-      design_file: designFile(config.taskKey),
-      plan_file: planFile(config.taskKey),
-      qa_file: qaFile(config.taskKey),
-    }),
-    config.extraPrompt,
-  );
-
   const implementPrompt = formatPrompt(
     formatTemplate(IMPLEMENT_PROMPT_TEMPLATE, {
       design_file: designFile(config.taskKey),
@@ -693,26 +685,22 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
       process.stdout.write(`Saving Jira issue JSON to: ${config.jiraTaskFile}\n`);
     }
-    await jiraFetchExecutor.execute(
-      buildExecutorContext(config),
+    await runPlanFlow(
+      createPipelineContext({
+        issueKey: config.taskKey,
+        jiraRef: config.jiraRef,
+        dryRun: config.dryRun,
+        verbose: config.verbose,
+        runtime: runtimeServices,
+      }),
       {
         jiraApiUrl: config.jiraApiUrl,
-        outputFile: config.jiraTaskFile,
+        jiraTaskFile: config.jiraTaskFile,
+        taskKey: config.taskKey,
+        codexCmd,
+        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
       },
-      jiraFetchExecutor.defaultConfig,
     );
-    printInfo("Running Codex planning mode");
-    printPrompt("Codex", planPrompt);
-    await codexLocalExecutor.execute(
-      buildExecutorContext(config),
-      {
-        prompt: planPrompt,
-        command: codexCmd,
-        env: { ...process.env },
-      },
-      codexLocalExecutor.defaultConfig,
-    );
-    requireArtifacts(planArtifacts(config.taskKey), "Plan mode did not produce the required artifacts.");
     return false;
   }
 
