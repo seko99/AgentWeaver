@@ -1,5 +1,7 @@
 import { designFile, planArtifacts, planFile, qaFile } from "../../artifacts.js";
 import { PLAN_PROMPT_TEMPLATE, formatPrompt, formatTemplate } from "../../prompts.js";
+import { runFlow } from "../flow-runner.js";
+import type { FlowDefinition } from "../flow-types.js";
 import { runNode } from "../node-runner.js";
 import { jiraFetchNode } from "../nodes/jira-fetch-node.js";
 import { planCodexNode } from "../nodes/plan-codex-node.js";
@@ -13,25 +15,44 @@ export type PlanFlowParams = {
   codexCmd: string;
 };
 
+export const planFlowDefinition: FlowDefinition<PlanFlowParams> = {
+  kind: "plan-flow",
+  version: 1,
+  steps: [
+    {
+      id: "fetch_jira",
+      async run(context, params) {
+        await runNode(jiraFetchNode, context, {
+          jiraApiUrl: params.jiraApiUrl,
+          outputFile: params.jiraTaskFile,
+        });
+        return { completed: true };
+      },
+    },
+    {
+      id: "run_codex_plan",
+      async run(context, params) {
+        const prompt = formatPrompt(
+          formatTemplate(PLAN_PROMPT_TEMPLATE, {
+            jira_task_file: params.jiraTaskFile,
+            design_file: designFile(params.taskKey),
+            plan_file: planFile(params.taskKey),
+            qa_file: qaFile(params.taskKey),
+          }),
+          params.extraPrompt,
+        );
+
+        await runNode(planCodexNode, context, {
+          prompt,
+          command: params.codexCmd,
+          requiredArtifacts: planArtifacts(params.taskKey),
+        });
+        return { completed: true };
+      },
+    },
+  ],
+};
+
 export async function runPlanFlow(context: PipelineContext, params: PlanFlowParams): Promise<void> {
-  await runNode(jiraFetchNode, context, {
-    jiraApiUrl: params.jiraApiUrl,
-    outputFile: params.jiraTaskFile,
-  });
-
-  const prompt = formatPrompt(
-    formatTemplate(PLAN_PROMPT_TEMPLATE, {
-      jira_task_file: params.jiraTaskFile,
-      design_file: designFile(params.taskKey),
-      plan_file: planFile(params.taskKey),
-      qa_file: qaFile(params.taskKey),
-    }),
-    params.extraPrompt,
-  );
-
-  await runNode(planCodexNode, context, {
-    prompt,
-    command: params.codexCmd,
-    requiredArtifacts: planArtifacts(params.taskKey),
-  });
+  await runFlow(planFlowDefinition, context, params);
 }
