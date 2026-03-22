@@ -34,8 +34,6 @@ import {
   IMPLEMENT_PROMPT_TEMPLATE,
   PLAN_PROMPT_TEMPLATE,
   REVIEW_FIX_PROMPT_TEMPLATE,
-  REVIEW_PROMPT_TEMPLATE,
-  REVIEW_REPLY_PROMPT_TEMPLATE,
   REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   REVIEW_SUMMARY_PROMPT_TEMPLATE,
   TASK_SUMMARY_PROMPT_TEMPLATE,
@@ -45,7 +43,9 @@ import {
   formatTemplate,
 } from "./prompts.js";
 import { createPipelineContext } from "./pipeline/context.js";
+import { runImplementFlow } from "./pipeline/flows/implement-flow.js";
 import { runPlanFlow } from "./pipeline/flows/plan-flow.js";
+import { runReviewFlow } from "./pipeline/flows/review-flow.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
@@ -707,101 +707,50 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
   if (config.command === "implement") {
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(planArtifacts(config.taskKey), "Implement mode requires plan artifacts from the planning phase.");
-    await runCodexInDocker(config, implementPrompt, "Running Codex implementation mode in isolated Docker");
-    if (runFollowupVerify) {
-      await runVerifyBuildInDocker(config, "Running build verification in isolated Docker");
-    }
+    await runImplementFlow(
+      createPipelineContext({
+        issueKey: config.taskKey,
+        jiraRef: config.jiraRef,
+        dryRun: config.dryRun,
+        verbose: config.verbose,
+        runtime: runtimeServices,
+      }),
+      {
+        dockerComposeFile: config.dockerComposeFile,
+        prompt: implementPrompt,
+        runFollowupVerify,
+        ...(!config.dryRun
+          ? {
+              onVerifyBuildFailure: async (output: string) => {
+                printError("Build verification failed");
+                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+              },
+            }
+          : {}),
+      },
+    );
     return false;
   }
 
   if (config.command === "review") {
     requireJiraTaskFile(config.jiraTaskFile);
-    requireArtifacts(planArtifacts(config.taskKey), "Review mode requires plan artifacts from the planning phase.");
-    const iteration = nextReviewIterationForTask(config.taskKey);
-    const reviewFile = artifactFile("review", config.taskKey, iteration);
-    const reviewReplyFile = artifactFile("review-reply", config.taskKey, iteration);
-    const reviewSummaryFile = artifactFile("review-summary", config.taskKey, iteration);
-    const reviewReplySummaryFile = artifactFile("review-reply-summary", config.taskKey, iteration);
-    const claudePrompt = formatPrompt(
-      formatTemplate(REVIEW_PROMPT_TEMPLATE, {
-        jira_task_file: config.jiraTaskFile,
-        design_file: designFile(config.taskKey),
-        plan_file: planFile(config.taskKey),
-        review_file: reviewFile,
+    const result = await runReviewFlow(
+      createPipelineContext({
+        issueKey: config.taskKey,
+        jiraRef: config.jiraRef,
+        dryRun: config.dryRun,
+        verbose: config.verbose,
+        runtime: runtimeServices,
       }),
-      config.extraPrompt,
-    );
-    const codexReplyPrompt = formatPrompt(
-      formatTemplate(REVIEW_REPLY_PROMPT_TEMPLATE, {
-        review_file: reviewFile,
-        jira_task_file: config.jiraTaskFile,
-        design_file: designFile(config.taskKey),
-        plan_file: planFile(config.taskKey),
-        review_reply_file: reviewReplyFile,
-      }),
-      config.extraPrompt,
-    );
-
-    printInfo(`Running Claude review mode (iteration ${iteration})`);
-    printPrompt("Claude", claudePrompt);
-    await claudeExecutor.execute(
-      buildExecutorContext(config),
       {
-        prompt: claudePrompt,
-        command: claudeCmd,
-        env: { ...process.env },
-      },
-      {
-        ...claudeExecutor.defaultConfig,
-        defaultModel: claudeReviewModel(),
-      },
-    );
-
-    if (!config.dryRun) {
-      requireArtifacts([reviewFile], "Claude review did not produce the required review artifact.");
-      const reviewSummaryText = await runClaudeSummary(
+        jiraTaskFile: config.jiraTaskFile,
+        taskKey: config.taskKey,
         claudeCmd,
-        reviewSummaryFile,
-        formatTemplate(REVIEW_SUMMARY_PROMPT_TEMPLATE, {
-          review_file: reviewFile,
-          review_summary_file: reviewSummaryFile,
-        }),
-        config.verbose,
-      );
-      printSummary("Claude Comments", reviewSummaryText);
-    }
-
-    printInfo(`Running Codex review reply mode (iteration ${iteration})`);
-    printPrompt("Codex", codexReplyPrompt);
-    await codexLocalExecutor.execute(
-      buildExecutorContext(config),
-      {
-        prompt: codexReplyPrompt,
-        command: codexCmd,
-        env: { ...process.env },
+        codexCmd,
+        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
       },
-      codexLocalExecutor.defaultConfig,
     );
-
-    let readyToMerge = false;
-    if (!config.dryRun) {
-      requireArtifacts([reviewReplyFile], "Codex review reply did not produce the required review-reply artifact.");
-      const reviewReplySummaryText = await runClaudeSummary(
-        claudeCmd,
-        reviewReplySummaryFile,
-        formatTemplate(REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE, {
-          review_reply_file: reviewReplyFile,
-          review_reply_summary_file: reviewReplySummaryFile,
-        }),
-        config.verbose,
-      );
-      printSummary("Codex Reply Summary", reviewReplySummaryText);
-      if (existsSync(READY_TO_MERGE_FILE)) {
-        printPanel("Ready To Merge", "Изменения готовы к merge\nФайл ready-to-merge.md создан.", "green");
-        readyToMerge = true;
-      }
-    }
-    return readyToMerge;
+    return result.readyToMerge;
   }
 
   if (config.command === "review-fix") {
