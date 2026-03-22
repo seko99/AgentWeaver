@@ -1,0 +1,58 @@
+{
+  "name": "agentweaver",
+  "version": "0.1.0",
+  "description": "CLI orchestrator for Jira/Codex/Claude engineering workflows",
+  "keywords": [
+    "agent",
+    "cli",
+    "jira",
+    "codex",
+    "claude",
+    "tui",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/seko99/AgentWeaver#readme",
+  "bugs": {
+    "url": "https://github.com/seko99/AgentWeaver/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seko99/AgentWeaver.git"
+  },
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": "./dist/index.js",
+  "bin": {
+    "agentweaver": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "npm@9.2.0",
+  "preferGlobal": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run check && npm run build",
+    "pack:check": "npm pack --dry-run",
+    "start": "node dist/index.js",
+    "dev": "node --loader ts-node/esm src/index.ts"
+  },
+  "engines": {
+    "node": ">=18.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.30",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.1",
+    "neo-blessed": "^0.2.0"
+  }
+}
