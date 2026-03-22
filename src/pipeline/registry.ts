@@ -1,3 +1,4 @@
+import { commandCheckExecutor } from "../executors/command-check-executor.js";
 import { claudeExecutor } from "../executors/claude-executor.js";
 import { claudeSummaryExecutor } from "../executors/claude-summary-executor.js";
 import { codexDockerExecutor } from "../executors/codex-docker-executor.js";
@@ -9,6 +10,7 @@ import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
 
 export type ExecutorId =
   | "process"
+  | "command-check"
   | "jira-fetch"
   | "codex-local"
   | "codex-docker"
@@ -26,6 +28,7 @@ type AnyExecutorDefinition = ExecutorDefinition<JsonValue, unknown, unknown>;
 
 const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   process: processExecutor as unknown as AnyExecutorDefinition,
+  "command-check": commandCheckExecutor as unknown as AnyExecutorDefinition,
   "jira-fetch": jiraFetchExecutor as unknown as AnyExecutorDefinition,
   "codex-local": codexLocalExecutor as unknown as AnyExecutorDefinition,
   "codex-docker": codexDockerExecutor as unknown as AnyExecutorDefinition,

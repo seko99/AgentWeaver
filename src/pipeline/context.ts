@@ -11,6 +11,7 @@ export type CreatePipelineContextInput = {
   dryRun: boolean;
   verbose: boolean;
   runtime: RuntimeServices;
+  setSummary?: (markdown: string) => void;
 };
 
 export function createPipelineContext(input: CreatePipelineContextInput): PipelineContext {
@@ -24,5 +25,6 @@ export function createPipelineContext(input: CreatePipelineContextInput): Pipeli
     verbose: input.verbose,
     runtime: input.runtime,
     executors: createExecutorRegistry(),
+    ...(input.setSummary ? { setSummary: input.setSummary } : {}),
   };
 }

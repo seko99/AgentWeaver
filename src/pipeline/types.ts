@@ -41,6 +41,7 @@ export type PipelineContext = {
   verbose: boolean;
   runtime: RuntimeServices;
   executors: ExecutorRegistry;
+  setSummary?: (markdown: string) => void;
 };
 
 export type PipelineNodeDefinition<TParams, TResult> = {

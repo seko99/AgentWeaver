@@ -7,14 +7,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { codexDockerExecutor } from "./executors/codex-docker-executor.js";
-import { codexLocalExecutor } from "./executors/codex-local-executor.js";
-import { claudeExecutor } from "./executors/claude-executor.js";
-import { claudeSummaryExecutor } from "./executors/claude-summary-executor.js";
-import { jiraFetchExecutor } from "./executors/jira-fetch-executor.js";
-import { processExecutor } from "./executors/process-executor.js";
-import type { ExecutorContext, RuntimeServices } from "./executors/types.js";
-import { verifyBuildExecutor } from "./executors/verify-build-executor.js";
+import type { RuntimeServices } from "./executors/types.js";
 import {
   READY_TO_MERGE_FILE,
   REVIEW_FILE_RE,
@@ -35,14 +28,15 @@ import {
   PLAN_PROMPT_TEMPLATE,
   REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   REVIEW_SUMMARY_PROMPT_TEMPLATE,
-  TASK_SUMMARY_PROMPT_TEMPLATE,
   formatPrompt,
   formatTemplate,
 } from "./prompts.js";
+import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { createPipelineContext } from "./pipeline/context.js";
 import { runFlow } from "./pipeline/flow-runner.js";
 import { implementFlowDefinition, runImplementFlow } from "./pipeline/flows/implement-flow.js";
 import { planFlowDefinition, runPlanFlow } from "./pipeline/flows/plan-flow.js";
+import { runPreflightFlow } from "./pipeline/flows/preflight-flow.js";
 import { createReviewFixFlowDefinition, runReviewFixFlow } from "./pipeline/flows/review-fix-flow.js";
 import { createReviewFlowDefinition, runReviewFlow } from "./pipeline/flows/review-flow.js";
 import { runTestFixFlow } from "./pipeline/flows/test-fix-flow.js";
@@ -70,7 +64,6 @@ type CommandName = (typeof COMMANDS)[number];
 
 const DEFAULT_CODEX_MODEL = "gpt-5.4";
 const DEFAULT_CLAUDE_REVIEW_MODEL = "opus";
-const DEFAULT_CLAUDE_SUMMARY_MODEL = "haiku";
 const HISTORY_FILE = path.join(os.homedir(), ".codex", "memories", "agentweaver-history");
 const AUTO_STATE_SCHEMA_VERSION = 1;
 const AUTO_MAX_REVIEW_ITERATIONS = 3;
@@ -440,28 +433,6 @@ function buildPhaseConfig(baseConfig: Config, command: CommandName): Config {
   return { ...baseConfig, command };
 }
 
-function buildExecutorContext(config: Config): ExecutorContext {
-  return {
-    cwd: process.cwd(),
-    env: { ...process.env },
-    ui: getOutputAdapter(),
-    dryRun: config.dryRun,
-    verbose: config.verbose,
-    runtime: runtimeServices,
-  };
-}
-
-function buildRuntimeExecutorContext(options: { dryRun?: boolean; verbose?: boolean } = {}): ExecutorContext {
-  return {
-    cwd: process.cwd(),
-    env: { ...process.env },
-    ui: getOutputAdapter(),
-    dryRun: options.dryRun ?? false,
-    verbose: options.verbose ?? false,
-    runtime: runtimeServices,
-  };
-}
-
 function appendPromptText(basePrompt: string | null | undefined, suffix: string): string {
   if (!basePrompt?.trim()) {
     return suffix;
@@ -645,104 +616,17 @@ function claudeReviewModel(): string {
   return process.env.CLAUDE_REVIEW_MODEL?.trim() || DEFAULT_CLAUDE_REVIEW_MODEL;
 }
 
-function claudeSummaryModel(): string {
-  return process.env.CLAUDE_SUMMARY_MODEL?.trim() || DEFAULT_CLAUDE_SUMMARY_MODEL;
-}
-
-function truncateText(text: string, maxChars = 12000): string {
-  return text.length <= maxChars ? text.trim() : text.trim().slice(-maxChars);
-}
-
-function fallbackBuildFailureSummary(output: string): string {
-  const lines = output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const tail = lines.length > 0 ? lines.slice(-8) : ["No build output captured."];
-  return `Не удалось получить summary через Claude.\n\nПоследние строки лога:\n${tail.join("\n")}`;
-}
-
 async function summarizeBuildFailure(output: string): Promise<string> {
-  if (!output.trim()) {
-    return "Build verification failed, but no output was captured.";
-  }
-
-  let claudeCmd: string;
-  try {
-    claudeCmd = resolveCmd("claude", "CLAUDE_BIN");
-  } catch {
-    return fallbackBuildFailureSummary(output);
-  }
-
-  const prompt =
-    "Ниже лог упавшей build verification.\n" +
-    "Сделай краткое резюме на русском языке, без воды.\n" +
-    "Нужно обязательно выделить:\n" +
-    "1. Где именно упало.\n" +
-    "2. Главную причину падения.\n" +
-    "3. Что нужно исправить дальше, если это очевидно.\n" +
-    "Ответ дай максимум 5 короткими пунктами.\n\n" +
-    `Лог:\n${truncateText(output)}`;
-
-  printInfo(`Summarizing build failure with Claude (${claudeSummaryModel()})`);
-  try {
-    const result = await processExecutor.execute(
-      buildRuntimeExecutorContext({ dryRun: false, verbose: false }),
-      {
-        argv: [claudeCmd, "--model", claudeSummaryModel(), "-p", prompt],
-        env: { ...process.env },
-        label: `claude:${claudeSummaryModel()}`,
-      },
-      processExecutor.defaultConfig,
-    );
-    return result.output.trim() || fallbackBuildFailureSummary(output);
-  } catch {
-    return fallbackBuildFailureSummary(output);
-  }
-}
-
-async function runClaudeSummary(claudeCmd: string, outputFile: string, prompt: string, verbose = false): Promise<string> {
-  printInfo(`Preparing summary in ${outputFile}`);
-  printPrompt("Claude", prompt);
-  const result = await claudeSummaryExecutor.execute(
-    buildRuntimeExecutorContext({ dryRun: false, verbose }),
-    {
-      command: claudeCmd,
-      outputFile,
-      prompt,
-      env: { ...process.env },
-      verbose,
-    },
-    claudeSummaryExecutor.defaultConfig,
+  return summarizeBuildFailureViaPipeline(
+    createPipelineContext({
+      issueKey: "build-failure-summary",
+      jiraRef: "build-failure-summary",
+      dryRun: false,
+      verbose: false,
+      runtime: runtimeServices,
+    }),
+    output,
   );
-  return result.artifactText;
-}
-
-async function summarizeTask(jiraRef: string): Promise<{ issueKey: string; summaryText: string }> {
-  const config = buildConfig("plan", jiraRef);
-  const claudeCmd = resolveCmd("claude", "CLAUDE_BIN");
-  await jiraFetchExecutor.execute(
-    buildExecutorContext(config),
-    {
-      jiraApiUrl: config.jiraApiUrl,
-      outputFile: config.jiraTaskFile,
-    },
-    jiraFetchExecutor.defaultConfig,
-  );
-
-  const summaryPrompt = formatTemplate(TASK_SUMMARY_PROMPT_TEMPLATE, {
-    jira_task_file: config.jiraTaskFile,
-    task_summary_file: taskSummaryFile(config.taskKey),
-  });
-  const summaryText = await runClaudeSummary(claudeCmd, taskSummaryFile(config.taskKey), summaryPrompt);
-  return { issueKey: config.jiraIssueKey, summaryText };
-}
-
-function resolveTaskIdentity(jiraRef: string): { issueKey: string; summaryText: string } {
-  const config = buildConfig("plan", jiraRef);
-  const summaryPath = taskSummaryFile(config.taskKey);
-  const summaryText = existsSync(summaryPath) ? readFileSync(summaryPath, "utf8").trim() : "";
-  return { issueKey: config.jiraIssueKey, summaryText };
 }
 
 async function executeCommand(config: Config, runFollowupVerify = true): Promise<boolean> {
@@ -1311,52 +1195,36 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
   printInfo("Use /help to see commands.");
 
   try {
-    ui.setStatus("preflight");
-    printInfo("Checking required commands");
-    resolveCmd("codex", "CODEX_BIN");
-    resolveCmd("claude", "CLAUDE_BIN");
-    printInfo("Required commands found");
-
-    if (forceRefresh || !existsSync(jiraTaskPath)) {
-      ui.setStatus("fetch_jira");
-      printInfo(`Fetching Jira issue ${config.jiraIssueKey}`);
-      await jiraFetchExecutor.execute(
-        buildExecutorContext(config),
-        {
-          jiraApiUrl: config.jiraApiUrl,
-          outputFile: config.jiraTaskFile,
+    ui.setBusy(true, "preflight");
+    await runPreflightFlow(
+      createPipelineContext({
+        issueKey: config.taskKey,
+        jiraRef: config.jiraRef,
+        dryRun: false,
+        verbose: config.verbose,
+        runtime: runtimeServices,
+        setSummary: (markdown) => {
+          ui.setSummary(markdown);
         },
-        jiraFetchExecutor.defaultConfig,
-      );
-
-      ui.setStatus("summary");
-      printInfo("Generating task summary with Claude");
-      const claudeCmd = resolveCmd("claude", "CLAUDE_BIN");
-      const summaryPrompt = formatTemplate(TASK_SUMMARY_PROMPT_TEMPLATE, {
-        jira_task_file: config.jiraTaskFile,
-        task_summary_file: taskSummaryFile(config.taskKey),
-      });
-      const summaryText = await runClaudeSummary(claudeCmd, taskSummaryFile(config.taskKey), summaryPrompt);
-      ui.setSummary(summaryText);
-      printInfo("Task summary loaded");
-    } else {
-      const taskIdentity = resolveTaskIdentity(jiraRef);
-      if (taskIdentity.summaryText) {
-        ui.setSummary(taskIdentity.summaryText);
-        printInfo("Loaded existing task summary");
-      } else {
-        ui.setSummary("Task summary is not available yet. Run `/plan` or refresh Jira data.");
-        printInfo("Task summary is not available yet");
-      }
+      }),
+      {
+        jiraApiUrl: config.jiraApiUrl,
+        jiraTaskFile: config.jiraTaskFile,
+        taskKey: config.taskKey,
+        forceRefresh,
+      },
+    );
+    if (!existsSync(taskSummaryFile(config.taskKey))) {
+      ui.setSummary("Task summary is not available yet. Run `/plan` or refresh Jira data.");
     }
-    ui.setStatus("idle");
   } catch (error) {
-    ui.setStatus("preflight_failed");
     if (error instanceof TaskRunnerError) {
       printError(error.message);
     } else {
       throw error;
     }
+  } finally {
+    ui.setBusy(false);
   }
 
   return await new Promise<number>((resolve, reject) => {
