@@ -69,7 +69,7 @@ export class InteractiveUi {
       top: 3,
       left: 0,
       width: "28%",
-      height: "100%-7",
+      bottom: 10,
       tags: true,
       label: " Commands ",
       padding: {
@@ -112,12 +112,12 @@ export class InteractiveUi {
 
     this.status = blessed.box({
       parent: this.screen,
-      top: 11,
-      left: "28%",
-      width: "72%",
-      height: 4,
+      bottom: 4,
+      left: 0,
+      width: "28%",
+      height: 6,
       tags: true,
-      label: " Running ",
+      label: " Status ",
       padding: {
         left: 1,
         right: 1,
@@ -131,10 +131,10 @@ export class InteractiveUi {
 
     this.log = blessed.log({
       parent: this.screen,
-      top: 15,
+      top: 11,
+      bottom: 4,
       left: "28%",
       width: "72%",
-      height: "100%-19",
       tags: false,
       label: " Activity ",
       padding: {
