@@ -1,71 +1,80 @@
 # AgentWeaver
 
-`AgentWeaver` это CLI-оркестратор для инженерного workflow вида `plan -> implement -> review -> fix -> test` поверх Jira, Codex и Claude.
+`AgentWeaver` is a TypeScript/Node.js CLI for engineering workflows around Jira, Codex, and Claude.
 
-Главное здесь не `docker-compose`, а сам агентный сценарий в `./agentweaver.py`. Docker-обвязка в репозитории нужна как вспомогательный runtime для запуска Codex в предсказуемом окружении, логина и build/test-проверок.
+It orchestrates a flow like:
 
-## Что делает AgentWeaver
-- Забирает задачу из Jira по ключу или browse URL.
-- Строит артефакты workflow: дизайн, план реализации, QA-план, review/reply summary.
-- Оркестрирует шаги `plan`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `auto`.
-- Позволяет запускать эти шаги локально или через Docker runtime, не меняя пользовательский сценарий.
+`plan -> implement -> test -> review -> review-fix -> test`
 
-Основной entrypoint: `./agentweaver.py`
+The package is designed to run as an npm CLI and includes an interactive terminal UI built on `neo-blessed`.
 
-## Состав репозитория
-- `agentweaver.py` — основной CLI и interactive shell.
-- `docker-compose.yml` — вспомогательный runtime для `codex`, `codex-exec`, `verify-build`, `codex-login`.
-- `Dockerfile.codex` — образ для этого runtime с `codex`, Go toolchain и утилитами.
-- `verify_build.sh` — project-specific build verification script для контейнерного `verify-build`.
-- `requirements.txt` — Python-зависимости для CLI.
+## What It Does
 
-## Быстрый старт
-1. Установите Python-зависимости для CLI:
+- Fetches a Jira issue by key or browse URL
+- Generates workflow artifacts such as design, implementation plan, QA plan, reviews, and summaries
+- Runs workflow stages like `plan`, `implement`, `review`, `review-fix`, `test`, and `auto`
+- Persists `auto` pipeline state on disk so runs can resume
+- Uses Docker runtime services for isolated Codex execution and build verification
+
+## Repository Layout
+
+- `src/` — main TypeScript sources
+- `src/index.ts` — CLI entrypoint and workflow orchestration
+- `src/interactive-ui.ts` — interactive TUI built with `neo-blessed`
+- `src/markdown.ts` — markdown-to-terminal renderer for the TUI
+- `docker-compose.yml` — runtime services for Codex and build verification
+- `Dockerfile.codex` — container image for Codex runtime
+- `verify_build.sh` — project-specific verification entrypoint used by `verify-build`
+- `package.json` — npm package metadata and scripts
+- `tsconfig.json` — TypeScript configuration
+
+## Requirements
+
+- Node.js `>= 18.19.0`
+- npm
+- Docker with `docker compose` or `docker-compose`
+- `codex` CLI for `plan` and Codex-driven steps
+- `claude` CLI for review and summary steps
+
+## Installation
+
+Local development:
 
 ```bash
-pip install -r requirements.txt
+npm install
+npm run build
 ```
 
-2. Подготовьте переменные окружения для самого AgentWeaver:
-- `JIRA_API_KEY` для скачивания задачи из Jira.
-- `JIRA_BASE_URL`, если передаёте только ключ задачи, а не полный browse URL.
-- `AGENTWEAVER_HOME`, только если нужно явно указать, где лежит установка AgentWeaver. Если переменная не задана, используется каталог, в котором лежит `agentweaver.py`.
-- `CODEX_BIN`, `CLAUDE_BIN`, `CODEX_MODEL`, `CLAUDE_REVIEW_MODEL`, `CLAUDE_SUMMARY_MODEL` при необходимости переопределения.
-
-3. Запускайте нужный шаг workflow:
+Global install after publication:
 
 ```bash
-./agentweaver.py DEMO-3288
-./agentweaver.py plan DEMO-3288
-./agentweaver.py implement DEMO-3288
-./agentweaver.py review DEMO-3288
-./agentweaver.py auto DEMO-3288
+npm install -g agentweaver
 ```
 
-При запуске из папки проекта `AgentWeaver` автоматически использует:
-- `PROJECT_DIR=$PWD`
-- `AGENTWEAVER_HOME` или каталог самого `agentweaver.py`
-- `AGENTWEAVER_HOME/docker-compose.yml`
-- `AGENTWEAVER_HOME/.codex-home`
-- `~/.ssh` и `~/.gitconfig`, а если их нет, то безопасные fallback-пути внутри `AGENTWEAVER_HOME/.runtime`
+One-off usage after publication:
 
-То есть для типового запуска из проекта достаточно настроить только Jira-доступ.
+```bash
+npx agentweaver --help
+```
 
-## Docker runtime
-Docker здесь нужен как инструмент: чтобы запускать Codex в контейнере, делать login и иметь изолированный runtime для build/test задач.
+## Environment
 
-### Что делает контейнерная конфигурация
-- Запускает `codex` в контейнере.
-- Монтирует только каталог проекта (`PROJECT_DIR` -> `/workspace`).
-- Стартует `codex` с флагом `--dangerously-bypass-approvals-and-sandbox`.
-- Даёт сервис `codex-exec` для неинтерактивного `codex exec` с промптом из переменной окружения.
-- Держит root filesystem read-only, оставляя writable только bind mount проекта и tmpfs (`/tmp`, `/root`).
-- Сохраняет данные авторизации `codex` в `AGENTWEAVER_HOME/.codex-home` по умолчанию.
-- Включает Go-стек: `go`, `golangci-lint v2`, `swag`, `protoc`, `protoc-gen-go`, `protoc-gen-go-grpc`, `git`, `curl`, `jq`, `rg`, `make`, `docker` CLI.
-- Для `testcontainers` использует отдельный внутренний `dockerd`, без проброса `docker.sock` хоста в `codex`.
+Required:
 
-### Настройка `.env`
-Для запуска `AgentWeaver` из проекта обычно достаточно такого `.env`:
+- `JIRA_API_KEY` — Jira API token used to fetch issue JSON
+
+Common optional variables:
+
+- `JIRA_BASE_URL` — required when you pass only an issue key like `DEMO-123`
+- `AGENTWEAVER_HOME` — path to the AgentWeaver installation directory
+- `DOCKER_COMPOSE_BIN` — override compose command, for example `docker compose`
+- `CODEX_BIN` — override `codex` executable path
+- `CLAUDE_BIN` — override `claude` executable path
+- `CODEX_MODEL` — defaults to `gpt-5.4`
+- `CLAUDE_REVIEW_MODEL` — defaults to `opus`
+- `CLAUDE_SUMMARY_MODEL` — defaults to `haiku`
+
+Example `.env`:
 
 ```bash
 JIRA_API_KEY=your-jira-api-token
@@ -76,67 +85,159 @@ CLAUDE_BIN=claude
 CODEX_MODEL=gpt-5.4
 CLAUDE_REVIEW_MODEL=opus
 CLAUDE_SUMMARY_MODEL=haiku
-GOPRIVATE=gitlab.yourdomain.org/*
-GONOSUMDB=gitlab.yourdomain.org/*
-GONOPROXY=gitlab.yourdomain.org/*
+GOPRIVATE=gitlab.example.org/*
+GONOSUMDB=gitlab.example.org/*
+GONOPROXY=gitlab.example.org/*
 GIT_ALLOW_PROTOCOL=file:https:ssh
-CODEX_PROMPT=
-CODEX_EXEC_FLAGS=--dangerously-bypass-approvals-and-sandbox
 ```
 
-Для нового окружения можно взять шаблон `.env.example`.
-Кэши `go`/`golangci-lint` и codex auth по умолчанию хранятся в `AGENTWEAVER_HOME/.codex-home`, поэтому повторные прогоны заметно быстрее.
+## Usage
 
-### Запуск сервисов
-1. Один раз выполните вход по подписке (интерактивно):
+Direct CLI usage:
+
+```bash
+agentweaver plan DEMO-3288
+agentweaver implement DEMO-3288
+agentweaver review DEMO-3288
+agentweaver auto DEMO-3288
+```
+
+From source checkout:
+
+```bash
+node dist/index.js plan DEMO-3288
+node dist/index.js auto DEMO-3288
+```
+
+Interactive mode:
+
+```bash
+agentweaver DEMO-3288
+```
+
+When you run from a working project directory, set `AGENTWEAVER_HOME` to the AgentWeaver installation:
+
+```bash
+AGENTWEAVER_HOME=/absolute/path/to/AgentWeaver agentweaver DEMO-3288
+```
+
+Useful commands:
+
+```bash
+agentweaver --help
+agentweaver auto --help-phases
+agentweaver auto-status DEMO-3288
+agentweaver auto-reset DEMO-3288
+```
+
+## Interactive TUI
+
+Interactive mode opens a full-screen terminal UI with:
+
+- command input
+- activity log
+- task summary pane
+- command list/help
+- keyboard navigation between panes
+
+Current navigation:
+
+- `Enter` — run command
+- `Tab` / `Shift+Tab` — switch panes
+- `Ctrl+J` — focus activity log
+- `Ctrl+K` — focus command input
+- `Ctrl+U` — focus task summary
+- `Ctrl+H` — focus commands pane
+- `PgUp` / `PgDn` / `Home` / `End` — scroll focused panes
+- `?` or `F1` — help overlay
+- `q` or `Ctrl+C` — exit
+
+## Docker Runtime
+
+Docker is used as an isolated execution environment for Codex and build/test verification.
+
+Main services:
+
+- `codex` — interactive Codex container
+- `codex-exec` — non-interactive `codex exec`
+- `verify-build` — project verification script inside container
+- `codex-login` — interactive login container
+- `dockerd` — internal Docker daemon for testcontainers/build flows
+
+Typical login flow:
 
 ```bash
 PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex-login
 ```
 
-`codex-login` использует `network_mode: host`, чтобы OAuth callback на `localhost` был доступен из браузера хоста.
-
-2. Рабочий запуск Codex в контейнере:
+Interactive Codex container:
 
 ```bash
 PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex
 ```
 
-3. Неинтерактивный запуск с готовым промптом:
+Non-interactive Codex run:
 
 ```bash
 PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm \
-  -e CODEX_PROMPT="Проверь проект и исправь failing тесты" \
+  -e CODEX_PROMPT="Review the project and fix failing tests" \
   codex-exec
 ```
 
-Если удобнее держать промпт в `.env`, можно задать `CODEX_PROMPT` там и запускать короче:
+Build verification:
 
 ```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex-exec
+PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm verify-build
 ```
 
-По умолчанию `codex-exec` запускает `codex exec --dangerously-bypass-approvals-and-sandbox`, чтобы режим совпадал с интерактивным `codex`. Флаги можно переопределить через `CODEX_EXEC_FLAGS`, например:
+## Development
+
+Install dependencies and build:
 
 ```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm \
-  -e CODEX_PROMPT="Сделай обзор изменений в репозитории" \
-  -e CODEX_EXEC_FLAGS="--full-auto" \
-  codex-exec
+npm install
+npm run build
 ```
 
-## Go-команды внутри контейнера
+Type-check only:
 
 ```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex bash -lc "go test ./..."
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex bash -lc "golangci-lint run ./..."
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex bash -lc "swag init -g cmd/main.go -o docs/swagger"
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex bash -lc "protoc --version && which protoc-gen-go && which protoc-gen-go-grpc"
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex bash -lc "go version && golangci-lint --version"
+npm run check
 ```
 
-## Примечания по безопасности
-- `codex` контейнер не получает `docker.sock` хоста.
-- Доступ к Docker для тестов идет через изолированный `dockerd` в этой же compose-сети.
-- Git remote-операции разрешены только по secure-протоколам (`ssh`/`https`); `git://` блокируется.
-- Сервис `dockerd` запущен `privileged` (техническое требование DinD); это безопаснее, чем отдавать агенту доступ к Docker хоста, но не равно полной sandbox-изоляции.
+Preview publish tarball:
+
+```bash
+npm run pack:check
+```
+
+Run from source in dev mode:
+
+```bash
+npm run dev -- --help
+```
+
+## Publishing
+
+The package is prepared for npm publication and currently includes:
+
+- npm bin entry: `agentweaver`
+- `prepublishOnly` build/typecheck
+- tarball filtering through `files`
+- public publish config
+
+Publish flow:
+
+```bash
+npm login
+npm publish
+```
+
+If you want a public package, verify the package name and license before publishing.
+
+## Security Notes
+
+- the Codex container does not receive host `docker.sock`
+- Docker access for tests goes through isolated `dockerd`
+- secure Git protocols only: `ssh` and `https`
+- `dockerd` runs privileged because DinD requires it; this is still safer than exposing host Docker directly
