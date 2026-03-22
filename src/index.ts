@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-import { accessSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { appendFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import type { RuntimeServices } from "./executors/types.js";
 import {
   READY_TO_MERGE_FILE,
   REVIEW_FILE_RE,
@@ -37,8 +37,11 @@ import {
   formatPrompt,
   formatTemplate,
 } from "./prompts.js";
+import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
+import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
+import { runCommand } from "./runtime/process-runner.js";
 import { InteractiveUi } from "./interactive-ui.js";
-import { bye, dim, formatDone, getOutputAdapter, printError, printInfo, printPanel, printPrompt, printSummary } from "./tui.js";
+import { bye, printError, printInfo, printPanel, printPrompt, printSummary } from "./tui.js";
 
 const COMMANDS = [
   "plan",
@@ -63,6 +66,12 @@ const AUTO_STATE_SCHEMA_VERSION = 1;
 const AUTO_MAX_REVIEW_ITERATIONS = 3;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(MODULE_DIR, "..");
+const runtimeServices: RuntimeServices = {
+  resolveCmd,
+  resolveDockerComposeCmd,
+  dockerRuntimeEnv: () => dockerRuntimeEnv(PACKAGE_ROOT),
+  runCommand,
+};
 
 type Config = {
   command: CommandName;
@@ -338,170 +347,6 @@ function loadEnvFile(envFilePath: string): void {
   }
 }
 
-function agentweaverHome(): string {
-  const configured = process.env.AGENTWEAVER_HOME?.trim();
-  if (configured) {
-    return path.resolve(configured);
-  }
-  return PACKAGE_ROOT;
-}
-
-function defaultDockerComposeFile(): string {
-  return path.join(agentweaverHome(), "docker-compose.yml");
-}
-
-function defaultCodexHomeDir(): string {
-  return path.join(agentweaverHome(), ".codex-home");
-}
-
-function ensureRuntimeBindPath(targetPath: string, isDir: boolean): string {
-  mkdirSync(path.dirname(targetPath), { recursive: true });
-  if (isDir) {
-    mkdirSync(targetPath, { recursive: true });
-  } else if (!existsSync(targetPath)) {
-    writeFileSync(targetPath, "", "utf8");
-  }
-  return targetPath;
-}
-
-function defaultHostSshDir(): string {
-  const candidate = path.join(os.homedir(), ".ssh");
-  if (existsSync(candidate)) {
-    return candidate;
-  }
-  return ensureRuntimeBindPath(path.join(agentweaverHome(), ".runtime", "ssh"), true);
-}
-
-function defaultHostGitconfig(): string {
-  const candidate = path.join(os.homedir(), ".gitconfig");
-  if (existsSync(candidate)) {
-    return candidate;
-  }
-  return ensureRuntimeBindPath(path.join(agentweaverHome(), ".runtime", "gitconfig"), false);
-}
-
-function dockerRuntimeEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  env.AGENTWEAVER_HOME ??= agentweaverHome();
-  env.PROJECT_DIR ??= process.cwd();
-  env.CODEX_HOME_DIR ??= ensureRuntimeBindPath(defaultCodexHomeDir(), true);
-  env.HOST_SSH_DIR ??= defaultHostSshDir();
-  env.HOST_GITCONFIG ??= defaultHostGitconfig();
-  env.LOCAL_UID ??= typeof process.getuid === "function" ? String(process.getuid()) : "1000";
-  env.LOCAL_GID ??= typeof process.getgid === "function" ? String(process.getgid()) : "1000";
-  return env;
-}
-
-function commandExists(commandName: string): boolean {
-  const result = spawnSync("bash", ["-lc", `command -v ${shellQuote(commandName)}`], { stdio: "ignore" });
-  return result.status === 0;
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
-function isExecutable(filePath: string): boolean {
-  try {
-    accessSync(filePath, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function findCmdPath(commandName: string, envVarName: string): string | null {
-  const configuredPath = process.env[envVarName];
-  if (configuredPath && isExecutable(configuredPath)) {
-    return configuredPath;
-  }
-
-  const direct = spawnSync("bash", ["-lc", `command -v ${shellQuote(commandName)}`], { encoding: "utf8" });
-  if (direct.status === 0) {
-    const candidate = direct.stdout.trim().split(/\r?\n/)[0] ?? "";
-    if (candidate && !candidate.includes("alias") && isExecutable(candidate)) {
-      return candidate;
-    }
-  }
-
-  const interactive = spawnSync("bash", ["-ic", `type -a -- ${shellQuote(commandName)}`], {
-    encoding: "utf8",
-  });
-  if (interactive.status !== 0) {
-    return null;
-  }
-
-  for (const rawLine of interactive.stdout.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) {
-      continue;
-    }
-    if (line.startsWith(`${commandName} is aliased to `)) {
-      const aliasValue = line.split(" is aliased to ", 2)[1]?.replace(/^['`]|['`]$/g, "") ?? "";
-      if (aliasValue && isExecutable(aliasValue)) {
-        return aliasValue;
-      }
-      continue;
-    }
-    if (line.startsWith("/")) {
-      const candidate = line.split(/\s+/)[0] ?? "";
-      if (candidate && isExecutable(candidate)) {
-        return candidate;
-      }
-    }
-  }
-
-  return null;
-}
-
-function resolveCmd(commandName: string, envVarName: string): string {
-  const candidate = findCmdPath(commandName, envVarName);
-  if (candidate) {
-    return candidate;
-  }
-  throw new TaskRunnerError(`Missing required command: ${commandName}`);
-}
-
-function requireDockerCompose(): void {
-  if (!commandExists("docker")) {
-    throw new TaskRunnerError("Missing required command: docker");
-  }
-  const result = spawnSync("docker", ["compose", "version"], { stdio: "ignore" });
-  if (result.status !== 0) {
-    throw new TaskRunnerError("Missing required docker compose plugin");
-  }
-}
-
-function resolveDockerComposeCmd(): string[] {
-  const configured = process.env.DOCKER_COMPOSE_BIN?.trim() ?? "";
-  if (configured) {
-    const parts = splitArgs(configured);
-    if (parts.length === 0) {
-      throw new TaskRunnerError("DOCKER_COMPOSE_BIN is set but empty.");
-    }
-    const executable = parts[0] ?? "";
-    try {
-      if (path.isAbsolute(executable)) {
-        accessSync(executable, constants.X_OK);
-        return parts;
-      }
-    } catch {
-      throw new TaskRunnerError(`Configured docker compose command is not executable: ${configured}`);
-    }
-    if (commandExists(executable)) {
-      return parts;
-    }
-    throw new TaskRunnerError(`Configured docker compose command is not executable: ${configured}`);
-  }
-
-  if (commandExists("docker-compose")) {
-    return ["docker-compose"];
-  }
-
-  requireDockerCompose();
-  return ["docker", "compose"];
-}
-
 function nextReviewIterationForTask(taskKey: string): number {
   let maxIndex = 0;
   for (const entry of readdirSync(process.cwd(), { withFileTypes: true })) {
@@ -531,131 +376,6 @@ function latestReviewReplyIteration(taskKey: string): number | null {
   return maxIndex;
 }
 
-function formatCommand(argv: string[], env?: NodeJS.ProcessEnv): string {
-  const envParts = Object.entries(env ?? {})
-    .filter(([key, value]) => value !== undefined && process.env[key] !== value)
-    .map(([key, value]) => `${key}=${shellQuote(value ?? "")}`);
-  const command = argv.map(shellQuote).join(" ");
-  return envParts.length > 0 ? `${envParts.join(" ")} ${command}` : command;
-}
-
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
-
-async function runCommand(
-  argv: string[],
-  options: {
-    env?: NodeJS.ProcessEnv;
-    dryRun?: boolean;
-    verbose?: boolean;
-    label?: string;
-    printFailureOutput?: boolean;
-  } = {},
-): Promise<string> {
-  const { env, dryRun = false, verbose = false, label, printFailureOutput = true } = options;
-  const outputAdapter = getOutputAdapter();
-
-  if (dryRun) {
-    outputAdapter.writeStdout(`${formatCommand(argv, env)}\n`);
-    return "";
-  }
-
-  if (verbose && outputAdapter.supportsPassthrough) {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(argv[0] ?? "", argv.slice(1), {
-        stdio: "inherit",
-        env,
-      });
-      child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(String(code ?? 1)))));
-      child.on("error", reject);
-    }).catch((error) => {
-      const code = Number.parseInt((error as Error).message, 10);
-      throw Object.assign(new Error(`Command failed with exit code ${Number.isNaN(code) ? 1 : code}`), {
-        returnCode: Number.isNaN(code) ? 1 : code,
-        output: "",
-      });
-    });
-    return "";
-  }
-
-  const startedAt = Date.now();
-  const statusLabel = label ?? path.basename(argv[0] ?? argv.join(" "));
-  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-  let frameIndex = 0;
-  let output = "";
-
-  const child = spawn(argv[0] ?? "", argv.slice(1), {
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  child.stdout?.on("data", (chunk) => {
-    const text = String(chunk);
-    output += text;
-    if (!outputAdapter.supportsTransientStatus || verbose) {
-      outputAdapter.writeStdout(text);
-    }
-  });
-  child.stderr?.on("data", (chunk) => {
-    const text = String(chunk);
-    output += text;
-    if (!outputAdapter.supportsTransientStatus || verbose) {
-      outputAdapter.writeStderr(text);
-    }
-  });
-
-  if (!outputAdapter.supportsTransientStatus) {
-    outputAdapter.writeStdout(`Running ${statusLabel}\n`);
-  }
-
-  const timer = outputAdapter.supportsTransientStatus
-    ? setInterval(() => {
-        const elapsed = formatDuration(Date.now() - startedAt);
-        process.stdout.write(`\r${frames[frameIndex]} ${statusLabel} ${dim(elapsed)}`);
-        frameIndex = (frameIndex + 1) % frames.length;
-      }, 200)
-    : null;
-
-  try {
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      child.on("error", reject);
-      child.on("exit", (code) => resolve(code ?? 1));
-    });
-
-    if (timer) {
-      clearInterval(timer);
-      process.stdout.write(`\r${" ".repeat(80)}\r${formatDone(formatDuration(Date.now() - startedAt))}\n`);
-    } else {
-      outputAdapter.writeStdout(`Done ${formatDuration(Date.now() - startedAt)}\n`);
-    }
-
-    if (exitCode !== 0) {
-      if (output && printFailureOutput) {
-        if (outputAdapter.supportsTransientStatus) {
-          process.stderr.write(output);
-          if (!output.endsWith("\n")) {
-            process.stderr.write("\n");
-          }
-        }
-      }
-      throw Object.assign(new Error(`Command failed with exit code ${exitCode}`), {
-        returnCode: exitCode,
-        output,
-      });
-    }
-
-    return output;
-  } finally {
-    if (timer) {
-      clearInterval(timer);
-    }
-  }
-}
-
 function buildConfig(
   command: CommandName,
   jiraRef: string,
@@ -676,7 +396,7 @@ function buildConfig(
     autoFromPhase: options.autoFromPhase ? validateAutoPhaseId(options.autoFromPhase) : null,
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
-    dockerComposeFile: defaultDockerComposeFile(),
+    dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
     dockerComposeCmd: [],
     codexCmd: process.env.CODEX_BIN ?? "codex",
     claudeCmd: process.env.CLAUDE_BIN ?? "claude",
@@ -755,7 +475,7 @@ function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): voi
 }
 
 async function runCodexInDocker(config: Config, dockerComposeCmd: string[], prompt: string, labelText: string): Promise<void> {
-  const dockerEnv = dockerRuntimeEnv();
+  const dockerEnv = runtimeServices.dockerRuntimeEnv();
   dockerEnv.CODEX_PROMPT = prompt;
   dockerEnv.CODEX_EXEC_FLAGS = `--model ${codexModel()} --dangerously-bypass-approvals-and-sandbox`;
   printInfo(labelText);
@@ -777,7 +497,7 @@ async function runVerifyBuildInDocker(config: Config, dockerComposeCmd: string[]
     await runCommand(
       [...dockerComposeCmd, "-f", config.dockerComposeFile, "run", "--rm", "verify-build"],
       {
-        env: dockerRuntimeEnv(),
+            env: runtimeServices.dockerRuntimeEnv(),
         dryRun: config.dryRun,
         verbose: false,
         label: "verify-build",
