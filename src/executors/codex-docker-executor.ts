@@ -1,3 +1,4 @@
+import { codexDockerExecutorDefaultConfig } from "./configs/codex-docker-config.js";
 import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js";
 import { processExecutor } from "./process-executor.js";
 
@@ -34,16 +35,7 @@ export const codexDockerExecutor: ExecutorDefinition<
 > = {
   kind: "codex-docker",
   version: 1,
-  defaultConfig: {
-    service: "codex-exec",
-    composeFileFlag: "-f",
-    runArgs: ["run", "--rm"],
-    modelEnvVar: "CODEX_MODEL",
-    defaultModel: "gpt-5.4",
-    promptEnvVar: "CODEX_PROMPT",
-    flagsEnvVar: "CODEX_EXEC_FLAGS",
-    execFlagsTemplate: "--model {model} --dangerously-bypass-approvals-and-sandbox",
-  },
+  defaultConfig: codexDockerExecutorDefaultConfig,
   async execute(context: ExecutorContext, input: CodexDockerExecutorInput, config: CodexDockerExecutorConfig) {
     const composeCommand = context.runtime.resolveDockerComposeCmd();
     const env = context.runtime.dockerRuntimeEnv();

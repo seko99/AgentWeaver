@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { requireArtifacts } from "../artifacts.js";
+import { claudeSummaryExecutorDefaultConfig } from "./configs/claude-summary-config.js";
 import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js";
 import { processExecutor } from "./process-executor.js";
 
@@ -39,14 +40,7 @@ export const claudeSummaryExecutor: ExecutorDefinition<
 > = {
   kind: "claude-summary",
   version: 1,
-  defaultConfig: {
-    commandEnvVar: "CLAUDE_BIN",
-    defaultCommand: "claude",
-    modelEnvVar: "CLAUDE_SUMMARY_MODEL",
-    defaultModel: "haiku",
-    promptFlag: "-p",
-    allowedTools: "Read,Write,Edit",
-  },
+  defaultConfig: claudeSummaryExecutorDefaultConfig,
   async execute(context: ExecutorContext, input: ClaudeSummaryExecutorInput, config: ClaudeSummaryExecutorConfig) {
     const env = input.env ?? context.env;
     const command = input.command ?? context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);

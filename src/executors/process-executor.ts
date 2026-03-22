@@ -1,3 +1,4 @@
+import { processExecutorDefaultConfig } from "./configs/process-config.js";
 import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js";
 
 export type ProcessExecutorConfig = JsonObject & {
@@ -19,9 +20,7 @@ export type ProcessExecutorResult = {
 export const processExecutor: ExecutorDefinition<ProcessExecutorConfig, ProcessExecutorInput, ProcessExecutorResult> = {
   kind: "process",
   version: 1,
-  defaultConfig: {
-    printFailureOutput: true,
-  },
+  defaultConfig: processExecutorDefaultConfig,
   async execute(context: ExecutorContext, input: ProcessExecutorInput, config: ProcessExecutorConfig) {
     const options: Parameters<ExecutorContext["runtime"]["runCommand"]>[1] = {
       dryRun: input.dryRun ?? context.dryRun,

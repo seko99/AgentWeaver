@@ -1,3 +1,4 @@
+import { codexLocalExecutorDefaultConfig } from "./configs/codex-local-config.js";
 import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js";
 import { processExecutor } from "./process-executor.js";
 
@@ -33,14 +34,7 @@ export const codexLocalExecutor: ExecutorDefinition<
 > = {
   kind: "codex-local",
   version: 1,
-  defaultConfig: {
-    commandEnvVar: "CODEX_BIN",
-    defaultCommand: "codex",
-    modelEnvVar: "CODEX_MODEL",
-    defaultModel: "gpt-5.4",
-    subcommand: "exec",
-    fullAutoFlag: "--full-auto",
-  },
+  defaultConfig: codexLocalExecutorDefaultConfig,
   async execute(context: ExecutorContext, input: CodexLocalExecutorInput, config: CodexLocalExecutorConfig) {
     const env = input.env ?? context.env;
     const command = input.command ?? context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);
