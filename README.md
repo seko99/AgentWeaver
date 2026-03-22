@@ -16,12 +16,26 @@ The package is designed to run as an npm CLI and includes an interactive termina
 - Persists `auto` pipeline state on disk so runs can resume
 - Uses Docker runtime services for isolated Codex execution and build verification
 
+## Architecture
+
+The CLI now uses an executor-based architecture.
+
+- `src/index.ts` remains the orchestration layer for CLI commands and `auto` state transitions
+- `src/executors/` contains first-class executors for external actions such as Jira fetch, local Codex, Docker Codex, Claude, Claude summaries, process execution, and build verification
+- `src/executors/configs/` contains data-only default configs for executors with JSON-compatible structure
+- `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
+
+This keeps command handlers focused on workflow composition instead of inline subprocess wiring.
+
 ## Repository Layout
 
 - `src/` — main TypeScript sources
 - `src/index.ts` — CLI entrypoint and workflow orchestration
 - `src/interactive-ui.ts` — interactive TUI built with `neo-blessed`
 - `src/markdown.ts` — markdown-to-terminal renderer for the TUI
+- `src/executors/` — executor modules for concrete execution families
+- `src/executors/configs/` — default executor configs kept as plain data
+- `src/runtime/` — shared runtime services used by executors
 - `docker-compose.yml` — runtime services for Codex and build verification
 - `Dockerfile.codex` — container image for Codex runtime
 - `verify_build.sh` — project-specific verification entrypoint used by `verify-build`
@@ -215,6 +229,16 @@ Run from source in dev mode:
 
 ```bash
 npm run dev -- --help
+```
+
+Representative smoke checks during development:
+
+```bash
+node dist/index.js --help
+node dist/index.js auto --help-phases
+node dist/index.js plan --dry DEMO-123
+node dist/index.js implement --dry DEMO-123
+node dist/index.js review --dry DEMO-123
 ```
 
 ## Publishing
