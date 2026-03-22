@@ -2,7 +2,7 @@ import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
 
-import { dim, formatDone, getOutputAdapter } from "../tui.js";
+import { dim, formatDone, getOutputAdapter, setCurrentExecutor } from "../tui.js";
 import { shellQuote } from "./command-resolution.js";
 
 export function formatCommand(argv: string[], env?: NodeJS.ProcessEnv): string {
@@ -34,7 +34,9 @@ export async function runCommand(
   const outputAdapter = getOutputAdapter();
 
   if (dryRun) {
+    setCurrentExecutor(label ?? path.basename(argv[0] ?? argv.join(" ")));
     outputAdapter.writeStdout(`${formatCommand(argv, env)}\n`);
+    setCurrentExecutor(null);
     return "";
   }
 
@@ -66,6 +68,7 @@ export async function runCommand(
     env,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  setCurrentExecutor(statusLabel);
 
   child.stdout?.on("data", (chunk) => {
     const text = String(chunk);
@@ -82,7 +85,7 @@ export async function runCommand(
     }
   });
 
-  if (!outputAdapter.supportsTransientStatus) {
+  if (!outputAdapter.supportsTransientStatus && outputAdapter.renderAuxiliaryOutput !== false) {
     outputAdapter.writeStdout(`Running ${statusLabel}\n`);
   }
 
@@ -103,7 +106,7 @@ export async function runCommand(
     if (timer) {
       clearInterval(timer);
       process.stdout.write(`\r${" ".repeat(80)}\r${formatDone(formatDuration(Date.now() - startedAt))}\n`);
-    } else {
+    } else if (outputAdapter.renderAuxiliaryOutput !== false) {
       outputAdapter.writeStdout(`Done ${formatDuration(Date.now() - startedAt)}\n`);
     }
 
@@ -122,6 +125,7 @@ export async function runCommand(
 
     return output;
   } finally {
+    setCurrentExecutor(null);
     if (timer) {
       clearInterval(timer);
     }

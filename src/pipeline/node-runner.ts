@@ -1,3 +1,4 @@
+import { setCurrentNode } from "../tui.js";
 import { runNodeChecks } from "./checks.js";
 import type { PipelineContext, PipelineNodeDefinition, PipelineNodeResult } from "./types.js";
 
@@ -6,8 +7,13 @@ export async function runNode<TParams, TResult>(
   context: PipelineContext,
   params: TParams,
 ): Promise<PipelineNodeResult<TResult>> {
-  const result = await node.run(context, params);
-  const checks = node.checks?.(context, params, result) ?? [];
-  runNodeChecks(checks);
-  return result;
+  setCurrentNode(node.kind);
+  try {
+    const result = await node.run(context, params);
+    const checks = node.checks?.(context, params, result) ?? [];
+    runNodeChecks(checks);
+    return result;
+  } finally {
+    setCurrentNode(null);
+  }
 }
