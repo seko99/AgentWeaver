@@ -1,3 +1,4 @@
+import { claudeExecutorDefaultConfig } from "./configs/claude-config.js";
 import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js";
 import { processExecutor } from "./process-executor.js";
 
@@ -32,17 +33,7 @@ function resolveModel(config: ClaudeExecutorConfig, env: NodeJS.ProcessEnv): str
 export const claudeExecutor: ExecutorDefinition<ClaudeExecutorConfig, ClaudeExecutorInput, ClaudeExecutorResult> = {
   kind: "claude",
   version: 1,
-  defaultConfig: {
-    commandEnvVar: "CLAUDE_BIN",
-    defaultCommand: "claude",
-    modelEnvVar: "CLAUDE_REVIEW_MODEL",
-    defaultModel: "opus",
-    promptFlag: "-p",
-    allowedTools: "Read,Write,Edit",
-    outputFormat: "stream-json",
-    includePartialMessages: true,
-    verboseMode: true,
-  },
+  defaultConfig: claudeExecutorDefaultConfig,
   async execute(context: ExecutorContext, input: ClaudeExecutorInput, config: ClaudeExecutorConfig) {
     const env = input.env ?? context.env;
     const command = input.command ?? context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);

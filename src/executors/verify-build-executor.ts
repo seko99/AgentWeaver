@@ -1,3 +1,4 @@
+import { verifyBuildExecutorDefaultConfig } from "./configs/verify-build-config.js";
 import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js";
 import { processExecutor } from "./process-executor.js";
 
@@ -25,13 +26,7 @@ export const verifyBuildExecutor: ExecutorDefinition<
 > = {
   kind: "verify-build",
   version: 1,
-  defaultConfig: {
-    service: "verify-build",
-    composeFileFlag: "-f",
-    runArgs: ["run", "--rm"],
-    printFailureOutput: false,
-    verbose: false,
-  },
+  defaultConfig: verifyBuildExecutorDefaultConfig,
   async execute(context: ExecutorContext, input: VerifyBuildExecutorInput, config: VerifyBuildExecutorConfig) {
     const composeCommand = context.runtime.resolveDockerComposeCmd();
     const result = await processExecutor.execute(

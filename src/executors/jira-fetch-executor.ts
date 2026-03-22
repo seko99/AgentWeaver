@@ -1,3 +1,4 @@
+import { jiraFetchExecutorDefaultConfig } from "./configs/jira-fetch-config.js";
 import { fetchJiraIssue } from "../jira.js";
 import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js";
 
@@ -22,10 +23,7 @@ export const jiraFetchExecutor: ExecutorDefinition<
 > = {
   kind: "jira-fetch",
   version: 1,
-  defaultConfig: {
-    authEnvVar: "JIRA_API_KEY",
-    acceptHeader: "application/json",
-  },
+  defaultConfig: jiraFetchExecutorDefaultConfig,
   async execute(_context: ExecutorContext, input: JiraFetchExecutorInput) {
     await fetchJiraIssue(input.jiraApiUrl, input.outputFile);
     return { outputFile: input.outputFile };
