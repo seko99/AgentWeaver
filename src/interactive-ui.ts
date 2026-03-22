@@ -25,6 +25,7 @@ export class InteractiveUi {
   private historyIndex: number;
   private busy = false;
   private currentCommand = "idle";
+  private summaryText = "";
   private focusedPane: "input" | "log" | "summary" | "sidebar" = "input";
 
   constructor(private readonly options: InteractiveUiOptions, history: string[]) {
@@ -401,15 +402,9 @@ export class InteractiveUi {
   }
 
   private renderStaticContent(): void {
-    this.header.setContent(
-      `{bold}AgentWeaver{/bold}  {green-fg}${this.options.issueKey}{/green-fg}\n` +
-        `cwd: ${this.options.cwd}   current: ${this.currentCommand}`,
-    );
-
-    const summaryBody = this.options.summaryText.trim()
-      ? this.options.summaryText.trim()
-      : "Using existing Jira task file.\n\nUse /help to see commands.";
-    this.summary.setContent(renderMarkdownToTerminal(stripAnsi(summaryBody)));
+    this.summaryText = this.options.summaryText.trim();
+    this.updateHeader();
+    this.renderSummary();
 
     this.sidebar.setContent(
       [
@@ -447,6 +442,20 @@ export class InteractiveUi {
     );
   }
 
+  private updateHeader(): void {
+    this.header.setContent(
+      `{bold}AgentWeaver{/bold}  {green-fg}${this.options.issueKey}{/green-fg}\n` +
+        `cwd: ${this.options.cwd}   current: ${this.currentCommand}`,
+    );
+  }
+
+  private renderSummary(): void {
+    const summaryBody = this.summaryText
+      ? this.summaryText
+      : "Task summary is not available yet.";
+    this.summary.setContent(renderMarkdownToTerminal(stripAnsi(summaryBody)));
+  }
+
   private createAdapter(): OutputAdapter {
     return {
       writeStdout: (text) => {
@@ -473,12 +482,24 @@ export class InteractiveUi {
   setBusy(busy: boolean, command?: string): void {
     this.busy = busy;
     this.currentCommand = command ?? (busy ? this.currentCommand : "idle");
+    this.updateHeader();
     this.header.setContent(
       `{bold}AgentWeaver{/bold}  {green-fg}${this.options.issueKey}{/green-fg}\n` +
-        `cwd: ${this.options.cwd}\n` +
-        `current: ${this.currentCommand}${busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`,
+        `cwd: ${this.options.cwd}   current: ${this.currentCommand}${busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`,
     );
     this.input.setLabel(busy ? " command [busy] " : " command ");
+    this.screen.render();
+  }
+
+  setStatus(status: string): void {
+    this.currentCommand = status;
+    this.updateHeader();
+    this.screen.render();
+  }
+
+  setSummary(markdown: string): void {
+    this.summaryText = markdown.trim();
+    this.renderSummary();
     this.screen.render();
   }
 
