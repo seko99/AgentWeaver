@@ -12,6 +12,7 @@ import { codexLocalExecutor } from "./executors/codex-local-executor.js";
 import { claudeExecutor } from "./executors/claude-executor.js";
 import { claudeSummaryExecutor } from "./executors/claude-summary-executor.js";
 import { jiraFetchExecutor } from "./executors/jira-fetch-executor.js";
+import { processExecutor } from "./executors/process-executor.js";
 import type { ExecutorContext, RuntimeServices } from "./executors/types.js";
 import { verifyBuildExecutor } from "./executors/verify-build-executor.js";
 import {
@@ -88,7 +89,6 @@ type Config = {
   dryRun: boolean;
   verbose: boolean;
   dockerComposeFile: string;
-  dockerComposeCmd: string[];
   codexCmd: string;
   claudeCmd: string;
   jiraIssueKey: string;
@@ -403,7 +403,6 @@ function buildConfig(
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
     dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
-    dockerComposeCmd: [],
     codexCmd: process.env.CODEX_BIN ?? "codex",
     claudeCmd: process.env.CLAUDE_BIN ?? "claude",
     jiraIssueKey,
@@ -414,10 +413,9 @@ function buildConfig(
   };
 }
 
-function checkPrerequisites(config: Config): { codexCmd: string; claudeCmd: string; dockerComposeCmd: string[] } {
+function checkPrerequisites(config: Config): { codexCmd: string; claudeCmd: string } {
   let codexCmd = config.codexCmd;
   let claudeCmd = config.claudeCmd;
-  let dockerComposeCmd = config.dockerComposeCmd;
 
   if (config.command === "plan" || config.command === "review") {
     codexCmd = resolveCmd("codex", "CODEX_BIN");
@@ -426,13 +424,13 @@ function checkPrerequisites(config: Config): { codexCmd: string; claudeCmd: stri
     claudeCmd = resolveCmd("claude", "CLAUDE_BIN");
   }
   if (["implement", "review-fix", "test", "test-fix", "test-linter-fix"].includes(config.command)) {
-    dockerComposeCmd = resolveDockerComposeCmd();
+    resolveDockerComposeCmd();
     if (!existsSync(config.dockerComposeFile)) {
       throw new TaskRunnerError(`docker-compose file not found: ${config.dockerComposeFile}`);
     }
   }
 
-  return { codexCmd, claudeCmd, dockerComposeCmd };
+  return { codexCmd, claudeCmd };
 }
 
 function buildPhaseConfig(baseConfig: Config, command: CommandName): Config {
@@ -502,7 +500,7 @@ function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): voi
   state.lastError = null;
 }
 
-async function runCodexInDocker(config: Config, dockerComposeCmd: string[], prompt: string, labelText: string): Promise<void> {
+async function runCodexInDocker(config: Config, prompt: string, labelText: string): Promise<void> {
   printInfo(labelText);
   printPrompt("Codex", prompt);
   await codexDockerExecutor.execute(
@@ -515,7 +513,7 @@ async function runCodexInDocker(config: Config, dockerComposeCmd: string[], prom
   );
 }
 
-async function runVerifyBuildInDocker(config: Config, dockerComposeCmd: string[], labelText: string): Promise<void> {
+async function runVerifyBuildInDocker(config: Config, labelText: string): Promise<void> {
   printInfo(labelText);
   try {
     await verifyBuildExecutor.execute(
@@ -587,13 +585,16 @@ async function summarizeBuildFailure(output: string): Promise<string> {
 
   printInfo(`Summarizing build failure with Claude (${claudeSummaryModel()})`);
   try {
-    const summary = await runCommand([claudeCmd, "--model", claudeSummaryModel(), "-p", prompt], {
-      env: { ...process.env },
-      dryRun: false,
-      verbose: false,
-      label: `claude:${claudeSummaryModel()}`,
-    });
-    return summary.trim() || fallbackBuildFailureSummary(output);
+    const result = await processExecutor.execute(
+      buildRuntimeExecutorContext({ dryRun: false, verbose: false }),
+      {
+        argv: [claudeCmd, "--model", claudeSummaryModel(), "-p", prompt],
+        env: { ...process.env },
+        label: `claude:${claudeSummaryModel()}`,
+      },
+      processExecutor.defaultConfig,
+    );
+    return result.output.trim() || fallbackBuildFailureSummary(output);
   } catch {
     return fallbackBuildFailureSummary(output);
   }
@@ -663,7 +664,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     return false;
   }
 
-  const { codexCmd, claudeCmd, dockerComposeCmd } = checkPrerequisites(config);
+  const { codexCmd, claudeCmd } = checkPrerequisites(config);
   process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
   process.env.JIRA_API_URL = config.jiraApiUrl;
   process.env.JIRA_TASK_FILE = config.jiraTaskFile;
@@ -718,9 +719,9 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
   if (config.command === "implement") {
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(planArtifacts(config.taskKey), "Implement mode requires plan artifacts from the planning phase.");
-    await runCodexInDocker(config, dockerComposeCmd, implementPrompt, "Running Codex implementation mode in isolated Docker");
+    await runCodexInDocker(config, implementPrompt, "Running Codex implementation mode in isolated Docker");
     if (runFollowupVerify) {
-      await runVerifyBuildInDocker(config, dockerComposeCmd, "Running build verification in isolated Docker");
+      await runVerifyBuildInDocker(config, "Running build verification in isolated Docker");
     }
     return false;
   }
@@ -832,17 +833,12 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       }),
       config.extraPrompt,
     );
-    await runCodexInDocker(
-      config,
-      dockerComposeCmd,
-      reviewFixPrompt,
-      `Running Codex review-fix mode in isolated Docker (iteration ${latestIteration})`,
-    );
+    await runCodexInDocker(config, reviewFixPrompt, `Running Codex review-fix mode in isolated Docker (iteration ${latestIteration})`);
     if (!config.dryRun) {
       requireArtifacts([reviewFixFile], "Review-fix mode did not produce the required review-fix artifact.");
     }
     if (runFollowupVerify) {
-      await runVerifyBuildInDocker(config, dockerComposeCmd, "Running build verification in isolated Docker");
+      await runVerifyBuildInDocker(config, "Running build verification in isolated Docker");
     }
     return false;
   }
@@ -850,7 +846,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
   if (config.command === "test") {
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(planArtifacts(config.taskKey), "Test mode requires plan artifacts from the planning phase.");
-    await runVerifyBuildInDocker(config, dockerComposeCmd, "Running build verification in isolated Docker");
+    await runVerifyBuildInDocker(config, "Running build verification in isolated Docker");
     return false;
   }
 
@@ -858,12 +854,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(planArtifacts(config.taskKey), `${config.command} mode requires plan artifacts from the planning phase.`);
     const prompt = formatPrompt(config.command === "test-fix" ? TEST_FIX_PROMPT_TEMPLATE : TEST_LINTER_FIX_PROMPT_TEMPLATE, config.extraPrompt);
-    await runCodexInDocker(
-      config,
-      dockerComposeCmd,
-      prompt,
-      `Running Codex ${config.command} mode in isolated Docker`,
-    );
+    await runCodexInDocker(config, prompt, `Running Codex ${config.command} mode in isolated Docker`);
     return false;
   }
 
