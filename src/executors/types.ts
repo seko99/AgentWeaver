@@ -1,7 +1,8 @@
 import type { OutputAdapter } from "../tui.js";
 
 export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
+export type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
 
 export type RuntimeServices = {
   resolveCmd: (commandName: string, envVarName: string) => string;
