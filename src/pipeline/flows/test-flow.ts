@@ -1,24 +1,16 @@
+import { planArtifacts, requireArtifacts } from "../../artifacts.js";
 import { runNode } from "../node-runner.js";
-import { codexDockerPromptNode } from "../nodes/codex-docker-prompt-node.js";
 import { verifyBuildNode } from "../nodes/verify-build-node.js";
 import type { PipelineContext } from "../types.js";
 
-export type ImplementFlowParams = {
+export type TestFlowParams = {
+  taskKey: string;
   dockerComposeFile: string;
-  prompt: string;
-  runFollowupVerify: boolean;
   onVerifyBuildFailure?: (output: string) => Promise<void>;
 };
 
-export async function runImplementFlow(context: PipelineContext, params: ImplementFlowParams): Promise<void> {
-  await runNode(codexDockerPromptNode, context, {
-    dockerComposeFile: params.dockerComposeFile,
-    prompt: params.prompt,
-    labelText: "Running Codex implementation mode in isolated Docker",
-  });
-  if (!params.runFollowupVerify) {
-    return;
-  }
+export async function runTestFlow(context: PipelineContext, params: TestFlowParams): Promise<void> {
+  requireArtifacts(planArtifacts(params.taskKey), "Test mode requires plan artifacts from the planning phase.");
   try {
     await runNode(verifyBuildNode, context, {
       dockerComposeFile: params.dockerComposeFile,

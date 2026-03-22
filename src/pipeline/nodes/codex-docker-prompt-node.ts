@@ -7,14 +7,16 @@ import { printInfo, printPrompt } from "../../tui.js";
 import type { PipelineNodeDefinition } from "../types.js";
 import { toExecutorContext } from "../types.js";
 
-export type ImplementCodexNodeParams = {
+export type CodexDockerPromptNodeParams = {
   prompt: string;
   dockerComposeFile: string;
   labelText: string;
+  requiredArtifacts?: string[];
+  missingArtifactsMessage?: string;
 };
 
-export const implementCodexNode: PipelineNodeDefinition<ImplementCodexNodeParams, CodexDockerExecutorResult> = {
-  kind: "implement-codex",
+export const codexDockerPromptNode: PipelineNodeDefinition<CodexDockerPromptNodeParams, CodexDockerExecutorResult> = {
+  kind: "codex-docker-prompt",
   version: 1,
   async run(context, params) {
     printInfo(params.labelText);
@@ -30,6 +32,21 @@ export const implementCodexNode: PipelineNodeDefinition<ImplementCodexNodeParams
       },
       executor.defaultConfig,
     );
-    return { value };
+    return {
+      value,
+      outputs: (params.requiredArtifacts ?? []).map((path) => ({ kind: "artifact" as const, path, required: true })),
+    };
+  },
+  checks(_context, params) {
+    if (!params.requiredArtifacts || params.requiredArtifacts.length === 0) {
+      return [];
+    }
+    return [
+      {
+        kind: "require-artifacts",
+        paths: params.requiredArtifacts,
+        message: params.missingArtifactsMessage ?? "Codex docker node did not produce required artifacts.",
+      },
+    ];
   },
 };

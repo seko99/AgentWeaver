@@ -33,19 +33,19 @@ import {
   AUTO_REVIEW_FIX_EXTRA_PROMPT,
   IMPLEMENT_PROMPT_TEMPLATE,
   PLAN_PROMPT_TEMPLATE,
-  REVIEW_FIX_PROMPT_TEMPLATE,
   REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   REVIEW_SUMMARY_PROMPT_TEMPLATE,
   TASK_SUMMARY_PROMPT_TEMPLATE,
-  TEST_FIX_PROMPT_TEMPLATE,
-  TEST_LINTER_FIX_PROMPT_TEMPLATE,
   formatPrompt,
   formatTemplate,
 } from "./prompts.js";
 import { createPipelineContext } from "./pipeline/context.js";
 import { runImplementFlow } from "./pipeline/flows/implement-flow.js";
 import { runPlanFlow } from "./pipeline/flows/plan-flow.js";
+import { runReviewFixFlow } from "./pipeline/flows/review-fix-flow.js";
 import { runReviewFlow } from "./pipeline/flows/review-flow.js";
+import { runTestFixFlow } from "./pipeline/flows/test-fix-flow.js";
+import { runTestFlow } from "./pipeline/flows/test-flow.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
@@ -502,42 +502,6 @@ function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): voi
   state.lastError = null;
 }
 
-async function runCodexInDocker(config: Config, prompt: string, labelText: string): Promise<void> {
-  printInfo(labelText);
-  printPrompt("Codex", prompt);
-  await codexDockerExecutor.execute(
-    buildExecutorContext(config),
-    {
-      dockerComposeFile: config.dockerComposeFile,
-      prompt,
-    },
-    codexDockerExecutor.defaultConfig,
-  );
-}
-
-async function runVerifyBuildInDocker(config: Config, labelText: string): Promise<void> {
-  printInfo(labelText);
-  try {
-    await verifyBuildExecutor.execute(
-      buildExecutorContext(config),
-      {
-        dockerComposeFile: config.dockerComposeFile,
-      },
-      verifyBuildExecutor.defaultConfig,
-    );
-  } catch (error) {
-    const returnCode = Number((error as { returnCode?: number }).returnCode ?? 1);
-    printError(`Build verification failed with exit code ${returnCode}`);
-    if (!config.dryRun) {
-      printSummary(
-        "Build Failure Summary",
-        await summarizeBuildFailure(String((error as { output?: string }).output ?? "")),
-      );
-    }
-    throw error;
-  }
-}
-
 function codexModel(): string {
   return process.env.CODEX_MODEL?.trim() || DEFAULT_CODEX_MODEL;
 }
@@ -755,43 +719,77 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
 
   if (config.command === "review-fix") {
     requireJiraTaskFile(config.jiraTaskFile);
-    requireArtifacts(planArtifacts(config.taskKey), "Review-fix mode requires plan artifacts from the planning phase.");
-    const latestIteration = latestReviewReplyIteration(config.taskKey);
-    if (latestIteration === null) {
-      throw new TaskRunnerError(`Review-fix mode requires at least one review-reply-${config.taskKey}-N.md artifact.`);
-    }
-    const reviewReplyFile = artifactFile("review-reply", config.taskKey, latestIteration);
-    const reviewFixFile = artifactFile("review-fix", config.taskKey, latestIteration);
-    const reviewFixPrompt = formatPrompt(
-      formatTemplate(REVIEW_FIX_PROMPT_TEMPLATE, {
-        review_reply_file: reviewReplyFile,
-        items: config.reviewFixPoints ?? "",
-        review_fix_file: reviewFixFile,
+    await runReviewFixFlow(
+      createPipelineContext({
+        issueKey: config.taskKey,
+        jiraRef: config.jiraRef,
+        dryRun: config.dryRun,
+        verbose: config.verbose,
+        runtime: runtimeServices,
       }),
-      config.extraPrompt,
+      {
+        taskKey: config.taskKey,
+        dockerComposeFile: config.dockerComposeFile,
+        latestIteration: latestReviewReplyIteration(config.taskKey),
+        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
+        ...(config.reviewFixPoints !== undefined ? { reviewFixPoints: config.reviewFixPoints } : {}),
+        runFollowupVerify,
+        ...(!config.dryRun
+          ? {
+              onVerifyBuildFailure: async (output: string) => {
+                printError("Build verification failed");
+                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+              },
+            }
+          : {}),
+      },
     );
-    await runCodexInDocker(config, reviewFixPrompt, `Running Codex review-fix mode in isolated Docker (iteration ${latestIteration})`);
-    if (!config.dryRun) {
-      requireArtifacts([reviewFixFile], "Review-fix mode did not produce the required review-fix artifact.");
-    }
-    if (runFollowupVerify) {
-      await runVerifyBuildInDocker(config, "Running build verification in isolated Docker");
-    }
     return false;
   }
 
   if (config.command === "test") {
     requireJiraTaskFile(config.jiraTaskFile);
-    requireArtifacts(planArtifacts(config.taskKey), "Test mode requires plan artifacts from the planning phase.");
-    await runVerifyBuildInDocker(config, "Running build verification in isolated Docker");
+    await runTestFlow(
+      createPipelineContext({
+        issueKey: config.taskKey,
+        jiraRef: config.jiraRef,
+        dryRun: config.dryRun,
+        verbose: config.verbose,
+        runtime: runtimeServices,
+      }),
+      {
+        taskKey: config.taskKey,
+        dockerComposeFile: config.dockerComposeFile,
+        ...(!config.dryRun
+          ? {
+              onVerifyBuildFailure: async (output: string) => {
+                printError("Build verification failed");
+                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+              },
+            }
+          : {}),
+      },
+    );
     return false;
   }
 
   if (config.command === "test-fix" || config.command === "test-linter-fix") {
     requireJiraTaskFile(config.jiraTaskFile);
-    requireArtifacts(planArtifacts(config.taskKey), `${config.command} mode requires plan artifacts from the planning phase.`);
-    const prompt = formatPrompt(config.command === "test-fix" ? TEST_FIX_PROMPT_TEMPLATE : TEST_LINTER_FIX_PROMPT_TEMPLATE, config.extraPrompt);
-    await runCodexInDocker(config, prompt, `Running Codex ${config.command} mode in isolated Docker`);
+    await runTestFixFlow(
+      createPipelineContext({
+        issueKey: config.taskKey,
+        jiraRef: config.jiraRef,
+        dryRun: config.dryRun,
+        verbose: config.verbose,
+        runtime: runtimeServices,
+      }),
+      {
+        command: config.command,
+        taskKey: config.taskKey,
+        dockerComposeFile: config.dockerComposeFile,
+        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
+      },
+    );
     return false;
   }
 
