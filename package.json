@@ -1,6 +1,6 @@
 {
   "name": "agentweaver",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI orchestrator for Jira/Codex/Claude engineering workflows",
   "keywords": [
     "agent",
@@ -52,6 +52,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "agentweaver": "^0.1.0",
     "markdown-it": "^14.1.1",
     "neo-blessed": "^0.2.0"
   }
