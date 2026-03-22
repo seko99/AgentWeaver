@@ -401,18 +401,64 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-function resolveCmd(commandName: string, envVarName: string): string {
+function isExecutable(filePath: string): boolean {
+  try {
+    accessSync(filePath, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function findCmdPath(commandName: string, envVarName: string): string | null {
   const configuredPath = process.env[envVarName];
-  if (configuredPath) {
-    accessSync(configuredPath, constants.X_OK);
+  if (configuredPath && isExecutable(configuredPath)) {
     return configuredPath;
   }
 
-  const result = spawnSync("bash", ["-lc", `command -v ${shellQuote(commandName)}`], { encoding: "utf8" });
-  if (result.status === 0 && result.stdout.trim()) {
-    return result.stdout.trim().split(/\r?\n/)[0] ?? commandName;
+  const direct = spawnSync("bash", ["-lc", `command -v ${shellQuote(commandName)}`], { encoding: "utf8" });
+  if (direct.status === 0) {
+    const candidate = direct.stdout.trim().split(/\r?\n/)[0] ?? "";
+    if (candidate && !candidate.includes("alias") && isExecutable(candidate)) {
+      return candidate;
+    }
   }
 
+  const interactive = spawnSync("bash", ["-ic", `type -a -- ${shellQuote(commandName)}`], {
+    encoding: "utf8",
+  });
+  if (interactive.status !== 0) {
+    return null;
+  }
+
+  for (const rawLine of interactive.stdout.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+    if (line.startsWith(`${commandName} is aliased to `)) {
+      const aliasValue = line.split(" is aliased to ", 2)[1]?.replace(/^['`]|['`]$/g, "") ?? "";
+      if (aliasValue && isExecutable(aliasValue)) {
+        return aliasValue;
+      }
+      continue;
+    }
+    if (line.startsWith("/")) {
+      const candidate = line.split(/\s+/)[0] ?? "";
+      if (candidate && isExecutable(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+function resolveCmd(commandName: string, envVarName: string): string {
+  const candidate = findCmdPath(commandName, envVarName);
+  if (candidate) {
+    return candidate;
+  }
   throw new TaskRunnerError(`Missing required command: ${commandName}`);
 }
 
@@ -832,6 +878,7 @@ async function summarizeTask(jiraRef: string): Promise<{ issueKey: string; summa
   const config = buildConfig("plan", jiraRef);
   const claudeCmd = resolveCmd("claude", "CLAUDE_BIN");
   await fetchJiraIssue(config.jiraApiUrl, config.jiraTaskFile);
+
   const summaryPrompt = formatTemplate(TASK_SUMMARY_PROMPT_TEMPLATE, {
     jira_task_file: config.jiraTaskFile,
     task_summary_file: taskSummaryFile(config.taskKey),
@@ -1372,8 +1419,6 @@ async function ensureHistoryFile(): Promise<void> {
 async function runInteractive(jiraRef: string, forceRefresh = false): Promise<number> {
   const config = buildConfig("plan", jiraRef);
   const jiraTaskPath = config.jiraTaskFile;
-  const taskIdentity =
-    forceRefresh || !existsSync(jiraTaskPath) ? await summarizeTask(jiraRef) : resolveTaskIdentity(jiraRef);
 
   await ensureHistoryFile();
   const historyLines = (await readFile(HISTORY_FILE, "utf8"))
@@ -1398,8 +1443,8 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
   ];
   const ui = new InteractiveUi(
     {
-      issueKey: taskIdentity.issueKey,
-      summaryText: taskIdentity.summaryText || "Task summary is not available yet. Run /plan or refresh Jira data.",
+      issueKey: config.jiraIssueKey,
+      summaryText: "Starting interactive session...",
       cwd: process.cwd(),
       commands: commandList,
       onSubmit: async (line) => {
@@ -1438,13 +1483,50 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
   );
 
   ui.mount();
-  printInfo(`Interactive mode for ${taskIdentity.issueKey}`);
-  if (taskIdentity.summaryText) {
-    printInfo("Task summary loaded.");
-  } else {
-    printInfo("Task summary is not available yet.");
-  }
+  printInfo(`Interactive mode for ${config.jiraIssueKey}`);
   printInfo("Use /help to see commands.");
+
+  try {
+    ui.setStatus("preflight");
+    printInfo("Checking required commands");
+    resolveCmd("codex", "CODEX_BIN");
+    resolveCmd("claude", "CLAUDE_BIN");
+    printInfo("Required commands found");
+
+    if (forceRefresh || !existsSync(jiraTaskPath)) {
+      ui.setStatus("fetch_jira");
+      printInfo(`Fetching Jira issue ${config.jiraIssueKey}`);
+      await fetchJiraIssue(config.jiraApiUrl, config.jiraTaskFile);
+
+      ui.setStatus("summary");
+      printInfo("Generating task summary with Claude");
+      const claudeCmd = resolveCmd("claude", "CLAUDE_BIN");
+      const summaryPrompt = formatTemplate(TASK_SUMMARY_PROMPT_TEMPLATE, {
+        jira_task_file: config.jiraTaskFile,
+        task_summary_file: taskSummaryFile(config.taskKey),
+      });
+      const summaryText = await runClaudeSummary(claudeCmd, taskSummaryFile(config.taskKey), summaryPrompt);
+      ui.setSummary(summaryText);
+      printInfo("Task summary loaded");
+    } else {
+      const taskIdentity = resolveTaskIdentity(jiraRef);
+      if (taskIdentity.summaryText) {
+        ui.setSummary(taskIdentity.summaryText);
+        printInfo("Loaded existing task summary");
+      } else {
+        ui.setSummary("Task summary is not available yet. Run `/plan` or refresh Jira data.");
+        printInfo("Task summary is not available yet");
+      }
+    }
+    ui.setStatus("idle");
+  } catch (error) {
+    ui.setStatus("preflight_failed");
+    if (error instanceof TaskRunnerError) {
+      printError(error.message);
+    } else {
+      throw error;
+    }
+  }
 
   return await new Promise<number>((resolve, reject) => {
     const interval = setInterval(() => {
