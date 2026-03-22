@@ -16,6 +16,7 @@ export class InteractiveUi {
   private readonly screen: any;
   private readonly header: any;
   private readonly summary: any;
+  private readonly status: any;
   private readonly sidebar: any;
   private readonly log: any;
   private readonly input: any;
@@ -27,6 +28,11 @@ export class InteractiveUi {
   private currentCommand = "idle";
   private summaryText = "";
   private focusedPane: "input" | "log" | "summary" | "sidebar" = "input";
+  private currentNode: string | null = null;
+  private currentExecutor: string | null = null;
+  private spinnerFrame = 0;
+  private spinnerTimer: NodeJS.Timeout | null = null;
+  private runningStartedAt: number | null = null;
 
   constructor(private readonly options: InteractiveUiOptions, history: string[]) {
     this.history = history;
@@ -63,7 +69,7 @@ export class InteractiveUi {
       top: 3,
       left: 0,
       width: "28%",
-      height: "100%-7",
+      bottom: 10,
       tags: true,
       label: " Commands ",
       padding: {
@@ -86,7 +92,7 @@ export class InteractiveUi {
       top: 3,
       left: "28%",
       width: "72%",
-      height: 9,
+      height: 8,
       tags: true,
       label: " Task Summary ",
       padding: {
@@ -104,12 +110,31 @@ export class InteractiveUi {
       },
     });
 
+    this.status = blessed.box({
+      parent: this.screen,
+      bottom: 4,
+      left: 0,
+      width: "28%",
+      height: 6,
+      tags: true,
+      label: " Status ",
+      padding: {
+        left: 1,
+        right: 1,
+      },
+      border: "line",
+      style: {
+        border: { fg: "green" },
+        fg: "white",
+      },
+    });
+
     this.log = blessed.log({
       parent: this.screen,
-      top: 12,
+      top: 11,
+      bottom: 4,
       left: "28%",
       width: "72%",
-      height: "100%-16",
       tags: false,
       label: " Activity ",
       padding: {
@@ -466,6 +491,12 @@ export class InteractiveUi {
       },
       supportsTransientStatus: false,
       supportsPassthrough: false,
+      renderAuxiliaryOutput: false,
+      setExecutionState: (state) => {
+        this.currentNode = state.node;
+        this.currentExecutor = state.executor;
+        this.updateRunningPanel();
+      },
     };
   }
 
@@ -475,6 +506,10 @@ export class InteractiveUi {
   }
 
   destroy(): void {
+    if (this.spinnerTimer) {
+      clearInterval(this.spinnerTimer);
+      this.spinnerTimer = null;
+    }
     setOutputAdapter(null);
     this.screen.destroy();
   }
@@ -482,11 +517,17 @@ export class InteractiveUi {
   setBusy(busy: boolean, command?: string): void {
     this.busy = busy;
     this.currentCommand = command ?? (busy ? this.currentCommand : "idle");
+    if (busy && this.runningStartedAt === null) {
+      this.runningStartedAt = Date.now();
+    } else if (!busy && this.currentNode === null && this.currentExecutor === null) {
+      this.runningStartedAt = null;
+    }
     this.updateHeader();
     this.header.setContent(
       `{bold}AgentWeaver{/bold}  {green-fg}${this.options.issueKey}{/green-fg}\n` +
         `cwd: ${this.options.cwd}   current: ${this.currentCommand}${busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`,
     );
+    this.updateRunningPanel();
     this.input.setLabel(busy ? " command [busy] " : " command ");
     this.screen.render();
   }
@@ -519,5 +560,45 @@ export class InteractiveUi {
     }
     this.log.setScrollPerc(100);
     this.screen.render();
+  }
+
+  private updateRunningPanel(): void {
+    const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    const running = this.busy || this.currentNode !== null || this.currentExecutor !== null;
+    if (running && this.spinnerTimer === null) {
+      if (this.runningStartedAt === null) {
+        this.runningStartedAt = Date.now();
+      }
+      this.spinnerTimer = setInterval(() => {
+        this.spinnerFrame = (this.spinnerFrame + 1) % frames.length;
+        this.updateRunningPanel();
+        this.screen.render();
+      }, 120);
+    } else if (!running && this.spinnerTimer) {
+      clearInterval(this.spinnerTimer);
+      this.spinnerTimer = null;
+      this.spinnerFrame = 0;
+      this.runningStartedAt = null;
+    }
+
+    const spinner = running ? `{green-fg}${frames[this.spinnerFrame] ?? "•"}{/green-fg}` : "•";
+    const elapsed = this.formatElapsed(running ? Date.now() : null);
+    const nodeLine = `Node: ${this.currentNode ?? "-"}`;
+    const executorLine = `Executor: ${this.currentExecutor ?? "-"}`;
+    const stateLine = `State: ${running ? `${spinner} running` : "idle"}`;
+    const elapsedLine = `Time: ${elapsed}`;
+    this.status.setContent([stateLine, elapsedLine, nodeLine, executorLine].join("\n"));
+    this.screen.render();
+  }
+
+  private formatElapsed(now: number | null): string {
+    if (this.runningStartedAt === null || now === null) {
+      return "00:00:00";
+    }
+    const totalSeconds = Math.max(0, Math.floor((now - this.runningStartedAt) / 1000));
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${hours}:${minutes}:${seconds}`;
   }
 }

@@ -15,6 +15,8 @@ export type OutputAdapter = {
   writeStderr: (text: string) => void;
   supportsTransientStatus: boolean;
   supportsPassthrough: boolean;
+  renderAuxiliaryOutput?: boolean;
+  setExecutionState?: (state: { node: string | null; executor: string | null }) => void;
 };
 
 const defaultAdapter: OutputAdapter = {
@@ -26,9 +28,14 @@ const defaultAdapter: OutputAdapter = {
   },
   supportsTransientStatus: true,
   supportsPassthrough: true,
+  renderAuxiliaryOutput: true,
 };
 
 let outputAdapter: OutputAdapter = defaultAdapter;
+let executionState: { node: string | null; executor: string | null } = {
+  node: null,
+  executor: null,
+};
 
 function color(text: string, ansi: string): string {
   return `${ansi}${text}${RESET}`;
@@ -44,6 +51,7 @@ function visibleLength(text: string): number {
 
 export function setOutputAdapter(adapter: OutputAdapter | null): void {
   outputAdapter = adapter ?? defaultAdapter;
+  outputAdapter.setExecutionState?.(executionState);
 }
 
 export function getOutputAdapter(): OutputAdapter {
@@ -71,6 +79,9 @@ export function renderPanel(title: string, body: string, borderColor?: string): 
 }
 
 export function printInfo(message: string): void {
+  if (outputAdapter.renderAuxiliaryOutput === false) {
+    return;
+  }
   outputAdapter.writeStdout(`${color(message, `${BOLD}${CYAN}`)}\n`);
 }
 
@@ -79,14 +90,23 @@ export function printError(message: string): void {
 }
 
 export function printPrompt(toolName: string, prompt: string): void {
+  if (outputAdapter.renderAuxiliaryOutput === false) {
+    return;
+  }
   outputAdapter.writeStdout(`${renderPanel(`${toolName} Prompt`, prompt, BLUE)}\n`);
 }
 
 export function printSummary(title: string, text: string): void {
+  if (outputAdapter.renderAuxiliaryOutput === false) {
+    return;
+  }
   outputAdapter.writeStdout(`${renderPanel(title, text.trim() || "Empty summary", YELLOW)}\n`);
 }
 
 export function printPanel(title: string, text: string, tone: "green" | "yellow" | "magenta" | "cyan"): void {
+  if (outputAdapter.renderAuxiliaryOutput === false) {
+    return;
+  }
   const borderColor = tone === "green" ? GREEN : tone === "yellow" ? YELLOW : tone === "magenta" ? MAGENTA : CYAN;
   outputAdapter.writeStdout(`${renderPanel(title, text, borderColor)}\n`);
 }
@@ -105,4 +125,23 @@ export function bold(text: string): string {
 
 export function bye(): void {
   outputAdapter.writeStdout(`${color("Bye", CYAN)}\n`);
+}
+
+function updateExecutionState(next: { node: string | null; executor: string | null }): void {
+  executionState = next;
+  outputAdapter.setExecutionState?.(executionState);
+}
+
+export function setCurrentNode(node: string | null): void {
+  updateExecutionState({
+    ...executionState,
+    node,
+  });
+}
+
+export function setCurrentExecutor(executor: string | null): void {
+  updateExecutionState({
+    ...executionState,
+    executor,
+  });
 }
