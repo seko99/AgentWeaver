@@ -7,7 +7,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import type { RuntimeServices } from "./executors/types.js";
+import { codexDockerExecutor } from "./executors/codex-docker-executor.js";
+import { codexLocalExecutor } from "./executors/codex-local-executor.js";
+import { claudeExecutor } from "./executors/claude-executor.js";
+import { claudeSummaryExecutor } from "./executors/claude-summary-executor.js";
+import { jiraFetchExecutor } from "./executors/jira-fetch-executor.js";
+import type { ExecutorContext, RuntimeServices } from "./executors/types.js";
+import { verifyBuildExecutor } from "./executors/verify-build-executor.js";
 import {
   READY_TO_MERGE_FILE,
   REVIEW_FILE_RE,
@@ -21,7 +27,7 @@ import {
   taskSummaryFile,
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
-import { buildJiraApiUrl, buildJiraBrowseUrl, extractIssueKey, fetchJiraIssue, requireJiraTaskFile } from "./jira.js";
+import { buildJiraApiUrl, buildJiraBrowseUrl, extractIssueKey, requireJiraTaskFile } from "./jira.js";
 import {
   AUTO_REVIEW_FIX_EXTRA_PROMPT,
   IMPLEMENT_PROMPT_TEMPLATE,
@@ -41,7 +47,7 @@ import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolutio
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
 import { InteractiveUi } from "./interactive-ui.js";
-import { bye, printError, printInfo, printPanel, printPrompt, printSummary } from "./tui.js";
+import { bye, getOutputAdapter, printError, printInfo, printPanel, printPrompt, printSummary } from "./tui.js";
 
 const COMMANDS = [
   "plan",
@@ -433,6 +439,28 @@ function buildPhaseConfig(baseConfig: Config, command: CommandName): Config {
   return { ...baseConfig, command };
 }
 
+function buildExecutorContext(config: Config): ExecutorContext {
+  return {
+    cwd: process.cwd(),
+    env: { ...process.env },
+    ui: getOutputAdapter(),
+    dryRun: config.dryRun,
+    verbose: config.verbose,
+    runtime: runtimeServices,
+  };
+}
+
+function buildRuntimeExecutorContext(options: { dryRun?: boolean; verbose?: boolean } = {}): ExecutorContext {
+  return {
+    cwd: process.cwd(),
+    env: { ...process.env },
+    ui: getOutputAdapter(),
+    dryRun: options.dryRun ?? false,
+    verbose: options.verbose ?? false,
+    runtime: runtimeServices,
+  };
+}
+
 function appendPromptText(basePrompt: string | null | undefined, suffix: string): string {
   if (!basePrompt?.trim()) {
     return suffix;
@@ -475,34 +503,27 @@ function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): voi
 }
 
 async function runCodexInDocker(config: Config, dockerComposeCmd: string[], prompt: string, labelText: string): Promise<void> {
-  const dockerEnv = runtimeServices.dockerRuntimeEnv();
-  dockerEnv.CODEX_PROMPT = prompt;
-  dockerEnv.CODEX_EXEC_FLAGS = `--model ${codexModel()} --dangerously-bypass-approvals-and-sandbox`;
   printInfo(labelText);
   printPrompt("Codex", prompt);
-  await runCommand(
-    [...dockerComposeCmd, "-f", config.dockerComposeFile, "run", "--rm", "codex-exec"],
+  await codexDockerExecutor.execute(
+    buildExecutorContext(config),
     {
-      env: dockerEnv,
-      dryRun: config.dryRun,
-      verbose: config.verbose,
-      label: `codex:${codexModel()}`,
+      dockerComposeFile: config.dockerComposeFile,
+      prompt,
     },
+    codexDockerExecutor.defaultConfig,
   );
 }
 
 async function runVerifyBuildInDocker(config: Config, dockerComposeCmd: string[], labelText: string): Promise<void> {
   printInfo(labelText);
   try {
-    await runCommand(
-      [...dockerComposeCmd, "-f", config.dockerComposeFile, "run", "--rm", "verify-build"],
+    await verifyBuildExecutor.execute(
+      buildExecutorContext(config),
       {
-            env: runtimeServices.dockerRuntimeEnv(),
-        dryRun: config.dryRun,
-        verbose: false,
-        label: "verify-build",
-        printFailureOutput: false,
+        dockerComposeFile: config.dockerComposeFile,
       },
+      verifyBuildExecutor.defaultConfig,
     );
   } catch (error) {
     const returnCode = Number((error as { returnCode?: number }).returnCode ?? 1);
@@ -581,23 +602,31 @@ async function summarizeBuildFailure(output: string): Promise<string> {
 async function runClaudeSummary(claudeCmd: string, outputFile: string, prompt: string, verbose = false): Promise<string> {
   printInfo(`Preparing summary in ${outputFile}`);
   printPrompt("Claude", prompt);
-  await runCommand(
-    [claudeCmd, "--model", claudeSummaryModel(), "-p", "--allowedTools=Read,Write,Edit", prompt],
+  const result = await claudeSummaryExecutor.execute(
+    buildRuntimeExecutorContext({ dryRun: false, verbose }),
     {
+      command: claudeCmd,
+      outputFile,
+      prompt,
       env: { ...process.env },
-      dryRun: false,
       verbose,
-      label: `claude:${claudeSummaryModel()}`,
     },
+    claudeSummaryExecutor.defaultConfig,
   );
-  requireArtifacts([outputFile], `Claude summary did not produce ${outputFile}.`);
-  return readFileSync(outputFile, "utf8").trim();
+  return result.artifactText;
 }
 
 async function summarizeTask(jiraRef: string): Promise<{ issueKey: string; summaryText: string }> {
   const config = buildConfig("plan", jiraRef);
   const claudeCmd = resolveCmd("claude", "CLAUDE_BIN");
-  await fetchJiraIssue(config.jiraApiUrl, config.jiraTaskFile);
+  await jiraFetchExecutor.execute(
+    buildExecutorContext(config),
+    {
+      jiraApiUrl: config.jiraApiUrl,
+      outputFile: config.jiraTaskFile,
+    },
+    jiraFetchExecutor.defaultConfig,
+  );
 
   const summaryPrompt = formatTemplate(TASK_SUMMARY_PROMPT_TEMPLATE, {
     jira_task_file: config.jiraTaskFile,
@@ -663,15 +692,25 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
       process.stdout.write(`Saving Jira issue JSON to: ${config.jiraTaskFile}\n`);
     }
-    await fetchJiraIssue(config.jiraApiUrl, config.jiraTaskFile);
+    await jiraFetchExecutor.execute(
+      buildExecutorContext(config),
+      {
+        jiraApiUrl: config.jiraApiUrl,
+        outputFile: config.jiraTaskFile,
+      },
+      jiraFetchExecutor.defaultConfig,
+    );
     printInfo("Running Codex planning mode");
     printPrompt("Codex", planPrompt);
-    await runCommand([codexCmd, "exec", "--model", codexModel(), "--full-auto", planPrompt], {
-      env: { ...process.env },
-      dryRun: config.dryRun,
-      verbose: config.verbose,
-      label: `codex:${codexModel()}`,
-    });
+    await codexLocalExecutor.execute(
+      buildExecutorContext(config),
+      {
+        prompt: planPrompt,
+        command: codexCmd,
+        env: { ...process.env },
+      },
+      codexLocalExecutor.defaultConfig,
+    );
     requireArtifacts(planArtifacts(config.taskKey), "Plan mode did not produce the required artifacts.");
     return false;
   }
@@ -716,24 +755,16 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
 
     printInfo(`Running Claude review mode (iteration ${iteration})`);
     printPrompt("Claude", claudePrompt);
-    await runCommand(
-      [
-        claudeCmd,
-        "--model",
-        claudeReviewModel(),
-        "-p",
-        "--allowedTools=Read,Write,Edit",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--include-partial-messages",
-        claudePrompt,
-      ],
+    await claudeExecutor.execute(
+      buildExecutorContext(config),
       {
+        prompt: claudePrompt,
+        command: claudeCmd,
         env: { ...process.env },
-        dryRun: config.dryRun,
-        verbose: config.verbose,
-        label: `claude:${claudeReviewModel()}`,
+      },
+      {
+        ...claudeExecutor.defaultConfig,
+        defaultModel: claudeReviewModel(),
       },
     );
 
@@ -753,12 +784,15 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
 
     printInfo(`Running Codex review reply mode (iteration ${iteration})`);
     printPrompt("Codex", codexReplyPrompt);
-    await runCommand([codexCmd, "exec", "--model", codexModel(), "--full-auto", codexReplyPrompt], {
-      env: { ...process.env },
-      dryRun: config.dryRun,
-      verbose: config.verbose,
-      label: `codex:${codexModel()}`,
-    });
+    await codexLocalExecutor.execute(
+      buildExecutorContext(config),
+      {
+        prompt: codexReplyPrompt,
+        command: codexCmd,
+        env: { ...process.env },
+      },
+      codexLocalExecutor.defaultConfig,
+    );
 
     let readyToMerge = false;
     if (!config.dryRun) {
@@ -1216,7 +1250,14 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
     if (forceRefresh || !existsSync(jiraTaskPath)) {
       ui.setStatus("fetch_jira");
       printInfo(`Fetching Jira issue ${config.jiraIssueKey}`);
-      await fetchJiraIssue(config.jiraApiUrl, config.jiraTaskFile);
+      await jiraFetchExecutor.execute(
+        buildExecutorContext(config),
+        {
+          jiraApiUrl: config.jiraApiUrl,
+          outputFile: config.jiraTaskFile,
+        },
+        jiraFetchExecutor.defaultConfig,
+      );
 
       ui.setStatus("summary");
       printInfo("Generating task summary with Claude");
