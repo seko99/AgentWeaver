@@ -81,7 +81,11 @@ function validateCondition(condition: ConditionSpec | undefined, path: string): 
 
 function validateStep(step: DeclarativeStepSpec, nodeRegistry: NodeRegistry, path: string): void {
   assert(nodeRegistry.has(step.node), `Unknown node kind '${step.node}' at ${path}.node`);
+  const nodeMeta = nodeRegistry.getMeta(step.node);
   validateCondition(step.when, `${path}.when`);
+  if (step.prompt) {
+    assert(nodeMeta.prompt === "allowed", `Node '${step.node}' does not accept prompt binding at ${path}.prompt`);
+  }
   if (step.prompt?.templateRef) {
     assert(isPromptTemplateRef(step.prompt.templateRef), `Unknown prompt template '${step.prompt.templateRef}' at ${path}.prompt.templateRef`);
   }
@@ -117,6 +121,13 @@ function validateExpectation(expectation: ExpectationSpec, path: string): void {
   }
   if (expectation.kind === "require-file") {
     validateValueSpec(expectation.path, `${path}.path`);
+    return;
+  }
+  if (expectation.kind === "step-output") {
+    validateValueSpec(expectation.value, `${path}.value`);
+    if (expectation.equals) {
+      validateValueSpec(expectation.equals, `${path}.equals`);
+    }
     return;
   }
   throw new TaskRunnerError(`Unsupported expectation at ${path}`);
@@ -311,7 +322,14 @@ export function validateExpandedPhases(phases: ExpandedPhaseSpec[]): void {
             validateExpandedValueSpec(expectation.paths, phases, phaseIndex, stepIndex, `phases.${phase.id}.steps.${step.id}.expect[${index}].paths`);
             return;
           }
-          validateExpandedValueSpec(expectation.path, phases, phaseIndex, stepIndex, `phases.${phase.id}.steps.${step.id}.expect[${index}].path`);
+          if (expectation.kind === "require-file") {
+            validateExpandedValueSpec(expectation.path, phases, phaseIndex, stepIndex, `phases.${phase.id}.steps.${step.id}.expect[${index}].path`);
+            return;
+          }
+          validateExpandedValueSpec(expectation.value, phases, phaseIndex, stepIndex, `phases.${phase.id}.steps.${step.id}.expect[${index}].value`);
+          if (expectation.equals) {
+            validateExpandedValueSpec(expectation.equals, phases, phaseIndex, stepIndex, `phases.${phase.id}.steps.${step.id}.expect[${index}].equals`);
+          }
         });
       }
       validateExpandedCondition(step.stopFlowIf, phases, phaseIndex, stepIndex, `phases.${phase.id}.steps.${step.id}.stopFlowIf`, true);

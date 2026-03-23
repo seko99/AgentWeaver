@@ -145,10 +145,19 @@ function interpolateExpectation(expectation: ExpectationSpec, repeatVars: Record
     };
   }
   const when = expectation.when ? interpolateCondition(expectation.when, repeatVars) : undefined;
+  if (expectation.kind === "require-file") {
+    return {
+      kind: expectation.kind,
+      ...(when ? { when } : {}),
+      path: interpolateValueSpec(expectation.path, repeatVars),
+      message: interpolateText(expectation.message, repeatVars),
+    };
+  }
   return {
     kind: expectation.kind,
     ...(when ? { when } : {}),
-    path: interpolateValueSpec(expectation.path, repeatVars),
+    value: interpolateValueSpec(expectation.value, repeatVars),
+    ...(expectation.equals ? { equals: interpolateValueSpec(expectation.equals, repeatVars) } : {}),
     message: interpolateText(expectation.message, repeatVars),
   };
 }
