@@ -17,6 +17,7 @@ export type OutputAdapter = {
   supportsTransientStatus: boolean;
   supportsPassthrough: boolean;
   renderAuxiliaryOutput?: boolean;
+  renderPanelsAsPlainText?: boolean;
   setExecutionState?: (state: { node: string | null; executor: string | null }) => void;
   setFlowState?: (state: { flowId: string | null; executionState: FlowExecutionState | null }) => void;
 };
@@ -31,6 +32,7 @@ const defaultAdapter: OutputAdapter = {
   supportsTransientStatus: true,
   supportsPassthrough: true,
   renderAuxiliaryOutput: true,
+  renderPanelsAsPlainText: false,
 };
 
 let outputAdapter: OutputAdapter = defaultAdapter;
@@ -65,6 +67,10 @@ export function getOutputAdapter(): OutputAdapter {
   return outputAdapter;
 }
 
+export function getExecutionState(): { node: string | null; executor: string | null } {
+  return executionState;
+}
+
 export function renderPanel(title: string, body: string, borderColor?: string): string {
   const lines = body.split("\n");
   const width = Math.max(visibleLength(title) + 2, ...lines.map((line) => visibleLength(line)), 10);
@@ -89,6 +95,10 @@ export function printInfo(message: string): void {
   if (outputAdapter.renderAuxiliaryOutput === false) {
     return;
   }
+  if (outputAdapter.renderPanelsAsPlainText) {
+    outputAdapter.writeStdout(`${message}\n\n`);
+    return;
+  }
   outputAdapter.writeStdout(`${color(message, `${BOLD}${CYAN}`)}\n`);
 }
 
@@ -100,11 +110,19 @@ export function printPrompt(toolName: string, prompt: string): void {
   if (outputAdapter.renderAuxiliaryOutput === false) {
     return;
   }
+  if (outputAdapter.renderPanelsAsPlainText) {
+    outputAdapter.writeStdout(`${toolName} Prompt\n${prompt.trim()}\n\n`);
+    return;
+  }
   outputAdapter.writeStdout(`${renderPanel(`${toolName} Prompt`, prompt, BLUE)}\n`);
 }
 
 export function printSummary(title: string, text: string): void {
   if (outputAdapter.renderAuxiliaryOutput === false) {
+    return;
+  }
+  if (outputAdapter.renderPanelsAsPlainText) {
+    outputAdapter.writeStdout(`${title}\n${text.trim() || "Empty summary"}\n\n`);
     return;
   }
   outputAdapter.writeStdout(`${renderPanel(title, text.trim() || "Empty summary", YELLOW)}\n`);
@@ -114,8 +132,20 @@ export function printPanel(title: string, text: string, tone: "green" | "yellow"
   if (outputAdapter.renderAuxiliaryOutput === false) {
     return;
   }
+  if (outputAdapter.renderPanelsAsPlainText) {
+    outputAdapter.writeStdout(`${title}\n${text}\n\n`);
+    return;
+  }
   const borderColor = tone === "green" ? GREEN : tone === "yellow" ? YELLOW : tone === "magenta" ? MAGENTA : CYAN;
   outputAdapter.writeStdout(`${renderPanel(title, text, borderColor)}\n`);
+}
+
+export function printFramedBlock(title: string, text: string, tone: "green" | "yellow" | "magenta" | "cyan"): void {
+  if (outputAdapter.renderAuxiliaryOutput === false) {
+    return;
+  }
+  const borderColor = tone === "green" ? GREEN : tone === "yellow" ? YELLOW : tone === "magenta" ? MAGENTA : CYAN;
+  outputAdapter.writeStdout(`${renderPanel(title, text, borderColor)}\n\n`);
 }
 
 export function formatDone(elapsed: string): string {

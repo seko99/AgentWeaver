@@ -206,6 +206,29 @@ function createAutoPipelineState(config: Config): AutoPipelineState {
   };
 }
 
+function stripExecutionStatePayload(executionState: FlowExecutionState): FlowExecutionState {
+  return {
+    flowKind: executionState.flowKind,
+    flowVersion: executionState.flowVersion,
+    terminated: executionState.terminated,
+    ...(executionState.terminationReason ? { terminationReason: executionState.terminationReason } : {}),
+    phases: executionState.phases.map((phase) => ({
+      id: phase.id,
+      status: phase.status,
+      repeatVars: { ...phase.repeatVars },
+      ...(phase.startedAt ? { startedAt: phase.startedAt } : {}),
+      ...(phase.finishedAt ? { finishedAt: phase.finishedAt } : {}),
+      steps: phase.steps.map((step) => ({
+        id: step.id,
+        status: step.status,
+        ...(step.startedAt ? { startedAt: step.startedAt } : {}),
+        ...(step.finishedAt ? { finishedAt: step.finishedAt } : {}),
+        ...(step.stopFlow !== undefined ? { stopFlow: step.stopFlow } : {}),
+      })),
+    })),
+  };
+}
+
 function loadAutoPipelineState(config: Config): AutoPipelineState | null {
   const filePath = autoStateFile(config.taskKey);
   if (!existsSync(filePath)) {
@@ -243,7 +266,18 @@ function loadAutoPipelineState(config: Config): AutoPipelineState | null {
 function saveAutoPipelineState(state: AutoPipelineState): void {
   state.updatedAt = nowIso8601();
   ensureTaskWorkspaceDir(state.issueKey);
-  writeFileSync(autoStateFile(state.issueKey), `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  writeFileSync(
+    autoStateFile(state.issueKey),
+    `${JSON.stringify(
+      {
+        ...state,
+        executionState: stripExecutionStatePayload(state.executionState),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 }
 
 function syncAndSaveAutoPipelineState(state: AutoPipelineState): void {
@@ -491,6 +525,9 @@ function declarativeFlowDefinition(id: string, label: string, fileName: string):
     label,
     phases: flow.phases.map((phase) => ({
       id: phase.id,
+      repeatVars: Object.fromEntries(
+        Object.entries(phase.repeatVars).map(([key, value]) => [key, value as string | number | boolean | null]),
+      ),
       steps: phase.steps.map((step) => ({
         id: step.id,
       })),
@@ -505,6 +542,9 @@ function autoFlowDefinition(): InteractiveFlowDefinition {
     label: "auto",
     phases: flow.phases.map((phase) => ({
       id: phase.id,
+      repeatVars: Object.fromEntries(
+        Object.entries(phase.repeatVars).map(([key, value]) => [key, value as string | number | boolean | null]),
+      ),
       steps: phase.steps.map((step) => ({
         id: step.id,
       })),
@@ -526,20 +566,7 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
 }
 
 function publishFlowState(flowId: string, executionState: FlowExecutionState): void {
-  setFlowExecutionState(flowId, {
-    flowKind: executionState.flowKind,
-    flowVersion: executionState.flowVersion,
-    terminated: executionState.terminated,
-    ...(executionState.terminationReason ? { terminationReason: executionState.terminationReason } : {}),
-    phases: executionState.phases.map((phase) => ({
-      ...phase,
-      repeatVars: { ...phase.repeatVars },
-      steps: phase.steps.map((step) => ({
-        ...step,
-        ...(step.outputs ? { outputs: { ...step.outputs } } : {}),
-      })),
-    })),
-  });
+  setFlowExecutionState(flowId, stripExecutionStatePayload(executionState));
 }
 
 async function runDeclarativeFlowBySpecFile(
