@@ -1,6 +1,5 @@
 import { commandCheckExecutor } from "../executors/command-check-executor.js";
 import { claudeExecutor } from "../executors/claude-executor.js";
-import { claudeSummaryExecutor } from "../executors/claude-summary-executor.js";
 import { codexDockerExecutor } from "../executors/codex-docker-executor.js";
 import { codexLocalExecutor } from "../executors/codex-local-executor.js";
 import { jiraFetchExecutor } from "../executors/jira-fetch-executor.js";
@@ -15,7 +14,6 @@ export type ExecutorId =
   | "codex-local"
   | "codex-docker"
   | "claude"
-  | "claude-summary"
   | "verify-build";
 
 export type ExecutorRegistry = {
@@ -33,7 +31,6 @@ const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   "codex-local": codexLocalExecutor as unknown as AnyExecutorDefinition,
   "codex-docker": codexDockerExecutor as unknown as AnyExecutorDefinition,
   claude: claudeExecutor as unknown as AnyExecutorDefinition,
-  "claude-summary": claudeSummaryExecutor as unknown as AnyExecutorDefinition,
   "verify-build": verifyBuildExecutor as unknown as AnyExecutorDefinition,
 };
 

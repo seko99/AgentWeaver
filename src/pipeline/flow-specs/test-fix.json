@@ -1,0 +1,24 @@
+{
+  "kind": "test-fix-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "test-fix",
+      "steps": [
+        {
+          "id": "run_codex_test_fix",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "test-fix",
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running Codex test-fix mode locally" },
+            "model": { "const": "gpt-5.4" }
+          }
+        }
+      ]
+    }
+  ]
+}
