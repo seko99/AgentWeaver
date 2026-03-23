@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { appendFile, readFile } from "node:fs/promises";
-import os from "node:os";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -32,8 +30,8 @@ import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
-import { InteractiveUi } from "./interactive-ui.js";
-import { bye, getOutputAdapter, printError, printInfo, printPanel, printPrompt, printSummary } from "./tui.js";
+import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
+import { bye, getOutputAdapter, printError, printInfo, printPanel, printPrompt, printSummary, setFlowExecutionState } from "./tui.js";
 
 const COMMANDS = [
   "plan",
@@ -50,7 +48,6 @@ const COMMANDS = [
 
 type CommandName = (typeof COMMANDS)[number];
 
-const HISTORY_FILE = path.join(os.homedir(), ".codex", "memories", "agentweaver-history");
 const AUTO_STATE_SCHEMA_VERSION = 2;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(MODULE_DIR, "..");
@@ -127,8 +124,8 @@ function usage(): string {
   agentweaver auto-reset <jira-browse-url|jira-issue-key>
 
 Interactive Mode:
-  When started with only a Jira task, the script opens an interactive shell.
-  Available slash commands: /plan, /implement, /review, /review-fix, /test, /test-fix, /test-linter-fix, /auto, /auto-status, /auto-reset, /help, /exit
+  When started with only a Jira task, the script opens an interactive UI.
+  Use Up/Down to select a flow, Enter to confirm launch, h for help, q to exit.
 
 Flags:
   --version       Show package version
@@ -487,6 +484,64 @@ function autoFlowParams(config: Config): Record<string, unknown> {
   };
 }
 
+function declarativeFlowDefinition(id: string, label: string, fileName: string): InteractiveFlowDefinition {
+  const flow = loadDeclarativeFlow(fileName);
+  return {
+    id,
+    label,
+    phases: flow.phases.map((phase) => ({
+      id: phase.id,
+      steps: phase.steps.map((step) => ({
+        id: step.id,
+      })),
+    })),
+  };
+}
+
+function autoFlowDefinition(): InteractiveFlowDefinition {
+  const flow = loadAutoFlow();
+  return {
+    id: "auto",
+    label: "auto",
+    phases: flow.phases.map((phase) => ({
+      id: phase.id,
+      steps: phase.steps.map((step) => ({
+        id: step.id,
+      })),
+    })),
+  };
+}
+
+function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
+  return [
+    autoFlowDefinition(),
+    declarativeFlowDefinition("plan", "plan", "plan.json"),
+    declarativeFlowDefinition("implement", "implement", "implement.json"),
+    declarativeFlowDefinition("review", "review", "review.json"),
+    declarativeFlowDefinition("review-fix", "review-fix", "review-fix.json"),
+    declarativeFlowDefinition("test", "test", "test.json"),
+    declarativeFlowDefinition("test-fix", "test-fix", "test-fix.json"),
+    declarativeFlowDefinition("test-linter-fix", "test-linter-fix", "test-linter-fix.json"),
+  ];
+}
+
+function publishFlowState(flowId: string, executionState: FlowExecutionState): void {
+  setFlowExecutionState(flowId, {
+    flowKind: executionState.flowKind,
+    flowVersion: executionState.flowVersion,
+    terminated: executionState.terminated,
+    ...(executionState.terminationReason ? { terminationReason: executionState.terminationReason } : {}),
+    phases: executionState.phases.map((phase) => ({
+      ...phase,
+      repeatVars: { ...phase.repeatVars },
+      steps: phase.steps.map((step) => ({
+        ...step,
+        ...(step.outputs ? { outputs: { ...step.outputs } } : {}),
+      })),
+    })),
+  });
+}
+
 async function runDeclarativeFlowBySpecFile(
   fileName: string,
   config: Config,
@@ -506,11 +561,15 @@ async function runDeclarativeFlowBySpecFile(
     terminated: false,
     phases: [],
   };
+  publishFlowState(config.command, executionState);
   for (const phase of flow.phases) {
     await runExpandedPhase(phase, context, flowParams, flow.constants, {
       executionState,
       flowKind: flow.kind,
       flowVersion: flow.version,
+      onStateChange: async (state) => {
+        publishFlowState(config.command, state);
+      },
     });
   }
 }
@@ -530,11 +589,15 @@ async function runAutoPhaseViaSpec(
   });
   const autoFlow = loadAutoFlow();
   const phase = findPhaseById(autoFlow.phases, phaseId);
+  publishFlowState("auto", executionState);
   try {
     const result = await runExpandedPhase(phase, context, autoFlowParams(config), autoFlow.constants, {
       executionState,
       flowKind: autoFlow.kind,
       flowVersion: autoFlow.version,
+      onStateChange: async (state) => {
+        publishFlowState("auto", state);
+      },
       onStepStart: async (_phase, step) => {
         if (!state) {
           return;
@@ -742,6 +805,7 @@ async function runAutoPipelineDryRun(config: Config): Promise<void> {
     terminated: false,
     phases: [],
   };
+  publishFlowState("auto", executionState);
   for (const phase of autoFlow.phases) {
     printInfo(`Dry-run auto phase: ${phase.id}`);
     await runAutoPhaseViaSpec(config, phase.id, executionState);
@@ -827,44 +891,6 @@ async function runAutoPipeline(config: Config): Promise<void> {
   }
 }
 
-function splitArgs(input: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let quote: "'" | '"' | null = null;
-
-  for (let index = 0; index < input.length; index += 1) {
-    const char = input[index] ?? "";
-    if (quote) {
-      if (char === quote) {
-        quote = null;
-      } else {
-        current += char;
-      }
-      continue;
-    }
-    if (char === "'" || char === '"') {
-      quote = char;
-      continue;
-    }
-    if (/\s/.test(char)) {
-      if (current) {
-        result.push(current);
-        current = "";
-      }
-      continue;
-    }
-    current += char;
-  }
-
-  if (quote) {
-    throw new TaskRunnerError("Cannot parse command: unterminated quote");
-  }
-  if (current) {
-    result.push(current);
-  }
-  return result;
-}
-
 function parseCliArgs(argv: string[]): ParsedArgs {
   if (argv.includes("--version") || argv.includes("-v")) {
     process.stdout.write(`${packageVersion()}\n`);
@@ -948,155 +974,45 @@ function buildConfigFromArgs(args: ParsedArgs): Config {
   });
 }
 
-function interactiveHelp(): void {
-  printPanel(
-    "Interactive Commands",
-    [
-      "/plan [extra prompt]",
-      "/implement [extra prompt]",
-      "/review [extra prompt]",
-      "/review-fix [extra prompt]",
-      "/test",
-      "/test-fix [extra prompt]",
-      "/test-linter-fix [extra prompt]",
-      "/auto [extra prompt]",
-      "/auto --from <phase> [extra prompt]",
-      "/auto-status",
-      "/auto-reset",
-      "/help auto",
-      "/help",
-      "/exit",
-    ].join("\n"),
-    "magenta",
-  );
-}
-
-function parseInteractiveCommand(line: string, jiraRef: string): Config | null {
-  const parts = splitArgs(line);
-  if (parts.length === 0) {
-    return null;
-  }
-
-  const command = parts[0] ?? "";
-  if (!command.startsWith("/")) {
-    throw new TaskRunnerError("Interactive mode expects slash commands. Use /help.");
-  }
-
-  const commandName = command.slice(1);
-  if (commandName === "help") {
-    if (parts[1] === "auto" || parts[1] === "phases") {
-      printAutoPhasesHelp();
-      return null;
-    }
-    interactiveHelp();
-    return null;
-  }
-  if (commandName === "exit" || commandName === "quit") {
-    throw new EOFError();
-  }
-  if (!COMMANDS.includes(commandName as CommandName)) {
-    throw new TaskRunnerError(`Unknown command: ${command}`);
-  }
-
-  if (commandName === "auto") {
-    let autoFromPhase: string | undefined;
-    let extraParts = parts.slice(1);
-    if (extraParts[0] === "--from") {
-      if (!extraParts[1]) {
-        throw new TaskRunnerError("auto --from requires a phase name. Use /help auto.");
-      }
-      autoFromPhase = extraParts[1];
-      extraParts = extraParts.slice(2);
-    }
-    return buildConfig("auto", jiraRef, {
-      extraPrompt: extraParts.join(" ") || null,
-      ...(autoFromPhase !== undefined ? { autoFromPhase } : {}),
-    });
-  }
-
-  return buildConfig(commandName as CommandName, jiraRef, {
-    extraPrompt: parts.slice(1).join(" ") || null,
-  });
-}
-
-class EOFError extends Error {}
-
-async function ensureHistoryFile(): Promise<void> {
-  mkdirSync(path.dirname(HISTORY_FILE), { recursive: true });
-  if (!existsSync(HISTORY_FILE)) {
-    writeFileSync(HISTORY_FILE, "", "utf8");
-  }
-}
-
 async function runInteractive(jiraRef: string, forceRefresh = false): Promise<number> {
   const config = buildConfig("plan", jiraRef);
   const jiraTaskPath = config.jiraTaskFile;
 
-  await ensureHistoryFile();
-  const historyLines = (await readFile(HISTORY_FILE, "utf8"))
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .slice(-200);
-
   let exiting = false;
-  const commandList = [
-    "/plan",
-    "/implement",
-    "/review",
-    "/review-fix",
-    "/test",
-    "/test-fix",
-    "/test-linter-fix",
-    "/auto",
-    "/auto-status",
-    "/auto-reset",
-    "/help",
-    "/exit",
-  ];
   const ui = new InteractiveUi(
     {
       issueKey: config.jiraIssueKey,
       summaryText: "Starting interactive session...",
       cwd: process.cwd(),
-      commands: commandList,
-      onSubmit: async (line) => {
+      flows: interactiveFlowDefinitions(),
+      onRun: async (flowId) => {
         try {
-          await appendFile(HISTORY_FILE, `${line.trim()}\n`, "utf8");
-          const command = parseInteractiveCommand(line, jiraRef);
-          if (!command) {
-            return;
-          }
-          ui.setBusy(true, command.command);
+          const command = buildConfig(flowId as CommandName, jiraRef);
           await executeCommand(command);
         } catch (error) {
-          if (error instanceof EOFError) {
-            exiting = true;
-            return;
-          }
           if (error instanceof TaskRunnerError) {
+            ui.setFlowFailed(flowId);
             printError(error.message);
             return;
           }
           const returnCode = Number((error as { returnCode?: number }).returnCode);
           if (!Number.isNaN(returnCode)) {
+            ui.setFlowFailed(flowId);
             printError(`Command failed with exit code ${returnCode}`);
             return;
           }
           throw error;
-        } finally {
-          ui.setBusy(false);
         }
       },
       onExit: () => {
         exiting = true;
       },
     },
-    historyLines,
   );
 
   ui.mount();
   printInfo(`Interactive mode for ${config.jiraIssueKey}`);
-  printInfo("Use /help to see commands.");
+  printInfo("Use h to see help.");
 
   try {
     ui.setBusy(true, "preflight");
@@ -1133,7 +1049,7 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
     }
     if (!existsSync(taskSummaryFile(config.taskKey))) {
       ui.appendLog("[preflight] task summary file was not created");
-      ui.setSummary("Task summary is not available yet. Run `/plan` or refresh Jira data.");
+      ui.setSummary("Task summary is not available yet. Select and run `plan` or refresh Jira data.");
     }
   } catch (error) {
     if (error instanceof TaskRunnerError) {
