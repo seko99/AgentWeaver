@@ -239,6 +239,7 @@ function loadAutoPipelineState(config: Config): AutoPipelineState | null {
       phases: [],
     };
   }
+  syncAutoStepsFromExecutionState(state);
   return state;
 }
 
@@ -261,17 +262,44 @@ function nextAutoStep(state: AutoPipelineState): AutoStepState | null {
   return state.steps.find((step) => ["running", "failed", "pending"].includes(step.status)) ?? null;
 }
 
-function markAutoStepSkipped(step: AutoStepState, note: string): void {
-  step.status = "skipped";
-  step.note = note;
-  step.finishedAt = nowIso8601();
+function findCurrentExecutionStep(state: AutoPipelineState): string | null {
+  for (const phase of state.executionState.phases) {
+    const runningStep = phase.steps.find((step) => step.status === "running");
+    if (runningStep) {
+      return `${phase.id}:${runningStep.id}`;
+    }
+  }
+  return null;
+}
+
+function deriveAutoPipelineStatus(state: AutoPipelineState): string {
+  if (state.lastError || state.steps.some((candidate) => candidate.status === "failed")) {
+    return "blocked";
+  }
+  if (state.executionState.terminated) {
+    return "completed";
+  }
+  if (state.steps.some((candidate) => candidate.status === "running")) {
+    return "running";
+  }
+  if (state.steps.some((candidate) => candidate.status === "pending")) {
+    return "pending";
+  }
+  if (state.steps.some((candidate) => candidate.status === "skipped")) {
+    return "completed";
+  }
+  if (state.steps.every((candidate) => candidate.status === "done")) {
+    return "completed";
+  }
+  return state.status;
 }
 
 function printAutoState(state: AutoPipelineState): void {
+  const currentStep = findCurrentExecutionStep(state) ?? state.currentStep ?? "-";
   const lines = [
     `Issue: ${state.issueKey}`,
-    `Status: ${state.status}`,
-    `Current step: ${state.currentStep ?? "-"}`,
+    `Status: ${deriveAutoPipelineStatus(state)}`,
+    `Current step: ${currentStep}`,
     `Updated: ${state.updatedAt}`,
   ];
   if (state.lastError) {
@@ -282,6 +310,10 @@ function printAutoState(state: AutoPipelineState): void {
   lines.push("");
   for (const step of state.steps) {
     lines.push(`[${step.status}] ${step.id}${step.note ? ` (${step.note})` : ""}`);
+    const phaseState = state.executionState.phases.find((candidate) => candidate.id === step.id);
+    for (const childStep of phaseState?.steps ?? []) {
+      lines.push(`  - [${childStep.status}] ${childStep.id}`);
+    }
   }
   if (state.executionState.terminated) {
     lines.push("", `Execution terminated: ${state.executionState.terminationReason ?? "yes"}`);
@@ -298,6 +330,7 @@ function syncAutoStepsFromExecutionState(state: AutoPipelineState): void {
     step.status = phaseState.status;
     step.startedAt = phaseState.startedAt ?? null;
     step.finishedAt = phaseState.finishedAt ?? null;
+    step.note = null;
     if (phaseState.status === "skipped") {
       step.note = "condition not met";
       step.returnCode ??= 0;
@@ -308,6 +341,8 @@ function syncAutoStepsFromExecutionState(state: AutoPipelineState): void {
       }
     }
   }
+  state.currentStep = findCurrentExecutionStep(state);
+  state.status = deriveAutoPipelineStatus(state);
 }
 
 function printAutoPhasesHelp(): void {
@@ -738,14 +773,8 @@ async function runAutoPipeline(config: Config): Promise<void> {
   while (true) {
     const step = nextAutoStep(state);
     if (!step) {
-      if (state.steps.some((candidate) => candidate.status === "failed")) {
-        state.status = "blocked";
-      } else if (state.steps.some((candidate) => candidate.status === "skipped")) {
-        state.status = "completed";
-      } else {
-        state.status = "max-iterations-reached";
-      }
-      state.currentStep = null;
+      state.status = deriveAutoPipelineStatus(state);
+      state.currentStep = findCurrentExecutionStep(state);
       saveAutoPipelineState(state);
       if (state.status === "completed") {
         printPanel("Auto", "Auto pipeline finished", "green");
@@ -774,6 +803,7 @@ async function runAutoPipeline(config: Config): Promise<void> {
       if (status === "skipped") {
         step.note = "condition not met";
       }
+      syncAutoStepsFromExecutionState(state);
     } catch (error) {
       const returnCode = Number((error as { returnCode?: number }).returnCode ?? 1);
       step.status = "failed";
@@ -791,8 +821,7 @@ async function runAutoPipeline(config: Config): Promise<void> {
     }
 
     if (state.executionState.terminated) {
-      state.status = "completed";
-      state.currentStep = null;
+      syncAutoStepsFromExecutionState(state);
       saveAutoPipelineState(state);
       printPanel("Auto", "Auto pipeline finished", "green");
       return;
