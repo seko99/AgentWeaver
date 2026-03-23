@@ -46,7 +46,8 @@
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
-            }
+            },
+            "model": { "const": "opus" }
           },
           "expect": [
             {
@@ -70,7 +71,7 @@
         {
           "id": "summarize_review",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-summary",
+          "node": "claude-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
@@ -92,7 +93,9 @@
             "format": "plain"
           },
           "params": {
+            "labelText": { "const": "Preparing Claude review summary" },
             "summaryTitle": { "const": "Claude Comments" },
+            "model": { "const": "haiku" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
@@ -150,7 +153,8 @@
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
-            }
+            },
+            "model": { "const": "gpt-5.4" }
           },
           "expect": [
             {
@@ -174,7 +178,7 @@
         {
           "id": "summarize_review_reply",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-summary",
+          "node": "claude-prompt",
           "prompt": {
             "templateRef": "review-reply-summary",
             "vars": {
@@ -196,7 +200,9 @@
             "format": "plain"
           },
           "params": {
+            "labelText": { "const": "Preparing Codex reply summary" },
             "summaryTitle": { "const": "Codex Reply Summary" },
+            "model": { "const": "haiku" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",

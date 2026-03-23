@@ -109,15 +109,34 @@
               }
             ]
           },
-          "node": "task-summary",
+          "node": "claude-prompt",
+          "prompt": {
+            "templateRef": "task-summary",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "task_summary_file": {
+                "artifact": {
+                  "kind": "task-summary-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "format": "plain"
+          },
           "params": {
-            "jiraTaskFile": {
+            "labelText": { "const": "Preparing task summary" },
+            "outputFile": {
               "artifact": {
-                "kind": "jira-task-file",
+                "kind": "task-summary-file",
                 "taskKey": { "ref": "params.taskKey" }
               }
             },
-            "taskKey": { "ref": "params.taskKey" }
+            "model": { "const": "haiku" }
           },
           "expect": [
             {
@@ -134,6 +153,18 @@
                 ]
               },
               "message": "Claude summary did not produce the task summary artifact."
+            }
+          ],
+          "after": [
+            {
+              "kind": "set-summary-from-file",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "path": {
+                "artifact": {
+                  "kind": "task-summary-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
             }
           ]
         }

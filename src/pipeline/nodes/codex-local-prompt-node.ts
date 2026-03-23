@@ -10,6 +10,7 @@ import { toExecutorContext } from "../types.js";
 export type CodexLocalPromptNodeParams = {
   prompt: string;
   labelText: string;
+  model?: string;
   requiredArtifacts?: string[];
   missingArtifactsMessage?: string;
 };
@@ -27,6 +28,7 @@ export const codexLocalPromptNode: PipelineNodeDefinition<CodexLocalPromptNodePa
       toExecutorContext(context),
       {
         prompt: params.prompt,
+        ...(params.model ? { model: params.model } : {}),
         env: { ...context.env },
       },
       executor.defaultConfig,

@@ -1,8 +1,9 @@
 import { TaskRunnerError } from "../errors.js";
+import { readFileSync } from "node:fs";
 import { runNodeChecks } from "./checks.js";
 import { runNodeByKind } from "./node-runner.js";
 import { renderPrompt } from "./prompt-runtime.js";
-import type { ExpectationSpec, ExpandedPhaseSpec } from "./spec-types.js";
+import type { ExpectationSpec, ExpandedPhaseSpec, StepAfterActionSpec } from "./spec-types.js";
 import type { NodeCheckSpec, PipelineContext } from "./types.js";
 import { evaluateCondition, resolveParams, resolveValue, type DeclarativeResolverContext } from "./value-resolver.js";
 
@@ -59,6 +60,18 @@ function resolveExpectation(expectation: ExpectationSpec, context: DeclarativeRe
   throw new TaskRunnerError(`Unsupported expectation kind: ${(expectation as { kind?: string }).kind ?? "unknown"}`);
 }
 
+function runAfterAction(action: StepAfterActionSpec, pipelineContext: PipelineContext, context: DeclarativeResolverContext): void {
+  if (action.kind === "set-summary-from-file") {
+    const value = resolveValue(action.path, context);
+    if (typeof value !== "string") {
+      throw new TaskRunnerError("After action 'set-summary-from-file' must resolve to string path");
+    }
+    pipelineContext.setSummary?.(readFileSync(value, "utf8").trim());
+    return;
+  }
+  throw new TaskRunnerError(`Unsupported after action kind: ${(action as { kind?: string }).kind ?? "unknown"}`);
+}
+
 export async function runExpandedPhase(
   phase: ExpandedPhaseSpec,
   pipelineContext: PipelineContext,
@@ -94,6 +107,11 @@ export async function runExpandedPhase(
           .filter((expectation) => evaluateCondition(expectation.when, stepContext))
           .map((expectation) => resolveExpectation(expectation, stepContext)),
       );
+    }
+    if (step.after) {
+      step.after.filter((action) => evaluateCondition(action.when, stepContext)).forEach((action) => {
+        runAfterAction(action, pipelineContext, stepContext);
+      });
     }
     steps.push({ id: step.id, status: "done" });
   }

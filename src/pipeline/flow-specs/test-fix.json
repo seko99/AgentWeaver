@@ -14,7 +14,8 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex test-fix mode locally" }
+            "labelText": { "const": "Running Codex test-fix mode locally" },
+            "model": { "const": "gpt-5.4" }
           }
         }
       ]

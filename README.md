@@ -87,9 +87,8 @@ Common optional variables:
 - `DOCKER_COMPOSE_BIN` — override compose command, for example `docker compose`
 - `CODEX_BIN` — override `codex` executable path
 - `CLAUDE_BIN` — override `claude` executable path
-- `CODEX_MODEL` — defaults to `gpt-5.4`
-- `CLAUDE_REVIEW_MODEL` — defaults to `opus`
-- `CLAUDE_SUMMARY_MODEL` — defaults to `haiku`
+- `CODEX_MODEL` — fallback model for Codex executors when the flow spec does not set `params.model`
+- `CLAUDE_MODEL` — fallback Claude model when the flow spec does not set `params.model`
 
 Example `.env`:
 
@@ -100,8 +99,7 @@ AGENTWEAVER_HOME=/absolute/path/to/AgentWeaver
 CODEX_BIN=codex
 CLAUDE_BIN=claude
 CODEX_MODEL=gpt-5.4
-CLAUDE_REVIEW_MODEL=opus
-CLAUDE_SUMMARY_MODEL=haiku
+CLAUDE_MODEL=opus
 GOPRIVATE=gitlab.example.org/*
 GONOSUMDB=gitlab.example.org/*
 GONOPROXY=gitlab.example.org/*
