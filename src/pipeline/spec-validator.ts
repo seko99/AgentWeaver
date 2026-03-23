@@ -84,7 +84,15 @@ function validateStep(step: DeclarativeStepSpec, nodeRegistry: NodeRegistry, pat
   const nodeMeta = nodeRegistry.getMeta(step.node);
   validateCondition(step.when, `${path}.when`);
   if (step.prompt) {
-    assert(nodeMeta.prompt === "allowed", `Node '${step.node}' does not accept prompt binding at ${path}.prompt`);
+    assert(nodeMeta.prompt !== "forbidden", `Node '${step.node}' does not accept prompt binding at ${path}.prompt`);
+    assert(
+      Boolean(step.prompt.templateRef || step.prompt.inlineTemplate),
+      `Prompt binding at ${path}.prompt must define templateRef or inlineTemplate`,
+    );
+  }
+  assert(step.prompt !== undefined || nodeMeta.prompt !== "required", `Node '${step.node}' requires prompt binding at ${path}.prompt`);
+  for (const requiredParam of nodeMeta.requiredParams ?? []) {
+    assert(step.params?.[requiredParam] !== undefined, `Node '${step.node}' requires param '${requiredParam}' at ${path}.params.${requiredParam}`);
   }
   if (step.prompt?.templateRef) {
     assert(isPromptTemplateRef(step.prompt.templateRef), `Unknown prompt template '${step.prompt.templateRef}' at ${path}.prompt.templateRef`);
