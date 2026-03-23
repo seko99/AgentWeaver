@@ -1,13 +1,13 @@
 import { existsSync, readdirSync } from "node:fs";
 
 import {
-  READY_TO_MERGE_FILE,
   REVIEW_REPLY_FILE_RE,
   artifactFile,
   planArtifacts,
+  readyToMergeFile,
   requireArtifacts,
+  taskWorkspaceDir,
 } from "../../artifacts.js";
-import { TaskRunnerError } from "../../errors.js";
 import { REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE, REVIEW_SUMMARY_PROMPT_TEMPLATE, formatTemplate } from "../../prompts.js";
 import { printPanel } from "../../tui.js";
 import { runFlow } from "../flow-runner.js";
@@ -20,7 +20,11 @@ import type { PipelineContext } from "../types.js";
 
 function nextReviewIterationForTask(taskKey: string): number {
   let maxIndex = 0;
-  for (const entry of readdirSync(process.cwd(), { withFileTypes: true })) {
+  const workspaceDir = taskWorkspaceDir(taskKey);
+  if (!existsSync(workspaceDir)) {
+    return 1;
+  }
+  for (const entry of readdirSync(workspaceDir, { withFileTypes: true })) {
     if (!entry.isFile()) {
       continue;
     }
@@ -116,8 +120,8 @@ export function createReviewFlowDefinition(iteration: number): FlowDefinition<Re
       },
       {
         id: "check_ready_to_merge",
-        async run(stepContext) {
-          const readyToMerge = !stepContext.dryRun && existsSync(READY_TO_MERGE_FILE);
+        async run(stepContext, stepParams) {
+          const readyToMerge = !stepContext.dryRun && existsSync(readyToMergeFile(stepParams.taskKey));
           if (readyToMerge) {
             printPanel("Ready To Merge", "Изменения готовы к merge\nФайл ready-to-merge.md создан.", "green");
           }
