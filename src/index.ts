@@ -28,6 +28,7 @@ import { loadAutoFlow } from "./pipeline/auto-flow.js";
 import { loadDeclarativeFlow } from "./pipeline/declarative-flows.js";
 import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
 import { runPreflightFlow } from "./pipeline/flows/preflight-flow.js";
+import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
@@ -419,14 +420,25 @@ async function runDeclarativeFlowBySpecFile(
     runtime: runtimeServices,
   });
   const flow = loadDeclarativeFlow(fileName);
+  const executionState: FlowExecutionState = {
+    flowKind: flow.kind,
+    flowVersion: flow.version,
+    terminated: false,
+    phases: [],
+  };
   for (const phase of flow.phases) {
-    await runExpandedPhase(phase, context, flowParams, flow.constants);
+    await runExpandedPhase(phase, context, flowParams, flow.constants, {
+      executionState,
+      flowKind: flow.kind,
+      flowVersion: flow.version,
+    });
   }
 }
 
 async function runAutoPhaseViaSpec(
   config: Config,
   phaseId: string,
+  executionState: FlowExecutionState,
   state?: AutoPipelineState,
 ): Promise<"done" | "skipped"> {
   const context = createPipelineContext({
@@ -440,6 +452,9 @@ async function runAutoPhaseViaSpec(
   const phase = findPhaseById(autoFlow.phases, phaseId);
   try {
     const result = await runExpandedPhase(phase, context, autoFlowParams(config), autoFlow.constants, {
+      executionState,
+      flowKind: autoFlow.kind,
+      flowVersion: autoFlow.version,
       onStepStart: async (_phase, step) => {
         if (!state) {
           return;
@@ -448,7 +463,7 @@ async function runAutoPhaseViaSpec(
         saveAutoPipelineState(state);
       },
     });
-    return result.status;
+    return result.status === "skipped" ? "skipped" : "done";
   } catch (error) {
     if (!config.dryRun) {
       const output = String((error as { output?: string }).output ?? "");
@@ -630,9 +645,16 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
 async function runAutoPipelineDryRun(config: Config): Promise<void> {
   checkAutoPrerequisites(config);
   printInfo("Dry-run auto pipeline from declarative spec");
-  for (const phase of loadAutoFlow().phases) {
+  const autoFlow = loadAutoFlow();
+  const executionState: FlowExecutionState = {
+    flowKind: autoFlow.kind,
+    flowVersion: autoFlow.version,
+    terminated: false,
+    phases: [],
+  };
+  for (const phase of autoFlow.phases) {
     printInfo(`Dry-run auto phase: ${phase.id}`);
-    await runAutoPhaseViaSpec(config, phase.id);
+    await runAutoPhaseViaSpec(config, phase.id, executionState);
   }
 }
 
@@ -656,6 +678,13 @@ async function runAutoPipeline(config: Config): Promise<void> {
   }
 
   printInfo("Running auto pipeline with persisted state");
+  const autoFlow = loadAutoFlow();
+  const executionState: FlowExecutionState = {
+    flowKind: autoFlow.kind,
+    flowVersion: autoFlow.version,
+    terminated: false,
+    phases: [],
+  };
   while (true) {
     const step = nextAutoStep(state);
     if (!step) {
@@ -688,7 +717,7 @@ async function runAutoPipeline(config: Config): Promise<void> {
 
     try {
       printInfo(`Running auto step: ${step.id}`);
-      const status = await runAutoPhaseViaSpec(config, step.id, state);
+      const status = await runAutoPhaseViaSpec(config, step.id, executionState, state);
       step.status = status;
       step.finishedAt = nowIso8601();
       step.returnCode = 0;
@@ -988,7 +1017,7 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
 
   try {
     ui.setBusy(true, "preflight");
-    await runPreflightFlow(
+    const preflightState = await runPreflightFlow(
       createPipelineContext({
         issueKey: config.taskKey,
         jiraRef: config.jiraRef,
@@ -1006,7 +1035,21 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
         forceRefresh,
       },
     );
+    const preflightPhase = preflightState.phases.find((phase) => phase.id === "preflight");
+    if (preflightPhase) {
+      ui.appendLog("[preflight] completed");
+      for (const step of preflightPhase.steps) {
+        ui.appendLog(`[preflight] ${step.id}: ${step.status}`);
+      }
+    }
+    if (!existsSync(jiraTaskPath)) {
+      throw new TaskRunnerError(
+        `Preflight finished without Jira task file: ${jiraTaskPath}\n` +
+          "Jira fetch did not complete successfully. Check JIRA_API_KEY and Jira connectivity.",
+      );
+    }
     if (!existsSync(taskSummaryFile(config.taskKey))) {
+      ui.appendLog("[preflight] task summary file was not created");
       ui.setSummary("Task summary is not available yet. Run `/plan` or refresh Jira data.");
     }
   } catch (error) {

@@ -77,6 +77,7 @@ export type DeclarativeStepSpec = {
   prompt?: PromptBindingSpec;
   params?: Record<string, ValueSpec>;
   expect?: ExpectationSpec[];
+  stopFlowIf?: ConditionSpec;
   after?: StepAfterActionSpec[];
 };
 
@@ -116,6 +117,34 @@ export type ExpandedStepSpec = {
   prompt?: PromptBindingSpec;
   params?: Record<string, ValueSpec>;
   expect?: ExpectationSpec[];
+  stopFlowIf?: ConditionSpec;
   after?: StepAfterActionSpec[];
   repeatVars: Record<string, JsonValue>;
+};
+
+export type ExpandedStepExecutionState = {
+  id: string;
+  status: "pending" | "running" | "done" | "skipped";
+  outputs?: Record<string, JsonValue>;
+  value?: JsonValue;
+  startedAt?: string;
+  finishedAt?: string;
+  stopFlow?: boolean;
+};
+
+export type ExpandedPhaseExecutionState = {
+  id: string;
+  status: "pending" | "running" | "done" | "skipped";
+  repeatVars: Record<string, JsonValue>;
+  steps: ExpandedStepExecutionState[];
+  startedAt?: string;
+  finishedAt?: string;
+};
+
+export type FlowExecutionState = {
+  flowKind: string;
+  flowVersion: number;
+  terminated: boolean;
+  terminationReason?: string;
+  phases: ExpandedPhaseExecutionState[];
 };

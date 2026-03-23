@@ -1,36 +1,114 @@
 import { TaskRunnerError } from "../errors.js";
 import { readFileSync } from "node:fs";
+import type { JsonValue } from "../executors/types.js";
 import { runNodeChecks } from "./checks.js";
 import { runNodeByKind } from "./node-runner.js";
 import { renderPrompt } from "./prompt-runtime.js";
-import type { ExpectationSpec, ExpandedPhaseSpec, StepAfterActionSpec } from "./spec-types.js";
+import type {
+  ExpectationSpec,
+  ExpandedPhaseExecutionState,
+  ExpandedPhaseSpec,
+  ExpandedStepExecutionState,
+  FlowExecutionState,
+  StepAfterActionSpec,
+} from "./spec-types.js";
 import type { NodeCheckSpec, PipelineContext } from "./types.js";
 import { evaluateCondition, resolveParams, resolveValue, type DeclarativeResolverContext } from "./value-resolver.js";
 
 export type DeclarativePhaseRunResult = {
   id: string;
-  status: "done" | "skipped";
+  status: "done" | "skipped" | "stopped";
+  stopped: boolean;
+  executionState: FlowExecutionState;
   steps: Array<{
     id: string;
     status: "done" | "skipped";
+    outputs?: Record<string, JsonValue>;
   }>;
 };
 
 export type DeclarativePhaseRunOptions = {
   onStepStart?: (phase: ExpandedPhaseSpec, step: { id: string }) => void | Promise<void>;
+  executionState?: FlowExecutionState;
+  flowKind?: string;
+  flowVersion?: number;
 };
+
+function nowIso8601(): string {
+  return new Date().toISOString();
+}
+
+function toJsonValue(value: unknown): JsonValue {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((candidate) => toJsonValue(candidate));
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, candidate]) => [key, toJsonValue(candidate)]),
+    );
+  }
+  return String(value);
+}
+
+function ensureExecutionState(options: DeclarativePhaseRunOptions): FlowExecutionState {
+  if (options.executionState) {
+    return options.executionState;
+  }
+  return {
+    flowKind: options.flowKind ?? "declarative-flow",
+    flowVersion: options.flowVersion ?? 1,
+    terminated: false,
+    phases: [],
+  };
+}
+
+function ensurePhaseState(executionState: FlowExecutionState, phase: ExpandedPhaseSpec): ExpandedPhaseExecutionState {
+  let phaseState = executionState.phases.find((candidate) => candidate.id === phase.id);
+  if (!phaseState) {
+    phaseState = {
+      id: phase.id,
+      status: "pending",
+      repeatVars: { ...phase.repeatVars },
+      steps: phase.steps.map<ExpandedStepExecutionState>((step) => ({
+        id: step.id,
+        status: "pending",
+      })),
+    };
+    executionState.phases.push(phaseState);
+  }
+  return phaseState;
+}
+
+function toStepOutputs(value: unknown): Record<string, JsonValue> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, candidate]) => [key, toJsonValue(candidate)]),
+  );
+}
 
 function createResolverContext(
   pipelineContext: PipelineContext,
   flowParams: Record<string, unknown>,
   flowConstants: Record<string, unknown>,
   repeatVars: Record<string, unknown>,
+  executionState?: FlowExecutionState,
 ): DeclarativeResolverContext {
   return {
     flowParams,
     flowConstants,
     pipelineContext,
     repeatVars,
+    ...(executionState ? { executionState } : {}),
   };
 }
 
@@ -79,20 +157,51 @@ export async function runExpandedPhase(
   flowConstants: Record<string, unknown>,
   options: DeclarativePhaseRunOptions = {},
 ): Promise<DeclarativePhaseRunResult> {
-  const phaseContext = createResolverContext(pipelineContext, flowParams, flowConstants, phase.repeatVars);
-  if (!evaluateCondition(phase.when, phaseContext)) {
+  const executionState = ensureExecutionState(options);
+  const phaseState = ensurePhaseState(executionState, phase);
+  const phaseContext = createResolverContext(pipelineContext, flowParams, flowConstants, phase.repeatVars, executionState);
+  if (executionState.terminated) {
+    phaseState.status = "skipped";
     return {
       id: phase.id,
       status: "skipped",
+      stopped: true,
+      executionState,
+      steps: phase.steps.map((step) => ({ id: step.id, status: "skipped" as const })),
+    };
+  }
+  if (!evaluateCondition(phase.when, phaseContext)) {
+    phaseState.status = "skipped";
+    phaseState.startedAt ??= nowIso8601();
+    phaseState.finishedAt = nowIso8601();
+    phaseState.steps.forEach((step) => {
+      step.status = "skipped";
+      step.finishedAt = nowIso8601();
+    });
+    return {
+      id: phase.id,
+      status: "skipped",
+      stopped: false,
+      executionState,
       steps: phase.steps.map((step) => ({ id: step.id, status: "skipped" as const })),
     };
   }
 
+  phaseState.status = "running";
+  phaseState.startedAt ??= nowIso8601();
   const steps: DeclarativePhaseRunResult["steps"] = [];
-  for (const step of phase.steps) {
+  for (const [stepIndex, step] of phase.steps.entries()) {
     await options.onStepStart?.(phase, step);
-    const stepContext = createResolverContext(pipelineContext, flowParams, flowConstants, step.repeatVars);
+    const stepContext = createResolverContext(pipelineContext, flowParams, flowConstants, step.repeatVars, executionState);
+    const stepState = phaseState.steps[stepIndex];
+    if (!stepState) {
+      throw new TaskRunnerError(`Missing execution state for step '${step.id}' in phase '${phase.id}'`);
+    }
+    stepState.status = "running";
+    stepState.startedAt ??= nowIso8601();
     if (!evaluateCondition(step.when, stepContext)) {
+      stepState.status = "skipped";
+      stepState.finishedAt = nowIso8601();
       steps.push({ id: step.id, status: "skipped" });
       continue;
     }
@@ -100,7 +209,14 @@ export async function runExpandedPhase(
     if (step.prompt) {
       params.prompt = renderPrompt(step.prompt, stepContext);
     }
-    await runNodeByKind(step.node, pipelineContext, params, { skipChecks: step.expect !== undefined });
+    const result = await runNodeByKind(step.node, pipelineContext, params, { skipChecks: step.expect !== undefined });
+    stepState.value = toJsonValue(result.value);
+    const stepOutputs = toStepOutputs(result.value);
+    if (stepOutputs) {
+      stepState.outputs = stepOutputs;
+    } else {
+      delete stepState.outputs;
+    }
     if (step.expect) {
       runNodeChecks(
         step.expect
@@ -113,12 +229,33 @@ export async function runExpandedPhase(
         runAfterAction(action, pipelineContext, stepContext);
       });
     }
-    steps.push({ id: step.id, status: "done" });
+    const stopFlow = step.stopFlowIf ? evaluateCondition(step.stopFlowIf, stepContext) : false;
+    stepState.status = "done";
+    stepState.finishedAt = nowIso8601();
+    stepState.stopFlow = stopFlow;
+    steps.push({ id: step.id, status: "done", ...(stepState.outputs ? { outputs: stepState.outputs } : {}) });
+    if (stopFlow) {
+      executionState.terminated = true;
+      executionState.terminationReason = `Stopped by ${phase.id}:${step.id}`;
+      phaseState.status = "done";
+      phaseState.finishedAt = nowIso8601();
+      return {
+        id: phase.id,
+        status: "stopped",
+        stopped: true,
+        executionState,
+        steps,
+      };
+    }
   }
 
+  phaseState.status = "done";
+  phaseState.finishedAt = nowIso8601();
   return {
     id: phase.id,
     status: "done",
+    stopped: false,
+    executionState,
     steps,
   };
 }

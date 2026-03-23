@@ -362,6 +362,9 @@
             {
               "id": "check_ready_to_merge",
               "node": "file-check",
+              "stopFlowIf": {
+                "ref": "steps.review_${iteration}.check_ready_to_merge.outputs.exists"
+              },
               "params": {
                 "path": {
                   "artifact": {
@@ -380,12 +383,7 @@
           "id": "review_fix_${iteration}",
           "when": {
             "not": {
-              "exists": {
-                "artifact": {
-                  "kind": "ready-to-merge-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              }
+              "ref": "steps.review_${iteration}.check_ready_to_merge.outputs.exists"
             }
           },
           "steps": [
@@ -453,12 +451,7 @@
           "id": "test_after_review_fix_${iteration}",
           "when": {
             "not": {
-              "exists": {
-                "artifact": {
-                  "kind": "ready-to-merge-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              }
+              "ref": "steps.review_${iteration}.check_ready_to_merge.outputs.exists"
             }
           },
           "steps": [

@@ -12,6 +12,7 @@ import {
 } from "../artifacts.js";
 import { TaskRunnerError } from "../errors.js";
 import { formatTemplate } from "../prompts.js";
+import type { FlowExecutionState } from "./spec-types.js";
 import type { PipelineContext } from "./types.js";
 import type { ArtifactListRefSpec, ArtifactRefSpec, ConditionSpec, ValueSpec } from "./spec-types.js";
 
@@ -20,10 +21,49 @@ type ResolverContext = {
   flowConstants: Record<string, unknown>;
   pipelineContext: PipelineContext;
   repeatVars: Record<string, unknown>;
+  executionState?: FlowExecutionState;
 };
+
+function readStepRef(segments: string[], context: ResolverContext, originalPath: string): unknown {
+  const [phaseId, stepId, scope, ...rest] = segments;
+  if (!phaseId || !stepId || !scope) {
+    throw new TaskRunnerError(`Invalid step ref '${originalPath}'`);
+  }
+  const phase = context.executionState?.phases.find((candidate) => candidate.id === phaseId);
+  if (!phase) {
+    throw new TaskRunnerError(`Unable to resolve step ref '${originalPath}': unknown phase '${phaseId}'`);
+  }
+  const step = phase.steps.find((candidate) => candidate.id === stepId);
+  if (!step) {
+    throw new TaskRunnerError(`Unable to resolve step ref '${originalPath}': unknown step '${stepId}' in phase '${phaseId}'`);
+  }
+  let current: unknown;
+  if (scope === "outputs") {
+    current = step.outputs;
+  } else if (scope === "value") {
+    current = step.value;
+  } else if (scope === "status") {
+    current = step.status;
+  } else {
+    throw new TaskRunnerError(`Unsupported step ref scope in '${originalPath}'`);
+  }
+  for (const segment of rest) {
+    if (!segment) {
+      continue;
+    }
+    if (!current || typeof current !== "object" || !(segment in current)) {
+      throw new TaskRunnerError(`Unable to resolve ref '${originalPath}'`);
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
 
 function readRef(path: string, context: ResolverContext): unknown {
   const [scope, ...rest] = path.split(".");
+  if (scope === "steps") {
+    return readStepRef(rest, context, path);
+  }
   const root =
     scope === "params"
       ? context.flowParams
