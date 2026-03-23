@@ -13,7 +13,7 @@ The package is designed to run as an npm CLI and includes an interactive termina
 - Fetches a Jira issue by key or browse URL
 - Generates workflow artifacts such as design, implementation plan, QA plan, reviews, and summaries
 - Runs workflow stages like `plan`, `implement`, `review`, `review-fix`, `test`, and `auto`
-- Persists `auto` pipeline state on disk so runs can resume
+- Persists compact `auto` pipeline state on disk so runs can resume without storing large agent outputs
 - Uses Docker runtime services for isolated Codex execution and build verification
 
 ## Architecture
@@ -145,27 +145,34 @@ agentweaver auto-status DEMO-3288
 agentweaver auto-reset DEMO-3288
 ```
 
+Notes:
+
+- `--verbose` streams child process `stdout/stderr` in direct CLI mode
+- the interactive `Activity` pane is intentionally structured: it shows launch separators, prompts, summaries, and short status messages instead of raw Codex/Claude logs by default
+
 ## Interactive TUI
 
 Interactive mode opens a full-screen terminal UI with:
 
-- command input
+- flow list
+- current flow progress
 - activity log
 - task summary pane
-- command list/help
 - keyboard navigation between panes
 
 Current navigation:
 
-- `Enter` — run command
+- `Enter` — run selected flow
 - `Tab` / `Shift+Tab` — switch panes
-- `Ctrl+J` — focus activity log
-- `Ctrl+K` — focus command input
-- `Ctrl+U` — focus task summary
-- `Ctrl+H` — focus commands pane
 - `PgUp` / `PgDn` / `Home` / `End` — scroll focused panes
-- `?` or `F1` — help overlay
+- `h` — help overlay
 - `q` or `Ctrl+C` — exit
+
+Activity pane behavior:
+
+- each external launch is separated with a framed block that shows the current `node`, `executor`, and `model` when available
+- prompts and summaries are rendered as plain text for readability
+- live raw Codex/Claude output is not shown there in normal mode
 
 ## Docker Runtime
 

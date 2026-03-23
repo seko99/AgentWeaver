@@ -92,6 +92,12 @@
 
 Для `codex-local`, `codex-docker` и `claude` модель теперь тоже считается частью `params`.
 
+Важно:
+
+- runtime во время текущего запуска может держать `step.value` и `step.outputs` в памяти, чтобы следующие шаги могли ссылаться на результаты через `ref`
+- persisted auto state сохраняет только компактный execution state: статусы, timestamps, `repeatVars` и `stopFlow`
+- большие agent outputs в auto state больше не сериализуются
+
 Общий шаблон:
 
 ```json
@@ -217,6 +223,7 @@ Runtime находит node через registry:
 
 - `require-artifacts`
 - `require-file`
+- `step-output`
 
 Пример:
 
@@ -252,6 +259,7 @@ Runtime находит node через registry:
 - если step задаёт `expect`, declarative runner использует именно его как источник postconditions
 - встроенные node-level checks для такого шага пропускаются, чтобы не было дублирования
 - legacy flow, которые вызывают node напрямую, продолжают использовать built-in checks node
+- `step-output` проверяется по runtime execution state текущего запуска, а не по persisted auto state на диске
 
 ## Что делает `after`
 
@@ -644,6 +652,22 @@ Node получит примерно:
 - resolve `params`
 - выполнение `node`
 - выполнение `expect`
+- хранение runtime `step.value`/`step.outputs` в памяти только на время текущего запуска
+
+### В persisted auto state живёт
+
+- phase statuses
+- step statuses
+- timestamps
+- `repeatVars`
+- `terminationReason`
+- `stopFlow`
+
+И не живёт:
+
+- полный agent `output`
+- `step.value`
+- `step.outputs`
 
 ## Почему `expect` лучше, чем старый `requiredArtifacts` в `params`
 
