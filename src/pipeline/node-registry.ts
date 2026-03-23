@@ -38,7 +38,8 @@ export type NodeRegistry = {
 export type NodeContractMetadata = {
   kind: NodeKind;
   version: number;
-  prompt: "allowed" | "forbidden";
+  prompt: "required" | "allowed" | "forbidden";
+  requiredParams?: string[];
 };
 
 const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
@@ -57,18 +58,33 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
 };
 
 const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
-  "build-failure-summary": { kind: "build-failure-summary", version: 1, prompt: "forbidden" },
-  "claude-prompt": { kind: "claude-prompt", version: 1, prompt: "allowed" },
-  "codex-docker-prompt": { kind: "codex-docker-prompt", version: 1, prompt: "allowed" },
-  "codex-local-prompt": { kind: "codex-local-prompt", version: 1, prompt: "allowed" },
-  "command-check": { kind: "command-check", version: 1, prompt: "forbidden" },
-  "file-check": { kind: "file-check", version: 1, prompt: "forbidden" },
-  "jira-fetch": { kind: "jira-fetch", version: 1, prompt: "forbidden" },
-  "plan-codex": { kind: "plan-codex", version: 1, prompt: "forbidden" },
-  "review-claude": { kind: "review-claude", version: 1, prompt: "forbidden" },
-  "review-reply-codex": { kind: "review-reply-codex", version: 1, prompt: "forbidden" },
-  "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden" },
-  "verify-build": { kind: "verify-build", version: 1, prompt: "forbidden" },
+  "build-failure-summary": { kind: "build-failure-summary", version: 1, prompt: "forbidden", requiredParams: ["output"] },
+  "claude-prompt": { kind: "claude-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },
+  "codex-docker-prompt": {
+    kind: "codex-docker-prompt",
+    version: 1,
+    prompt: "required",
+    requiredParams: ["dockerComposeFile", "labelText"],
+  },
+  "codex-local-prompt": { kind: "codex-local-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },
+  "command-check": { kind: "command-check", version: 1, prompt: "forbidden", requiredParams: ["commands"] },
+  "file-check": { kind: "file-check", version: 1, prompt: "forbidden", requiredParams: ["path"] },
+  "jira-fetch": { kind: "jira-fetch", version: 1, prompt: "forbidden", requiredParams: ["jiraApiUrl", "outputFile"] },
+  "plan-codex": { kind: "plan-codex", version: 1, prompt: "forbidden", requiredParams: ["prompt", "requiredArtifacts"] },
+  "review-claude": {
+    kind: "review-claude",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["jiraTaskFile", "taskKey", "iteration", "claudeCmd"],
+  },
+  "review-reply-codex": {
+    kind: "review-reply-codex",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["jiraTaskFile", "taskKey", "iteration", "codexCmd"],
+  },
+  "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden", requiredParams: ["path"] },
+  "verify-build": { kind: "verify-build", version: 1, prompt: "forbidden", requiredParams: ["dockerComposeFile", "labelText"] },
 };
 
 export function createNodeRegistry(): NodeRegistry {
