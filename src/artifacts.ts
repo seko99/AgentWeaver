@@ -1,4 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
+import process from "node:process";
 
 import { TaskRunnerError } from "./errors.js";
 
@@ -6,8 +8,22 @@ export const REVIEW_FILE_RE = /^review-(.+)-(\d+)\.md$/;
 export const REVIEW_REPLY_FILE_RE = /^review-reply-(.+)-(\d+)\.md$/;
 export const READY_TO_MERGE_FILE = "ready-to-merge.md";
 
+export function taskWorkspaceDir(taskKey: string): string {
+  return path.join(process.cwd(), `.agentweaver-${taskKey}`);
+}
+
+export function ensureTaskWorkspaceDir(taskKey: string): string {
+  const workspaceDir = taskWorkspaceDir(taskKey);
+  mkdirSync(workspaceDir, { recursive: true });
+  return workspaceDir;
+}
+
+export function taskWorkspaceFile(taskKey: string, fileName: string): string {
+  return path.join(taskWorkspaceDir(taskKey), fileName);
+}
+
 export function artifactFile(prefix: string, taskKey: string, iteration: number): string {
-  return `${prefix}-${taskKey}-${iteration}.md`;
+  return taskWorkspaceFile(taskKey, `${prefix}-${taskKey}-${iteration}.md`);
 }
 
 export function designFile(taskKey: string): string {
@@ -24,6 +40,18 @@ export function qaFile(taskKey: string): string {
 
 export function taskSummaryFile(taskKey: string): string {
   return artifactFile("task", taskKey, 1);
+}
+
+export function readyToMergeFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, READY_TO_MERGE_FILE);
+}
+
+export function jiraTaskFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `${taskKey}.json`);
+}
+
+export function autoStateFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `.agentweaver-state-${taskKey}.json`);
 }
 
 export function planArtifacts(taskKey: string): string[] {

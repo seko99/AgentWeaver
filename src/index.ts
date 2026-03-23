@@ -9,15 +9,18 @@ import { fileURLToPath } from "node:url";
 
 import type { RuntimeServices } from "./executors/types.js";
 import {
-  READY_TO_MERGE_FILE,
   REVIEW_FILE_RE,
   REVIEW_REPLY_FILE_RE,
   artifactFile,
+  autoStateFile,
   designFile,
+  ensureTaskWorkspaceDir,
+  jiraTaskFile,
   planArtifacts,
   planFile,
   qaFile,
   requireArtifacts,
+  taskWorkspaceDir,
   taskSummaryFile,
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
@@ -149,6 +152,7 @@ Interactive Mode:
   Available slash commands: /plan, /implement, /review, /review-fix, /test, /test-fix, /test-linter-fix, /auto, /auto-status, /auto-reset, /help, /exit
 
 Flags:
+  --version       Show package version
   --force         In interactive mode, force refresh Jira task and task summary
   --dry           Fetch Jira task, but print docker/codex/claude commands instead of executing them
   --verbose       Show live stdout/stderr of launched commands
@@ -166,6 +170,15 @@ Optional environment variables:
   CLAUDE_BIN
   CLAUDE_REVIEW_MODEL
   CLAUDE_SUMMARY_MODEL`;
+}
+
+function packageVersion(): string {
+  const packageJsonPath = path.join(PACKAGE_ROOT, "package.json");
+  const raw = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
+  if (typeof raw.version !== "string" || !raw.version.trim()) {
+    throw new TaskRunnerError(`Package version is missing in ${packageJsonPath}`);
+  }
+  return raw.version;
 }
 
 function nowIso8601(): string {
@@ -213,10 +226,6 @@ function validateAutoPhaseId(phaseId: string): string {
   return normalized;
 }
 
-function autoStateFile(taskKey: string): string {
-  return path.join(process.cwd(), `.agentweaver-state-${taskKey}.json`);
-}
-
 function createAutoPipelineState(config: Config): AutoPipelineState {
   return {
     schemaVersion: AUTO_STATE_SCHEMA_VERSION,
@@ -256,6 +265,7 @@ function loadAutoPipelineState(config: Config): AutoPipelineState | null {
 
 function saveAutoPipelineState(state: AutoPipelineState): void {
   state.updatedAt = nowIso8601();
+  ensureTaskWorkspaceDir(state.issueKey);
   writeFileSync(autoStateFile(state.issueKey), `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
@@ -351,7 +361,11 @@ function loadEnvFile(envFilePath: string): void {
 
 function nextReviewIterationForTask(taskKey: string): number {
   let maxIndex = 0;
-  for (const entry of readdirSync(process.cwd(), { withFileTypes: true })) {
+  const workspaceDir = taskWorkspaceDir(taskKey);
+  if (!existsSync(workspaceDir)) {
+    return 1;
+  }
+  for (const entry of readdirSync(workspaceDir, { withFileTypes: true })) {
     if (!entry.isFile()) {
       continue;
     }
@@ -365,7 +379,11 @@ function nextReviewIterationForTask(taskKey: string): number {
 
 function latestReviewReplyIteration(taskKey: string): number | null {
   let maxIndex: number | null = null;
-  for (const entry of readdirSync(process.cwd(), { withFileTypes: true })) {
+  const workspaceDir = taskWorkspaceDir(taskKey);
+  if (!existsSync(workspaceDir)) {
+    return null;
+  }
+  for (const entry of readdirSync(workspaceDir, { withFileTypes: true })) {
     if (!entry.isFile()) {
       continue;
     }
@@ -390,6 +408,7 @@ function buildConfig(
   } = {},
 ): Config {
   const jiraIssueKey = extractIssueKey(jiraRef);
+  ensureTaskWorkspaceDir(jiraIssueKey);
   return {
     command,
     jiraRef,
@@ -405,7 +424,7 @@ function buildConfig(
     taskKey: jiraIssueKey,
     jiraBrowseUrl: buildJiraBrowseUrl(jiraRef),
     jiraApiUrl: buildJiraApiUrl(jiraRef),
-    jiraTaskFile: `./${jiraIssueKey}.json`,
+    jiraTaskFile: jiraTaskFile(jiraIssueKey),
   };
 }
 
@@ -966,6 +985,10 @@ function splitArgs(input: string): string[] {
 }
 
 function parseCliArgs(argv: string[]): ParsedArgs {
+  if (argv.includes("--version") || argv.includes("-v")) {
+    process.stdout.write(`${packageVersion()}\n`);
+    process.exit(0);
+  }
   if (argv.includes("--help") || argv.includes("-h")) {
     process.stdout.write(`${usage()}\n`);
     process.exit(0);
