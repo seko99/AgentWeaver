@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import { TaskRunnerError } from "./errors.js";
 
@@ -63,6 +64,7 @@ export async function fetchJiraIssue(jiraApiUrl: string, jiraTaskFile: string): 
   }
 
   const body = Buffer.from(await response.arrayBuffer());
+  mkdirSync(path.dirname(jiraTaskFile), { recursive: true });
   await writeFile(jiraTaskFile, body);
 }
 
