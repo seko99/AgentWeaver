@@ -30,8 +30,15 @@ type AnyNodeDefinition = PipelineNodeDefinition<Record<string, unknown>, unknown
 
 export type NodeRegistry = {
   get: <TParams, TResult>(kind: NodeKind) => PipelineNodeDefinition<TParams, TResult>;
+  getMeta: (kind: NodeKind) => NodeContractMetadata;
   has: (kind: string) => kind is NodeKind;
   kinds: () => NodeKind[];
+};
+
+export type NodeContractMetadata = {
+  kind: NodeKind;
+  version: number;
+  prompt: "allowed" | "forbidden";
 };
 
 const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
@@ -49,10 +56,28 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "verify-build": verifyBuildNode as unknown as AnyNodeDefinition,
 };
 
+const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
+  "build-failure-summary": { kind: "build-failure-summary", version: 1, prompt: "forbidden" },
+  "claude-prompt": { kind: "claude-prompt", version: 1, prompt: "allowed" },
+  "codex-docker-prompt": { kind: "codex-docker-prompt", version: 1, prompt: "allowed" },
+  "codex-local-prompt": { kind: "codex-local-prompt", version: 1, prompt: "allowed" },
+  "command-check": { kind: "command-check", version: 1, prompt: "forbidden" },
+  "file-check": { kind: "file-check", version: 1, prompt: "forbidden" },
+  "jira-fetch": { kind: "jira-fetch", version: 1, prompt: "forbidden" },
+  "plan-codex": { kind: "plan-codex", version: 1, prompt: "forbidden" },
+  "review-claude": { kind: "review-claude", version: 1, prompt: "forbidden" },
+  "review-reply-codex": { kind: "review-reply-codex", version: 1, prompt: "forbidden" },
+  "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden" },
+  "verify-build": { kind: "verify-build", version: 1, prompt: "forbidden" },
+};
+
 export function createNodeRegistry(): NodeRegistry {
   return {
     get<TParams, TResult>(kind: NodeKind) {
       return builtInNodes[kind] as unknown as PipelineNodeDefinition<TParams, TResult>;
+    },
+    getMeta(kind: NodeKind) {
+      return builtInNodeMetadata[kind];
     },
     has(kind: string): kind is NodeKind {
       return kind in builtInNodes;

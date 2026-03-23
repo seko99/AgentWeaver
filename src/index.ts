@@ -96,6 +96,7 @@ type AutoPipelineState = {
   updatedAt: string;
   lastError?: { step?: string; returnCode?: number; message?: string } | null;
   steps: AutoStepState[];
+  executionState: FlowExecutionState;
 };
 
 type ParsedArgs = {
@@ -199,6 +200,12 @@ function createAutoPipelineState(config: Config): AutoPipelineState {
     maxReviewIterations,
     updatedAt: nowIso8601(),
     steps: buildAutoSteps(),
+    executionState: {
+      flowKind: autoFlow.kind,
+      flowVersion: autoFlow.version,
+      terminated: false,
+      phases: [],
+    },
   };
 }
 
@@ -222,6 +229,15 @@ function loadAutoPipelineState(config: Config): AutoPipelineState | null {
   const state = raw as AutoPipelineState;
   if (state.schemaVersion !== AUTO_STATE_SCHEMA_VERSION) {
     throw new TaskRunnerError(`Unsupported auto state schema in ${filePath}: ${state.schemaVersion}`);
+  }
+  if (!state.executionState) {
+    const autoFlow = loadAutoFlow();
+    state.executionState = {
+      flowKind: autoFlow.kind,
+      flowVersion: autoFlow.version,
+      terminated: false,
+      phases: [],
+    };
   }
   return state;
 }
@@ -267,7 +283,31 @@ function printAutoState(state: AutoPipelineState): void {
   for (const step of state.steps) {
     lines.push(`[${step.status}] ${step.id}${step.note ? ` (${step.note})` : ""}`);
   }
+  if (state.executionState.terminated) {
+    lines.push("", `Execution terminated: ${state.executionState.terminationReason ?? "yes"}`);
+  }
   printPanel("Auto Status", lines.join("\n"), "cyan");
+}
+
+function syncAutoStepsFromExecutionState(state: AutoPipelineState): void {
+  for (const step of state.steps) {
+    const phaseState = state.executionState.phases.find((candidate) => candidate.id === step.id);
+    if (!phaseState) {
+      continue;
+    }
+    step.status = phaseState.status;
+    step.startedAt = phaseState.startedAt ?? null;
+    step.finishedAt = phaseState.finishedAt ?? null;
+    if (phaseState.status === "skipped") {
+      step.note = "condition not met";
+      step.returnCode ??= 0;
+    } else if (phaseState.status === "done") {
+      step.returnCode ??= 0;
+      if (state.executionState.terminated && state.executionState.terminationReason?.startsWith(`Stopped by ${step.id}:`)) {
+        step.note = "stop condition met";
+      }
+    }
+  }
 }
 
 function printAutoPhasesHelp(): void {
@@ -463,6 +503,14 @@ async function runAutoPhaseViaSpec(
         saveAutoPipelineState(state);
       },
     });
+    if (state) {
+      state.executionState = result.executionState;
+      syncAutoStepsFromExecutionState(state);
+      if (result.stopped) {
+        state.status = "completed";
+      }
+      saveAutoPipelineState(state);
+    }
     return result.status === "skipped" ? "skipped" : "done";
   } catch (error) {
     if (!config.dryRun) {
@@ -498,6 +546,12 @@ function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): voi
   state.status = "pending";
   state.currentStep = null;
   state.lastError = null;
+  const targetIndex = state.executionState.phases.findIndex((phase) => phase.id === targetPhaseId);
+  if (targetIndex >= 0) {
+    state.executionState.phases = state.executionState.phases.slice(0, targetIndex);
+  }
+  state.executionState.terminated = false;
+  delete state.executionState.terminationReason;
 }
 
 async function summarizeBuildFailure(output: string): Promise<string> {
@@ -655,6 +709,9 @@ async function runAutoPipelineDryRun(config: Config): Promise<void> {
   for (const phase of autoFlow.phases) {
     printInfo(`Dry-run auto phase: ${phase.id}`);
     await runAutoPhaseViaSpec(config, phase.id, executionState);
+    if (executionState.terminated) {
+      break;
+    }
   }
 }
 
@@ -678,13 +735,6 @@ async function runAutoPipeline(config: Config): Promise<void> {
   }
 
   printInfo("Running auto pipeline with persisted state");
-  const autoFlow = loadAutoFlow();
-  const executionState: FlowExecutionState = {
-    flowKind: autoFlow.kind,
-    flowVersion: autoFlow.version,
-    terminated: false,
-    phases: [],
-  };
   while (true) {
     const step = nextAutoStep(state);
     if (!step) {
@@ -717,7 +767,7 @@ async function runAutoPipeline(config: Config): Promise<void> {
 
     try {
       printInfo(`Running auto step: ${step.id}`);
-      const status = await runAutoPhaseViaSpec(config, step.id, executionState, state);
+      const status = await runAutoPhaseViaSpec(config, step.id, state.executionState, state);
       step.status = status;
       step.finishedAt = nowIso8601();
       step.returnCode = 0;
@@ -738,6 +788,14 @@ async function runAutoPipeline(config: Config): Promise<void> {
       };
       saveAutoPipelineState(state);
       throw error;
+    }
+
+    if (state.executionState.terminated) {
+      state.status = "completed";
+      state.currentStep = null;
+      saveAutoPipelineState(state);
+      printPanel("Auto", "Auto pipeline finished", "green");
+      return;
     }
 
     saveAutoPipelineState(state);

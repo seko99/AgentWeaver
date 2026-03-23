@@ -135,6 +135,28 @@ function resolveExpectation(expectation: ExpectationSpec, context: DeclarativeRe
       message: expectation.message,
     };
   }
+  if (expectation.kind === "step-output") {
+    const value = resolveValue(expectation.value, context);
+    if (expectation.equals !== undefined) {
+      const expected = resolveValue(expectation.equals, context);
+      if (value !== expected) {
+        throw new TaskRunnerError(expectation.message);
+      }
+      return {
+        kind: "require-file",
+        path: "",
+        message: expectation.message,
+      };
+    }
+    if (!value) {
+      throw new TaskRunnerError(expectation.message);
+    }
+    return {
+      kind: "require-file",
+      path: "",
+      message: expectation.message,
+    };
+  }
   throw new TaskRunnerError(`Unsupported expectation kind: ${(expectation as { kind?: string }).kind ?? "unknown"}`);
 }
 
@@ -218,11 +240,16 @@ export async function runExpandedPhase(
       delete stepState.outputs;
     }
     if (step.expect) {
-      runNodeChecks(
-        step.expect
-          .filter((expectation) => evaluateCondition(expectation.when, stepContext))
-          .map((expectation) => resolveExpectation(expectation, stepContext)),
-      );
+      const nodeChecks = step.expect
+        .filter((expectation) => evaluateCondition(expectation.when, stepContext))
+        .flatMap((expectation) => {
+          if (expectation.kind === "step-output") {
+            resolveExpectation(expectation, stepContext);
+            return [];
+          }
+          return [resolveExpectation(expectation, stepContext)];
+        });
+      runNodeChecks(nodeChecks);
     }
     if (step.after) {
       step.after.filter((action) => evaluateCondition(action.when, stepContext)).forEach((action) => {

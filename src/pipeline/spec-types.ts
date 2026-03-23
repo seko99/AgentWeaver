@@ -62,6 +62,13 @@ export type ExpectationSpec =
       when?: ConditionSpec;
       path: ValueSpec;
       message: string;
+    }
+  | {
+      kind: "step-output";
+      when?: ConditionSpec;
+      value: ValueSpec;
+      equals?: ValueSpec;
+      message: string;
     };
 
 export type StepAfterActionSpec = {
