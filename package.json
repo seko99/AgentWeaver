@@ -36,7 +36,7 @@
   "packageManager": "npm@9.2.0",
   "preferGlobal": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-flow-specs.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run check && npm run build",
     "pack:check": "npm pack --dry-run",

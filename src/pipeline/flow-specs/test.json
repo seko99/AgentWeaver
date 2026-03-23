@@ -1,0 +1,19 @@
+{
+  "kind": "test-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "test",
+      "steps": [
+        {
+          "id": "verify_build",
+          "node": "verify-build",
+          "params": {
+            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "labelText": { "const": "Running build verification in isolated Docker" }
+          }
+        }
+      ]
+    }
+  ]
+}

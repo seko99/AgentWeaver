@@ -18,19 +18,22 @@ The package is designed to run as an npm CLI and includes an interactive termina
 
 ## Architecture
 
-The CLI now uses an executor-based architecture.
+The CLI now uses an executor + node + declarative flow architecture.
 
-- `src/index.ts` remains the orchestration layer for CLI commands and `auto` state transitions
-- `src/executors/` contains first-class executors for external actions such as Jira fetch, local Codex, Docker Codex, Claude, Claude summaries, process execution, and build verification
-- `src/executors/configs/` contains data-only default configs for executors with JSON-compatible structure
+- `src/index.ts` remains the CLI entrypoint and high-level orchestration layer
+- `src/executors/` contains first-class executors for external actions such as Jira fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
+- `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
+- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `plan`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `test-linter-fix`, and `auto`
 - `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
 
-This keeps command handlers focused on workflow composition instead of inline subprocess wiring.
+This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
 
 ## Repository Layout
 
 - `src/` — main TypeScript sources
 - `src/index.ts` — CLI entrypoint and workflow orchestration
+- `src/pipeline/flow-specs/` — declarative JSON specs for workflow stages
+- `src/pipeline/nodes/` — reusable pipeline nodes executed by the declarative runner
 - `src/interactive-ui.ts` — interactive TUI built with `neo-blessed`
 - `src/markdown.ts` — markdown-to-terminal renderer for the TUI
 - `src/executors/` — executor modules for concrete execution families

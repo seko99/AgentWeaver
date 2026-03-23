@@ -2,6 +2,7 @@ import process from "node:process";
 
 import type { RuntimeServices } from "../executors/types.js";
 import { getOutputAdapter } from "../tui.js";
+import { createNodeRegistry } from "./node-registry.js";
 import { createExecutorRegistry } from "./registry.js";
 import type { PipelineContext } from "./types.js";
 
@@ -25,6 +26,7 @@ export function createPipelineContext(input: CreatePipelineContextInput): Pipeli
     verbose: input.verbose,
     runtime: input.runtime,
     executors: createExecutorRegistry(),
+    nodes: createNodeRegistry(),
     ...(input.setSummary ? { setSummary: input.setSummary } : {}),
   };
 }

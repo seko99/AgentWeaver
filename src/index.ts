@@ -11,39 +11,23 @@ import type { RuntimeServices } from "./executors/types.js";
 import {
   REVIEW_FILE_RE,
   REVIEW_REPLY_FILE_RE,
-  artifactFile,
   autoStateFile,
-  designFile,
   ensureTaskWorkspaceDir,
   jiraTaskFile,
   planArtifacts,
-  planFile,
-  qaFile,
+  readyToMergeFile,
   requireArtifacts,
   taskWorkspaceDir,
   taskSummaryFile,
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
 import { buildJiraApiUrl, buildJiraBrowseUrl, extractIssueKey, requireJiraTaskFile } from "./jira.js";
-import {
-  AUTO_REVIEW_FIX_EXTRA_PROMPT,
-  IMPLEMENT_PROMPT_TEMPLATE,
-  PLAN_PROMPT_TEMPLATE,
-  REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
-  REVIEW_SUMMARY_PROMPT_TEMPLATE,
-  formatPrompt,
-  formatTemplate,
-} from "./prompts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { createPipelineContext } from "./pipeline/context.js";
-import { runFlow } from "./pipeline/flow-runner.js";
-import { implementFlowDefinition, runImplementFlow } from "./pipeline/flows/implement-flow.js";
-import { planFlowDefinition, runPlanFlow } from "./pipeline/flows/plan-flow.js";
+import { loadAutoFlow } from "./pipeline/auto-flow.js";
+import { loadDeclarativeFlow } from "./pipeline/declarative-flows.js";
+import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
 import { runPreflightFlow } from "./pipeline/flows/preflight-flow.js";
-import { createReviewFixFlowDefinition, runReviewFixFlow } from "./pipeline/flows/review-fix-flow.js";
-import { createReviewFlowDefinition, runReviewFlow } from "./pipeline/flows/review-flow.js";
-import { runTestFixFlow } from "./pipeline/flows/test-fix-flow.js";
-import { runTestFlow, testFlowDefinition } from "./pipeline/flows/test-flow.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
@@ -68,8 +52,7 @@ type CommandName = (typeof COMMANDS)[number];
 const DEFAULT_CODEX_MODEL = "gpt-5.4";
 const DEFAULT_CLAUDE_REVIEW_MODEL = "opus";
 const HISTORY_FILE = path.join(os.homedir(), ".codex", "memories", "agentweaver-history");
-const AUTO_STATE_SCHEMA_VERSION = 1;
-const AUTO_MAX_REVIEW_ITERATIONS = 3;
+const AUTO_STATE_SCHEMA_VERSION = 2;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(MODULE_DIR, "..");
 const runtimeServices: RuntimeServices = {
@@ -88,8 +71,6 @@ type Config = {
   dryRun: boolean;
   verbose: boolean;
   dockerComposeFile: string;
-  codexCmd: string;
-  claudeCmd: string;
   jiraIssueKey: string;
   taskKey: string;
   jiraBrowseUrl: string;
@@ -99,9 +80,7 @@ type Config = {
 
 type AutoStepState = {
   id: string;
-  command: Exclude<CommandName, "auto" | "auto-status" | "auto-reset">;
   status: "pending" | "running" | "failed" | "done" | "skipped";
-  reviewIteration?: number | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   returnCode?: number | null;
@@ -189,31 +168,15 @@ function normalizeAutoPhaseId(phaseId: string): string {
   return phaseId.trim().toLowerCase().replaceAll("-", "_");
 }
 
-function buildAutoSteps(maxReviewIterations = AUTO_MAX_REVIEW_ITERATIONS): AutoStepState[] {
-  const steps: AutoStepState[] = [
-    { id: "plan", command: "plan", status: "pending" },
-    { id: "implement", command: "implement", status: "pending" },
-    { id: "test_after_implement", command: "test", status: "pending" },
-  ];
-
-  for (let iteration = 1; iteration <= maxReviewIterations; iteration += 1) {
-    steps.push(
-      { id: `review_${iteration}`, command: "review", status: "pending", reviewIteration: iteration },
-      { id: `review_fix_${iteration}`, command: "review-fix", status: "pending", reviewIteration: iteration },
-      {
-        id: `test_after_review_fix_${iteration}`,
-        command: "test",
-        status: "pending",
-        reviewIteration: iteration,
-      },
-    );
-  }
-
-  return steps;
+function buildAutoSteps(): AutoStepState[] {
+  return loadAutoFlow().phases.map((phase) => ({
+    id: phase.id,
+    status: "pending",
+  }));
 }
 
-function autoPhaseIds(maxReviewIterations = AUTO_MAX_REVIEW_ITERATIONS): string[] {
-  return buildAutoSteps(maxReviewIterations).map((step) => step.id);
+function autoPhaseIds(): string[] {
+  return buildAutoSteps().map((step) => step.id);
 }
 
 function validateAutoPhaseId(phaseId: string): string {
@@ -227,13 +190,15 @@ function validateAutoPhaseId(phaseId: string): string {
 }
 
 function createAutoPipelineState(config: Config): AutoPipelineState {
+  const autoFlow = loadAutoFlow();
+  const maxReviewIterations = autoFlow.phases.filter((phase) => /^review_\d+$/.test(phase.id)).length;
   return {
     schemaVersion: AUTO_STATE_SCHEMA_VERSION,
     issueKey: config.taskKey,
     jiraRef: config.jiraRef,
     status: "pending",
     currentStep: null,
-    maxReviewIterations: AUTO_MAX_REVIEW_ITERATIONS,
+    maxReviewIterations,
     updatedAt: nowIso8601(),
     steps: buildAutoSteps(),
   };
@@ -288,19 +253,6 @@ function markAutoStepSkipped(step: AutoStepState, note: string): void {
   step.finishedAt = nowIso8601();
 }
 
-function skipAutoStepsAfterReadyToMerge(state: AutoPipelineState, currentStepId: string): void {
-  let seenCurrent = false;
-  for (const step of state.steps) {
-    if (!seenCurrent) {
-      seenCurrent = step.id === currentStepId;
-      continue;
-    }
-    if (step.status === "pending") {
-      markAutoStepSkipped(step, "ready-to-merge detected");
-    }
-  }
-}
-
 function printAutoState(state: AutoPipelineState): void {
   const lines = [
     `Issue: ${state.issueKey}`,
@@ -321,10 +273,7 @@ function printAutoState(state: AutoPipelineState): void {
 }
 
 function printAutoPhasesHelp(): void {
-  const phaseLines = ["Available auto phases:", "", "plan", "implement", "test_after_implement"];
-  for (let iteration = 1; iteration <= AUTO_MAX_REVIEW_ITERATIONS; iteration += 1) {
-    phaseLines.push(`review_${iteration}`, `review_fix_${iteration}`, `test_after_review_fix_${iteration}`);
-  }
+  const phaseLines = ["Available auto phases:", "", ...autoPhaseIds()];
   phaseLines.push("", "You can resume auto from a phase with:", "agentweaver auto --from <phase> <jira>", "or in interactive mode:", "/auto --from <phase>");
   printPanel("Auto Phases", phaseLines.join("\n"), "magenta");
 }
@@ -418,8 +367,6 @@ function buildConfig(
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
     dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
-    codexCmd: process.env.CODEX_BIN ?? "codex",
-    claudeCmd: process.env.CLAUDE_BIN ?? "claude",
     jiraIssueKey,
     taskKey: jiraIssueKey,
     jiraBrowseUrl: buildJiraBrowseUrl(jiraRef),
@@ -428,54 +375,45 @@ function buildConfig(
   };
 }
 
-function checkPrerequisites(config: Config): { codexCmd: string; claudeCmd: string } {
-  let codexCmd = config.codexCmd;
-  let claudeCmd = config.claudeCmd;
-
+function checkPrerequisites(config: Config): void {
   if (config.command === "plan" || config.command === "review") {
-    codexCmd = resolveCmd("codex", "CODEX_BIN");
+    resolveCmd("codex", "CODEX_BIN");
   }
   if (config.command === "review") {
-    claudeCmd = resolveCmd("claude", "CLAUDE_BIN");
+    resolveCmd("claude", "CLAUDE_BIN");
   }
-  if (["implement", "review-fix", "test", "test-fix", "test-linter-fix"].includes(config.command)) {
+  if (["implement", "review-fix", "test"].includes(config.command)) {
     resolveDockerComposeCmd();
     if (!existsSync(config.dockerComposeFile)) {
       throw new TaskRunnerError(`docker-compose file not found: ${config.dockerComposeFile}`);
     }
   }
-
-  return { codexCmd, claudeCmd };
 }
 
-function buildPhaseConfig(baseConfig: Config, command: CommandName): Config {
-  return { ...baseConfig, command };
-}
-
-function appendPromptText(basePrompt: string | null | undefined, suffix: string): string {
-  if (!basePrompt?.trim()) {
-    return suffix;
+function checkAutoPrerequisites(config: Config): void {
+  resolveCmd("codex", "CODEX_BIN");
+  resolveCmd("claude", "CLAUDE_BIN");
+  resolveDockerComposeCmd();
+  if (!existsSync(config.dockerComposeFile)) {
+    throw new TaskRunnerError(`docker-compose file not found: ${config.dockerComposeFile}`);
   }
-  return `${basePrompt.trim()}\n${suffix}`;
 }
 
-function configForAutoStep(baseConfig: Config, step: AutoStepState): Config {
-  if (step.command === "review-fix") {
-    return {
-      ...buildPhaseConfig(baseConfig, step.command),
-      extraPrompt: appendPromptText(baseConfig.extraPrompt, AUTO_REVIEW_FIX_EXTRA_PROMPT),
-    };
-  }
-  return buildPhaseConfig(baseConfig, step.command);
+function autoFlowParams(config: Config): Record<string, unknown> {
+  return {
+    jiraApiUrl: config.jiraApiUrl,
+    taskKey: config.taskKey,
+    dockerComposeFile: config.dockerComposeFile,
+    extraPrompt: config.extraPrompt,
+    reviewFixPoints: config.reviewFixPoints,
+  };
 }
 
-async function runAutoStepViaFlow(
+async function runDeclarativeFlowBySpecFile(
+  fileName: string,
   config: Config,
-  step: AutoStepState,
-  codexCmd: string,
-  claudeCmd: string,
-  state: AutoPipelineState,
-): Promise<boolean> {
+  flowParams: Record<string, unknown>,
+): Promise<void> {
   const context = createPipelineContext({
     issueKey: config.taskKey,
     jiraRef: config.jiraRef,
@@ -483,124 +421,47 @@ async function runAutoStepViaFlow(
     verbose: config.verbose,
     runtime: runtimeServices,
   });
-  const onStepStart = async (flowStep: { id: string }) => {
-    state.currentStep = `${step.id}:${flowStep.id}`;
-    saveAutoPipelineState(state);
-  };
-
-  if (step.command === "plan") {
-    await runFlow(
-      planFlowDefinition,
-      context,
-      {
-        jiraApiUrl: config.jiraApiUrl,
-        jiraTaskFile: config.jiraTaskFile,
-        taskKey: config.taskKey,
-        codexCmd,
-        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
-      },
-      { onStepStart },
-    );
-    return false;
+  const flow = loadDeclarativeFlow(fileName);
+  for (const phase of flow.phases) {
+    await runExpandedPhase(phase, context, flowParams, flow.constants);
   }
+}
 
-  if (step.command === "implement") {
-    const implementPrompt = formatPrompt(
-      formatTemplate(IMPLEMENT_PROMPT_TEMPLATE, {
-        design_file: designFile(config.taskKey),
-        plan_file: planFile(config.taskKey),
-      }),
-      config.extraPrompt,
-    );
-    await runFlow(
-      implementFlowDefinition,
-      context,
-      {
-        dockerComposeFile: config.dockerComposeFile,
-        prompt: implementPrompt,
-        runFollowupVerify: false,
-        ...(!config.dryRun
-          ? {
-              onVerifyBuildFailure: async (output: string) => {
-                printError("Build verification failed");
-                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-              },
-            }
-          : {}),
+async function runAutoPhaseViaSpec(
+  config: Config,
+  phaseId: string,
+  state?: AutoPipelineState,
+): Promise<"done" | "skipped"> {
+  const context = createPipelineContext({
+    issueKey: config.taskKey,
+    jiraRef: config.jiraRef,
+    dryRun: config.dryRun,
+    verbose: config.verbose,
+    runtime: runtimeServices,
+  });
+  const autoFlow = loadAutoFlow();
+  const phase = findPhaseById(autoFlow.phases, phaseId);
+  try {
+    const result = await runExpandedPhase(phase, context, autoFlowParams(config), autoFlow.constants, {
+      onStepStart: async (_phase, step) => {
+        if (!state) {
+          return;
+        }
+        state.currentStep = `${phaseId}:${step.id}`;
+        saveAutoPipelineState(state);
       },
-      { onStepStart },
-    );
-    return false;
-  }
-
-  if (step.command === "test") {
-    await runFlow(
-      testFlowDefinition,
-      context,
-      {
-        taskKey: config.taskKey,
-        dockerComposeFile: config.dockerComposeFile,
-        ...(!config.dryRun
-          ? {
-              onVerifyBuildFailure: async (output: string) => {
-                printError("Build verification failed");
-                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-              },
-            }
-          : {}),
-      },
-      { onStepStart },
-    );
-    return false;
-  }
-
-  if (step.command === "review") {
-    const iteration = step.reviewIteration ?? nextReviewIterationForTask(config.taskKey);
-    const result = await runFlow(
-      createReviewFlowDefinition(iteration),
-      context,
-      {
-        jiraTaskFile: config.jiraTaskFile,
-        taskKey: config.taskKey,
-        claudeCmd,
-        codexCmd,
-        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
-      },
-      { onStepStart },
-    );
-    return result.steps.find((candidate) => candidate.id === "check_ready_to_merge")?.result.metadata?.readyToMerge === true;
-  }
-
-  if (step.command === "review-fix") {
-    const latestIteration = step.reviewIteration ?? latestReviewReplyIteration(config.taskKey);
-    if (latestIteration === null) {
-      throw new TaskRunnerError(`Review-fix mode requires at least one review-reply-${config.taskKey}-N.md artifact.`);
+    });
+    return result.status;
+  } catch (error) {
+    if (!config.dryRun) {
+      const output = String((error as { output?: string }).output ?? "");
+      if (output.trim()) {
+        printError("Build verification failed");
+        printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+      }
     }
-    await runFlow(
-      createReviewFixFlowDefinition(latestIteration),
-      context,
-      {
-        taskKey: config.taskKey,
-        dockerComposeFile: config.dockerComposeFile,
-        latestIteration,
-        ...(config.reviewFixPoints !== undefined ? { reviewFixPoints: config.reviewFixPoints } : {}),
-        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
-        runFollowupVerify: false,
-        ...(!config.dryRun
-          ? {
-              onVerifyBuildFailure: async (output: string) => {
-                printError("Build verification failed");
-                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-              },
-            }
-          : {}),
-      },
-      { onStepStart },
-    );
-    return false;
+    throw error;
   }
-
-  throw new TaskRunnerError(`Unsupported auto step command: ${step.command}`);
 }
 
 function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): void {
@@ -668,18 +529,10 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     return false;
   }
 
-  const { codexCmd, claudeCmd } = checkPrerequisites(config);
+  checkPrerequisites(config);
   process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
   process.env.JIRA_API_URL = config.jiraApiUrl;
   process.env.JIRA_TASK_FILE = config.jiraTaskFile;
-
-  const implementPrompt = formatPrompt(
-    formatTemplate(IMPLEMENT_PROMPT_TEMPLATE, {
-      design_file: designFile(config.taskKey),
-      plan_file: planFile(config.taskKey),
-    }),
-    config.extraPrompt,
-  );
 
   if (config.command === "plan") {
     if (config.verbose) {
@@ -687,147 +540,98 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
       process.stdout.write(`Saving Jira issue JSON to: ${config.jiraTaskFile}\n`);
     }
-    await runPlanFlow(
-      createPipelineContext({
-        issueKey: config.taskKey,
-        jiraRef: config.jiraRef,
-        dryRun: config.dryRun,
-        verbose: config.verbose,
-        runtime: runtimeServices,
-      }),
-      {
-        jiraApiUrl: config.jiraApiUrl,
-        jiraTaskFile: config.jiraTaskFile,
-        taskKey: config.taskKey,
-        codexCmd,
-        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
-      },
-    );
+    await runDeclarativeFlowBySpecFile("plan.json", config, {
+      jiraApiUrl: config.jiraApiUrl,
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+    });
     return false;
   }
 
   if (config.command === "implement") {
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(planArtifacts(config.taskKey), "Implement mode requires plan artifacts from the planning phase.");
-    await runImplementFlow(
-      createPipelineContext({
-        issueKey: config.taskKey,
-        jiraRef: config.jiraRef,
-        dryRun: config.dryRun,
-        verbose: config.verbose,
-        runtime: runtimeServices,
-      }),
-      {
+    try {
+      await runDeclarativeFlowBySpecFile("implement.json", config, {
+        taskKey: config.taskKey,
         dockerComposeFile: config.dockerComposeFile,
-        prompt: implementPrompt,
+        extraPrompt: config.extraPrompt,
         runFollowupVerify,
-        ...(!config.dryRun
-          ? {
-              onVerifyBuildFailure: async (output: string) => {
-                printError("Build verification failed");
-                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-              },
-            }
-          : {}),
-      },
-    );
+      });
+    } catch (error) {
+      if (!config.dryRun) {
+        const output = String((error as { output?: string }).output ?? "");
+        if (output.trim()) {
+          printError("Build verification failed");
+          printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+        }
+      }
+      throw error;
+    }
     return false;
   }
 
   if (config.command === "review") {
     requireJiraTaskFile(config.jiraTaskFile);
-    const result = await runReviewFlow(
-      createPipelineContext({
-        issueKey: config.taskKey,
-        jiraRef: config.jiraRef,
-        dryRun: config.dryRun,
-        verbose: config.verbose,
-        runtime: runtimeServices,
-      }),
-      {
-        jiraTaskFile: config.jiraTaskFile,
-        taskKey: config.taskKey,
-        claudeCmd,
-        codexCmd,
-        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
-      },
-    );
-    return result.readyToMerge;
+    const iteration = nextReviewIterationForTask(config.taskKey);
+    await runDeclarativeFlowBySpecFile("review.json", config, {
+      taskKey: config.taskKey,
+      iteration,
+      extraPrompt: config.extraPrompt,
+    });
+    return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
 
   if (config.command === "review-fix") {
     requireJiraTaskFile(config.jiraTaskFile);
-    await runReviewFixFlow(
-      createPipelineContext({
-        issueKey: config.taskKey,
-        jiraRef: config.jiraRef,
-        dryRun: config.dryRun,
-        verbose: config.verbose,
-        runtime: runtimeServices,
-      }),
-      {
+    try {
+      await runDeclarativeFlowBySpecFile("review-fix.json", config, {
         taskKey: config.taskKey,
         dockerComposeFile: config.dockerComposeFile,
         latestIteration: latestReviewReplyIteration(config.taskKey),
-        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
-        ...(config.reviewFixPoints !== undefined ? { reviewFixPoints: config.reviewFixPoints } : {}),
         runFollowupVerify,
-        ...(!config.dryRun
-          ? {
-              onVerifyBuildFailure: async (output: string) => {
-                printError("Build verification failed");
-                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-              },
-            }
-          : {}),
-      },
-    );
+        extraPrompt: config.extraPrompt,
+        reviewFixPoints: config.reviewFixPoints,
+      });
+    } catch (error) {
+      if (!config.dryRun) {
+        const output = String((error as { output?: string }).output ?? "");
+        if (output.trim()) {
+          printError("Build verification failed");
+          printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+        }
+      }
+      throw error;
+    }
     return false;
   }
 
   if (config.command === "test") {
     requireJiraTaskFile(config.jiraTaskFile);
-    await runTestFlow(
-      createPipelineContext({
-        issueKey: config.taskKey,
-        jiraRef: config.jiraRef,
-        dryRun: config.dryRun,
-        verbose: config.verbose,
-        runtime: runtimeServices,
-      }),
-      {
+    try {
+      await runDeclarativeFlowBySpecFile("test.json", config, {
         taskKey: config.taskKey,
         dockerComposeFile: config.dockerComposeFile,
-        ...(!config.dryRun
-          ? {
-              onVerifyBuildFailure: async (output: string) => {
-                printError("Build verification failed");
-                printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-              },
-            }
-          : {}),
-      },
-    );
+      });
+    } catch (error) {
+      if (!config.dryRun) {
+        const output = String((error as { output?: string }).output ?? "");
+        if (output.trim()) {
+          printError("Build verification failed");
+          printSummary("Build Failure Summary", await summarizeBuildFailure(output));
+        }
+      }
+      throw error;
+    }
     return false;
   }
 
   if (config.command === "test-fix" || config.command === "test-linter-fix") {
     requireJiraTaskFile(config.jiraTaskFile);
-    await runTestFixFlow(
-      createPipelineContext({
-        issueKey: config.taskKey,
-        jiraRef: config.jiraRef,
-        dryRun: config.dryRun,
-        verbose: config.verbose,
-        runtime: runtimeServices,
-      }),
-      {
-        command: config.command,
-        taskKey: config.taskKey,
-        dockerComposeFile: config.dockerComposeFile,
-        ...(config.extraPrompt !== undefined ? { extraPrompt: config.extraPrompt } : {}),
-      },
-    );
+    await runDeclarativeFlowBySpecFile(config.command === "test-fix" ? "test-fix.json" : "test-linter-fix.json", config, {
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+    });
     return false;
   }
 
@@ -835,32 +639,11 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
 }
 
 async function runAutoPipelineDryRun(config: Config): Promise<void> {
-  const { codexCmd, claudeCmd } = checkPrerequisites(config);
-  printInfo("Dry-run auto pipeline: plan -> implement -> test -> review/review-fix/test");
-  const dryState = createAutoPipelineState(config);
-  await runAutoStepViaFlow(buildPhaseConfig(config, "plan"), dryState.steps[0]!, codexCmd, claudeCmd, dryState);
-  await runAutoStepViaFlow(buildPhaseConfig(config, "implement"), dryState.steps[1]!, codexCmd, claudeCmd, dryState);
-  await runAutoStepViaFlow(buildPhaseConfig(config, "test"), dryState.steps[2]!, codexCmd, claudeCmd, dryState);
-  for (let iteration = 1; iteration <= AUTO_MAX_REVIEW_ITERATIONS; iteration += 1) {
-    printInfo(`Dry-run auto review iteration ${iteration}/${AUTO_MAX_REVIEW_ITERATIONS}`);
-    const reviewStep = dryState.steps.find((step) => step.id === `review_${iteration}`);
-    const reviewFixStep = dryState.steps.find((step) => step.id === `review_fix_${iteration}`);
-    const testStep = dryState.steps.find((step) => step.id === `test_after_review_fix_${iteration}`);
-    if (!reviewStep || !reviewFixStep || !testStep) {
-      throw new TaskRunnerError(`Missing auto dry-run steps for iteration ${iteration}`);
-    }
-    await runAutoStepViaFlow(buildPhaseConfig(config, "review"), reviewStep, codexCmd, claudeCmd, dryState);
-    await runAutoStepViaFlow(
-      {
-        ...buildPhaseConfig(config, "review-fix"),
-        extraPrompt: appendPromptText(config.extraPrompt, AUTO_REVIEW_FIX_EXTRA_PROMPT),
-      },
-      reviewFixStep,
-      codexCmd,
-      claudeCmd,
-      dryState,
-    );
-    await runAutoStepViaFlow(buildPhaseConfig(config, "test"), testStep, codexCmd, claudeCmd, dryState);
+  checkAutoPrerequisites(config);
+  printInfo("Dry-run auto pipeline from declarative spec");
+  for (const phase of loadAutoFlow().phases) {
+    printInfo(`Dry-run auto phase: ${phase.id}`);
+    await runAutoPhaseViaSpec(config, phase.id);
   }
 }
 
@@ -870,7 +653,10 @@ async function runAutoPipeline(config: Config): Promise<void> {
     return;
   }
 
-  const { codexCmd, claudeCmd } = checkPrerequisites(config);
+  checkAutoPrerequisites(config);
+  process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
+  process.env.JIRA_API_URL = config.jiraApiUrl;
+  process.env.JIRA_TASK_FILE = config.jiraTaskFile;
   let state = loadAutoPipelineState(config) ?? createAutoPipelineState(config);
   if (config.autoFromPhase) {
     rewindAutoPipelineState(state, config.autoFromPhase);
@@ -913,18 +699,12 @@ async function runAutoPipeline(config: Config): Promise<void> {
 
     try {
       printInfo(`Running auto step: ${step.id}`);
-      const readyToMerge = await runAutoStepViaFlow(configForAutoStep(config, step), step, codexCmd, claudeCmd, state);
-      step.status = "done";
+      const status = await runAutoPhaseViaSpec(config, step.id, state);
+      step.status = status;
       step.finishedAt = nowIso8601();
       step.returnCode = 0;
-
-      if (step.command === "review" && readyToMerge) {
-        skipAutoStepsAfterReadyToMerge(state, step.id);
-        state.status = "completed";
-        state.currentStep = null;
-        saveAutoPipelineState(state);
-        printPanel("Auto", "Auto pipeline finished", "green");
-        return;
+      if (status === "skipped") {
+        step.note = "condition not met";
       }
     } catch (error) {
       const returnCode = Number((error as { returnCode?: number }).returnCode ?? 1);

@@ -1,0 +1,87 @@
+{
+  "kind": "plan-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "plan",
+      "steps": [
+        {
+          "id": "fetch_jira",
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
+            }
+          ]
+        },
+        {
+          "id": "run_codex_plan",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "plan",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "qa_file": {
+                "artifact": {
+                  "kind": "qa-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running Codex planning mode" }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "artifactList": {
+                  "kind": "plan-artifacts",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Plan mode did not produce the required artifacts."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

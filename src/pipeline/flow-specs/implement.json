@@ -1,0 +1,46 @@
+{
+  "kind": "implement-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "implement",
+      "steps": [
+        {
+          "id": "run_codex_implement",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "implement",
+            "vars": {
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running Codex implementation mode locally" }
+          }
+        },
+        {
+          "id": "verify_build_after_implement",
+          "when": { "ref": "params.runFollowupVerify" },
+          "node": "verify-build",
+          "params": {
+            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "labelText": { "const": "Running build verification in isolated Docker" }
+          }
+        }
+      ]
+    }
+  ]
+}

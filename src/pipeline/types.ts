@@ -1,5 +1,6 @@
 import type { ExecutorContext, RuntimeServices } from "../executors/types.js";
 import type { OutputAdapter } from "../tui.js";
+import type { NodeRegistry } from "./node-registry.js";
 import type { ExecutorRegistry } from "./registry.js";
 
 export type NodeOutputSpec =
@@ -41,6 +42,7 @@ export type PipelineContext = {
   verbose: boolean;
   runtime: RuntimeServices;
   executors: ExecutorRegistry;
+  nodes: NodeRegistry;
   setSummary?: (markdown: string) => void;
 };
 

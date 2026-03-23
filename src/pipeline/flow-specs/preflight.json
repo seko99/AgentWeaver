@@ -1,0 +1,143 @@
+{
+  "kind": "interactive-preflight-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "preflight",
+      "steps": [
+        {
+          "id": "check_commands",
+          "node": "command-check",
+          "params": {
+            "commands": {
+              "const": [
+                { "commandName": "codex", "envVarName": "CODEX_BIN" },
+                { "commandName": "claude", "envVarName": "CLAUDE_BIN" }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fetch_jira_if_needed",
+          "when": {
+            "any": [
+              { "ref": "params.forceRefresh" },
+              {
+                "not": {
+                  "exists": {
+                    "artifact": {
+                      "kind": "jira-task-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
+            }
+          ]
+        },
+        {
+          "id": "load_existing_task_summary",
+          "when": {
+            "all": [
+              {
+                "not": { "ref": "params.forceRefresh" }
+              },
+              {
+                "exists": {
+                  "artifact": {
+                    "kind": "jira-task-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              },
+              {
+                "exists": {
+                  "artifact": {
+                    "kind": "task-summary-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "summary-file-load",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "task-summary-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          }
+        },
+        {
+          "id": "generate_task_summary",
+          "when": {
+            "any": [
+              { "ref": "params.forceRefresh" },
+              {
+                "not": {
+                  "exists": {
+                    "artifact": {
+                      "kind": "task-summary-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "task-summary",
+          "params": {
+            "jiraTaskFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "taskKey": { "ref": "params.taskKey" }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "task-summary-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  }
+                ]
+              },
+              "message": "Claude summary did not produce the task summary artifact."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
