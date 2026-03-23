@@ -29,6 +29,7 @@ export type DeclarativePhaseRunResult = {
 
 export type DeclarativePhaseRunOptions = {
   onStepStart?: (phase: ExpandedPhaseSpec, step: { id: string }) => void | Promise<void>;
+  onStateChange?: (executionState: FlowExecutionState) => void | Promise<void>;
   executionState?: FlowExecutionState;
   flowKind?: string;
   flowVersion?: number;
@@ -184,6 +185,7 @@ export async function runExpandedPhase(
   const phaseContext = createResolverContext(pipelineContext, flowParams, flowConstants, phase.repeatVars, executionState);
   if (executionState.terminated) {
     phaseState.status = "skipped";
+    await options.onStateChange?.(executionState);
     return {
       id: phase.id,
       status: "skipped",
@@ -200,6 +202,7 @@ export async function runExpandedPhase(
       step.status = "skipped";
       step.finishedAt = nowIso8601();
     });
+    await options.onStateChange?.(executionState);
     return {
       id: phase.id,
       status: "skipped",
@@ -211,6 +214,7 @@ export async function runExpandedPhase(
 
   phaseState.status = "running";
   phaseState.startedAt ??= nowIso8601();
+  await options.onStateChange?.(executionState);
   const steps: DeclarativePhaseRunResult["steps"] = [];
   for (const [stepIndex, step] of phase.steps.entries()) {
     await options.onStepStart?.(phase, step);
@@ -221,9 +225,11 @@ export async function runExpandedPhase(
     }
     stepState.status = "running";
     stepState.startedAt ??= nowIso8601();
+    await options.onStateChange?.(executionState);
     if (!evaluateCondition(step.when, stepContext)) {
       stepState.status = "skipped";
       stepState.finishedAt = nowIso8601();
+      await options.onStateChange?.(executionState);
       steps.push({ id: step.id, status: "skipped" });
       continue;
     }
@@ -260,12 +266,14 @@ export async function runExpandedPhase(
     stepState.status = "done";
     stepState.finishedAt = nowIso8601();
     stepState.stopFlow = stopFlow;
+    await options.onStateChange?.(executionState);
     steps.push({ id: step.id, status: "done", ...(stepState.outputs ? { outputs: stepState.outputs } : {}) });
     if (stopFlow) {
       executionState.terminated = true;
       executionState.terminationReason = `Stopped by ${phase.id}:${step.id}`;
       phaseState.status = "done";
       phaseState.finishedAt = nowIso8601();
+      await options.onStateChange?.(executionState);
       return {
         id: phase.id,
         status: "stopped",
@@ -278,6 +286,7 @@ export async function runExpandedPhase(
 
   phaseState.status = "done";
   phaseState.finishedAt = nowIso8601();
+  await options.onStateChange?.(executionState);
   return {
     id: phase.id,
     status: "done",

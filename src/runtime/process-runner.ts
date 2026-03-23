@@ -2,7 +2,7 @@ import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
 
-import { dim, formatDone, getOutputAdapter, setCurrentExecutor } from "../tui.js";
+import { getExecutionState, getOutputAdapter, printFramedBlock, printInfo, setCurrentExecutor } from "../tui.js";
 import { shellQuote } from "./command-resolution.js";
 
 export function formatCommand(argv: string[], env?: NodeJS.ProcessEnv): string {
@@ -18,6 +18,25 @@ export function formatDuration(ms: number): string {
   const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
   const seconds = String(totalSeconds % 60).padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+function formatLaunchDetails(statusLabel: string): string {
+  const state = getExecutionState();
+  const lines: string[] = [];
+  if (state.node) {
+    lines.push(`Node: ${state.node}`);
+  }
+
+  const executorLabel = state.executor ?? statusLabel;
+  const separatorIndex = executorLabel.indexOf(":");
+  if (separatorIndex >= 0) {
+    lines.push(`Executor: ${executorLabel.slice(0, separatorIndex)}`);
+    lines.push(`Model: ${executorLabel.slice(separatorIndex + 1)}`);
+  } else {
+    lines.push(`Executor: ${executorLabel}`);
+  }
+
+  return lines.join("\n");
 }
 
 export async function runCommand(
@@ -60,8 +79,6 @@ export async function runCommand(
 
   const startedAt = Date.now();
   const statusLabel = label ?? path.basename(argv[0] ?? argv.join(" "));
-  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-  let frameIndex = 0;
   let output = "";
 
   const child = spawn(argv[0] ?? "", argv.slice(1), {
@@ -73,29 +90,21 @@ export async function runCommand(
   child.stdout?.on("data", (chunk) => {
     const text = String(chunk);
     output += text;
-    if (!outputAdapter.supportsTransientStatus || verbose) {
+    if (verbose) {
       outputAdapter.writeStdout(text);
     }
   });
   child.stderr?.on("data", (chunk) => {
     const text = String(chunk);
     output += text;
-    if (!outputAdapter.supportsTransientStatus || verbose) {
+    if (verbose) {
       outputAdapter.writeStderr(text);
     }
   });
 
-  if (!outputAdapter.supportsTransientStatus && outputAdapter.renderAuxiliaryOutput !== false) {
-    outputAdapter.writeStdout(`Running ${statusLabel}\n`);
+  if (outputAdapter.renderAuxiliaryOutput !== false) {
+    printFramedBlock("Запуск", formatLaunchDetails(statusLabel), "cyan");
   }
-
-  const timer = outputAdapter.supportsTransientStatus
-    ? setInterval(() => {
-        const elapsed = formatDuration(Date.now() - startedAt);
-        process.stdout.write(`\r${frames[frameIndex]} ${statusLabel} ${dim(elapsed)}`);
-        frameIndex = (frameIndex + 1) % frames.length;
-      }, 200)
-    : null;
 
   try {
     const exitCode = await new Promise<number>((resolve, reject) => {
@@ -103,11 +112,8 @@ export async function runCommand(
       child.on("exit", (code) => resolve(code ?? 1));
     });
 
-    if (timer) {
-      clearInterval(timer);
-      process.stdout.write(`\r${" ".repeat(80)}\r${formatDone(formatDuration(Date.now() - startedAt))}\n`);
-    } else if (outputAdapter.renderAuxiliaryOutput !== false) {
-      outputAdapter.writeStdout(`Done ${formatDuration(Date.now() - startedAt)}\n`);
+    if (outputAdapter.renderAuxiliaryOutput !== false) {
+      printInfo(`Закончили работу: ${statusLabel} (${formatDuration(Date.now() - startedAt)})`);
     }
 
     if (exitCode !== 0) {
@@ -126,8 +132,5 @@ export async function runCommand(
     return output;
   } finally {
     setCurrentExecutor(null);
-    if (timer) {
-      clearInterval(timer);
-    }
   }
 }
