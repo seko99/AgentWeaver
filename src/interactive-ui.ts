@@ -1,42 +1,74 @@
 import blessed from "neo-blessed";
 
 import { renderMarkdownToTerminal } from "./markdown.js";
+import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { setOutputAdapter, stripAnsi, type OutputAdapter } from "./tui.js";
+
+type InteractiveFlowDefinition = {
+  id: string;
+  label: string;
+  phases: Array<{
+    id: string;
+    repeatVars: Record<string, string | number | boolean | null>;
+    steps: Array<{
+      id: string;
+    }>;
+  }>;
+};
 
 type InteractiveUiOptions = {
   issueKey: string;
   summaryText: string;
   cwd: string;
-  commands: string[];
-  onSubmit: (line: string) => Promise<void>;
+  flows: InteractiveFlowDefinition[];
+  onRun: (flowId: string) => Promise<void>;
   onExit: () => void;
+};
+
+type FocusPane = "flows" | "progress" | "summary" | "log";
+
+type FlowStatusState = {
+  flowId: string | null;
+  executionState: FlowExecutionState | null;
 };
 
 export class InteractiveUi {
   private readonly screen: any;
   private readonly header: any;
-  private readonly summary: any;
+  private readonly progress: any;
+  private readonly flowList: any;
   private readonly status: any;
-  private readonly sidebar: any;
+  private readonly summary: any;
   private readonly log: any;
-  private readonly input: any;
   private readonly footer: any;
   private readonly help: any;
-  private readonly history: string[];
-  private historyIndex: number;
+  private readonly confirm: any;
+  private readonly flowMap: Map<string, InteractiveFlowDefinition>;
   private busy = false;
-  private currentCommand = "idle";
+  private currentFlowId: string | null = null;
+  private selectedFlowId: string;
   private summaryText = "";
-  private focusedPane: "input" | "log" | "summary" | "sidebar" = "input";
+  private focusedPane: FocusPane = "flows";
   private currentNode: string | null = null;
   private currentExecutor: string | null = null;
   private spinnerFrame = 0;
   private spinnerTimer: NodeJS.Timeout | null = null;
   private runningStartedAt: number | null = null;
+  private renderScheduled = false;
+  private logFlushTimer: NodeJS.Timeout | null = null;
+  private readonly pendingLogLines: string[] = [];
+  private flowState: FlowStatusState = {
+    flowId: null,
+    executionState: null,
+  };
+  private failedFlowId: string | null = null;
 
-  constructor(private readonly options: InteractiveUiOptions, history: string[]) {
-    this.history = history;
-    this.historyIndex = history.length;
+  constructor(private readonly options: InteractiveUiOptions) {
+    if (options.flows.length === 0) {
+      throw new Error("Interactive UI requires at least one flow.");
+    }
+    this.flowMap = new Map(options.flows.map((flow) => [flow.id, flow]));
+    this.selectedFlowId = options.flows[0]?.id ?? "auto";
 
     this.screen = blessed.screen({
       smartCSR: true,
@@ -64,14 +96,14 @@ export class InteractiveUi {
       },
     });
 
-    this.sidebar = blessed.box({
+    this.progress = blessed.box({
       parent: this.screen,
       top: 3,
       left: 0,
-      width: "28%",
-      bottom: 10,
+      width: "34%",
+      height: "50%-1",
       tags: true,
-      label: " Commands ",
+      label: " Current Flow ",
       padding: {
         left: 1,
         right: 1,
@@ -82,7 +114,82 @@ export class InteractiveUi {
       keys: true,
       vi: true,
       style: {
+        border: { fg: "green" },
+        fg: "white",
+      },
+    });
+
+    this.flowList = blessed.list({
+      parent: this.screen,
+      top: "50%+2",
+      left: 0,
+      width: "34%",
+      bottom: 10,
+      keys: true,
+      vi: true,
+      mouse: true,
+      tags: true,
+      label: " Flows ",
+      padding: {
+        left: 1,
+        right: 1,
+      },
+      border: "line",
+      scrollable: true,
+      alwaysScroll: true,
+      style: {
         border: { fg: "cyan" },
+        fg: "white",
+        selected: {
+          fg: "black",
+          bg: "green",
+          bold: true,
+        },
+      },
+    });
+
+    this.confirm = blessed.box({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: 44,
+      height: 8,
+      hidden: true,
+      tags: true,
+      label: " Confirm ",
+      padding: {
+        left: 1,
+        right: 1,
+        top: 1,
+        bottom: 1,
+      },
+      border: "line",
+      keys: true,
+      vi: true,
+      style: {
+        border: { fg: "yellow" },
+        bg: undefined,
+        fg: "white",
+      },
+      align: "center",
+      valign: "middle",
+    });
+
+    this.status = blessed.box({
+      parent: this.screen,
+      bottom: 4,
+      left: 0,
+      width: "34%",
+      height: 6,
+      tags: true,
+      label: " Status ",
+      padding: {
+        left: 1,
+        right: 1,
+      },
+      border: "line",
+      style: {
+        border: { fg: "green" },
         fg: "white",
       },
     });
@@ -90,9 +197,9 @@ export class InteractiveUi {
     this.summary = blessed.box({
       parent: this.screen,
       top: 3,
-      left: "28%",
-      width: "72%",
-      height: 8,
+      left: "34%",
+      width: "66%",
+      height: 12,
       tags: true,
       label: " Task Summary ",
       padding: {
@@ -110,31 +217,12 @@ export class InteractiveUi {
       },
     });
 
-    this.status = blessed.box({
-      parent: this.screen,
-      bottom: 4,
-      left: 0,
-      width: "28%",
-      height: 6,
-      tags: true,
-      label: " Status ",
-      padding: {
-        left: 1,
-        right: 1,
-      },
-      border: "line",
-      style: {
-        border: { fg: "green" },
-        fg: "white",
-      },
-    });
-
     this.log = blessed.log({
       parent: this.screen,
-      top: 11,
+      top: 15,
       bottom: 4,
-      left: "28%",
-      width: "72%",
+      left: "34%",
+      width: "66%",
       tags: false,
       label: " Activity ",
       padding: {
@@ -157,29 +245,6 @@ export class InteractiveUi {
       },
     });
 
-    this.input = blessed.textbox({
-      parent: this.screen,
-      bottom: 1,
-      left: 0,
-      width: "100%",
-      height: 3,
-      keys: true,
-      inputOnFocus: true,
-      mouse: true,
-      label: " command ",
-      padding: {
-        left: 1,
-      },
-      border: "line",
-      style: {
-        border: { fg: "magenta" },
-        fg: "white",
-        focus: {
-          border: { fg: "magenta" },
-        },
-      },
-    });
-
     this.footer = blessed.box({
       parent: this.screen,
       bottom: 0,
@@ -194,8 +259,8 @@ export class InteractiveUi {
       parent: this.screen,
       top: "center",
       left: "center",
-      width: "70%",
-      height: "65%",
+      width: "64%",
+      height: "52%",
       hidden: true,
       tags: true,
       label: " Help ",
@@ -224,20 +289,29 @@ export class InteractiveUi {
       this.options.onExit();
     });
 
-    this.screen.key(["f1", "?"], () => {
+    this.screen.key(["f1", "h", "?"], () => {
+      if (this.confirm.visible) {
+        return;
+      }
       this.help.hidden = !this.help.hidden;
       if (!this.help.hidden) {
         this.help.focus();
       } else {
-        this.input.focus();
+        this.focusPane("flows");
       }
-      this.screen.render();
+      this.requestRender();
     });
 
     this.screen.key(["escape"], () => {
-      this.help.hide();
-      this.focusPane("input");
-      this.screen.render();
+      if (!this.help.hidden) {
+        this.help.hide();
+        this.focusPane("flows");
+        this.requestRender();
+        return;
+      }
+      if (this.confirm.visible) {
+        this.closeConfirm();
+      }
     });
 
     this.screen.key(["C-l"], () => {
@@ -245,239 +319,199 @@ export class InteractiveUi {
       this.appendLog("Log cleared.");
     });
 
+    this.screen.key(["tab"], () => {
+      if (this.confirm.visible || !this.help.hidden) {
+        return;
+      }
+      this.cycleFocus(1);
+    });
+
     this.screen.key(["S-tab"], () => {
+      if (this.confirm.visible || !this.help.hidden) {
+        return;
+      }
       this.cycleFocus(-1);
     });
 
-    this.screen.key(["tab"], () => {
-      if (this.focusedPane !== "input") {
-        this.cycleFocus(1);
+    this.flowList.on("select item", (_item: unknown, index: number) => {
+      const flow = this.options.flows[index];
+      if (!flow) {
+        return;
       }
+      this.selectedFlowId = flow.id;
+      this.renderProgress();
+      this.requestRender();
     });
 
-    this.screen.key(["C-j"], () => {
-      this.focusPane("log");
+    this.flowList.key(["enter"], () => {
+      if (this.busy || this.confirm.visible || !this.help.hidden) {
+        return;
+      }
+      this.openConfirm();
     });
 
-    this.screen.key(["C-k"], () => {
-      this.focusPane("input");
+    this.flowList.key(["pageup"], () => {
+      this.flowList.scroll(-(this.flowList.height - 2));
+      this.requestRender();
+    });
+
+    this.flowList.key(["pagedown"], () => {
+      this.flowList.scroll(this.flowList.height - 2);
+      this.requestRender();
     });
 
     this.log.key(["up"], () => {
       this.log.scroll(-1);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["down"], () => {
       this.log.scroll(1);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["pageup"], () => {
       this.log.scroll(-(this.log.height - 2));
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["pagedown"], () => {
       this.log.scroll(this.log.height - 2);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["home"], () => {
       this.log.setScroll(0);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["end"], () => {
       this.log.setScrollPerc(100);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.summary.key(["pageup"], () => {
       this.summary.scroll(-(this.summary.height - 2));
-      this.screen.render();
+      this.requestRender();
     });
 
     this.summary.key(["pagedown"], () => {
       this.summary.scroll(this.summary.height - 2);
-      this.screen.render();
+      this.requestRender();
     });
 
-    this.sidebar.key(["pageup"], () => {
-      this.sidebar.scroll(-(this.sidebar.height - 2));
-      this.screen.render();
+    this.progress.key(["pageup"], () => {
+      this.progress.scroll(-(this.progress.height - 2));
+      this.requestRender();
     });
 
-    this.sidebar.key(["pagedown"], () => {
-      this.sidebar.scroll(this.sidebar.height - 2);
-      this.screen.render();
+    this.progress.key(["pagedown"], () => {
+      this.progress.scroll(this.progress.height - 2);
+      this.requestRender();
     });
 
-    this.input.key(["up"], () => {
-      if (this.history.length === 0) {
+    this.confirm.key(["enter"], async () => {
+      if (this.busy || this.confirm.hidden) {
         return;
       }
-      this.historyIndex = Math.max(0, this.historyIndex - 1);
-      this.input.setValue(this.history[this.historyIndex] ?? "");
-      this.screen.render();
-    });
-
-    this.input.key(["down"], () => {
-      if (this.history.length === 0) {
-        return;
-      }
-      this.historyIndex = Math.min(this.history.length, this.historyIndex + 1);
-      this.input.setValue(this.history[this.historyIndex] ?? "");
-      this.screen.render();
-    });
-
-    this.input.key(["tab"], () => {
-      const current = String(this.input.getValue() ?? "");
-      const hit = this.options.commands.find((item) => item.startsWith(current.trim()));
-      if (hit) {
-        this.input.setValue(hit);
-        this.screen.render();
+      const flowId = this.selectedFlowId;
+      this.closeConfirm();
+      this.setBusy(true, flowId);
+      this.clearFlowFailure(flowId);
+      this.setFlowDisplayState(flowId, null);
+      try {
+        await this.options.onRun(flowId);
+      } finally {
+        this.setBusy(false);
+        this.focusPane("flows");
       }
     });
 
-    this.input.key(["C-j"], () => {
-      this.focusPane("log");
-    });
-
-    this.input.key(["C-u"], () => {
-      this.focusPane("summary");
-    });
-
-    this.input.key(["C-h"], () => {
-      this.focusPane("sidebar");
-    });
-
-    this.input.key(["S-tab"], () => {
-      this.cycleFocus(-1);
-    });
-
-    this.log.key(["tab"], () => {
-      this.cycleFocus(1);
-    });
-
-    this.log.key(["S-tab"], () => {
-      this.cycleFocus(-1);
-    });
-
-    this.summary.key(["tab"], () => {
-      this.cycleFocus(1);
-    });
-
-    this.summary.key(["S-tab"], () => {
-      this.cycleFocus(-1);
-    });
-
-    this.sidebar.key(["tab"], () => {
-      this.cycleFocus(1);
-    });
-
-    this.sidebar.key(["S-tab"], () => {
-      this.cycleFocus(-1);
-    });
-
-    this.input.on("submit", async (value: string) => {
-      const line = value.trim();
-      this.input.clearValue();
-      this.screen.render();
-      if (!line || this.busy) {
-        return;
-      }
-      this.history.push(line);
-      this.historyIndex = this.history.length;
-      this.appendLog(`> ${line}`);
-      await this.options.onSubmit(line);
-      this.focusPane("input");
+    this.confirm.key(["escape"], () => {
+      this.closeConfirm();
     });
   }
 
   private cycleFocus(direction: 1 | -1): void {
-    const panes: Array<"input" | "log" | "summary" | "sidebar"> = ["input", "log", "summary", "sidebar"];
+    const panes: FocusPane[] = ["flows", "progress", "summary", "log"];
     const currentIndex = panes.indexOf(this.focusedPane);
     const nextIndex = (currentIndex + direction + panes.length) % panes.length;
-    this.focusPane(panes[nextIndex] ?? "input");
+    this.focusPane(panes[nextIndex] ?? "flows");
   }
 
-  private focusPane(pane: "input" | "log" | "summary" | "sidebar"): void {
+  private focusPane(pane: FocusPane): void {
     this.focusedPane = pane;
-    this.header.style.border.fg = "green";
-    this.log.style.border.fg = pane === "log" ? "brightYellow" : "yellow";
+    this.flowList.style.border.fg = pane === "flows" ? "brightCyan" : "cyan";
+    this.progress.style.border.fg = pane === "progress" ? "brightGreen" : "green";
     this.summary.style.border.fg = pane === "summary" ? "brightGreen" : "green";
-    this.sidebar.style.border.fg = pane === "sidebar" ? "brightCyan" : "cyan";
-    this.input.style.border.fg = pane === "input" ? "brightMagenta" : "magenta";
+    this.log.style.border.fg = pane === "log" ? "brightYellow" : "yellow";
+    this.flowList.setLabel(pane === "flows" ? " ▶ Flows " : " Flows ");
+    this.progress.setLabel(pane === "progress" ? " ▶ Current Flow " : " Current Flow ");
+    this.summary.setLabel(pane === "summary" ? " ▶ Task Summary " : " Task Summary ");
+    this.log.setLabel(pane === "log" ? " ▶ Activity " : " Activity ");
 
-    if (pane === "input") {
-      this.input.focus();
-    } else if (pane === "log") {
-      this.log.focus();
+    if (pane === "flows") {
+      if (this.confirm.visible) {
+        this.confirm.focus();
+      } else {
+        this.flowList.focus();
+      }
+    } else if (pane === "progress") {
+      this.progress.focus();
     } else if (pane === "summary") {
       this.summary.focus();
     } else {
-      this.sidebar.focus();
+      this.log.focus();
     }
 
     this.footer.setContent(
-      ` Focus: ${pane} | Enter: run command | Tab/Shift+Tab: switch pane | Ctrl+J: log | Ctrl+K: input | PgUp/PgDn: scroll | ?: help | q: exit `,
+      ` Focus: ${pane} | Up/Down: select flow | Enter: confirm run | h: help | Esc: close | Tab: switch pane | q: exit `,
     );
-    this.screen.render();
+    this.requestRender();
   }
 
   private renderStaticContent(): void {
     this.summaryText = this.options.summaryText.trim();
     this.updateHeader();
+    this.flowList.setItems(this.options.flows.map((flow) => flow.label));
+    this.flowList.select(this.options.flows.findIndex((flow) => flow.id === this.selectedFlowId));
     this.renderSummary();
-
-    this.sidebar.setContent(
-      [
-        this.options.commands.join("\n"),
-        "",
-        "Keys:",
-        "? / F1      help",
-        "Ctrl+L      clear log",
-        "Tab         complete",
-        "q / Ctrl+C  exit",
-      ].join("\n"),
-    );
+    this.renderProgress();
 
     this.help.setContent(
       renderMarkdownToTerminal(
         [
-        "AgentWeaver interactive mode",
-        "",
-        "Use slash commands in the input box:",
-        this.options.commands.join("\n"),
-        "",
-        "Keys:",
-        "Tab           autocomplete command",
-        "Up/Down       history",
-        "Ctrl+L        clear log",
-        "? or F1       toggle help",
-        "Esc           close help",
-        "q / Ctrl+C    exit",
-      ].join("\n"),
+          "AgentWeaver interactive mode",
+          "",
+          "Клавиши:",
+          "Up / Down    выбрать flow",
+          "Enter        открыть подтверждение запуска",
+          "Enter        подтвердить запуск в модалке",
+          "Esc          закрыть help или модалку",
+          "h / F1       открыть или закрыть help",
+          "Tab          переключить pane",
+          "Ctrl+L       очистить лог",
+          "q / Ctrl+C   выйти",
+          "",
+          "Доступные flow:",
+          ...this.options.flows.map((flow) => flow.label),
+        ].join("\n"),
       ),
     );
 
-    this.footer.setContent(
-      " Enter: run command | Tab: complete | Up/Down: history | ?: help | Ctrl+L: clear log | q: exit ",
-    );
+    this.footer.setContent(" Up/Down: select flow | Enter: confirm run | h: help | Tab: switch pane | q: exit ");
   }
 
   private updateHeader(): void {
+    const current = this.currentFlowId ?? this.selectedFlowId;
     this.header.setContent(
       `{bold}AgentWeaver{/bold}  {green-fg}${this.options.issueKey}{/green-fg}\n` +
-        `cwd: ${this.options.cwd}   current: ${this.currentCommand}`,
+        `cwd: ${this.options.cwd}   current: ${current}${this.busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`,
     );
   }
 
   private renderSummary(): void {
-    const summaryBody = this.summaryText
-      ? this.summaryText
-      : "Task summary is not available yet.";
+    const summaryBody = this.summaryText || "Task summary is not available yet.";
     this.summary.setContent(renderMarkdownToTerminal(stripAnsi(summaryBody)));
   }
 
@@ -491,57 +525,283 @@ export class InteractiveUi {
       },
       supportsTransientStatus: false,
       supportsPassthrough: false,
-      renderAuxiliaryOutput: false,
+      renderAuxiliaryOutput: true,
+      renderPanelsAsPlainText: true,
       setExecutionState: (state) => {
         this.currentNode = state.node;
         this.currentExecutor = state.executor;
         this.updateRunningPanel();
       },
+      setFlowState: (state) => {
+        this.setFlowDisplayState(state.flowId, state.executionState);
+      },
     };
+  }
+
+  private activeFlowId(): string {
+    return this.currentFlowId ?? this.selectedFlowId;
+  }
+
+  private progressFlowDefinition(): InteractiveFlowDefinition | undefined {
+    const preferredFlowId = this.busy ? this.activeFlowId() : this.selectedFlowId;
+    return this.flowMap.get(preferredFlowId);
+  }
+
+  private renderProgress(): void {
+    const flow = this.progressFlowDefinition();
+    if (!flow) {
+      this.progress.setContent("Flow structure is not available.");
+      return;
+    }
+
+    const flowState =
+      this.flowState.flowId === flow.id
+        ? this.flowState.executionState
+        : this.currentFlowId === flow.id
+          ? this.flowState.executionState
+          : null;
+
+    const lines: string[] = [flow.label, ""];
+    for (const item of this.visiblePhaseItems(flow, flowState)) {
+      if (item.kind === "group") {
+        lines.push(`${this.symbolForGroup(flow.id, item.phases, flowState)} ${item.label}`);
+        for (const phase of item.phases) {
+          const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
+          lines.push(`  ${this.symbolForStatus(flow.id, phaseState?.status ?? "pending")} ${this.displayPhaseId(phase)}`);
+          for (const step of phase.steps) {
+            const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
+            lines.push(`    ${this.symbolForStatus(flow.id, stepState?.status ?? "pending")} ${step.id}`);
+          }
+        }
+        lines.push("");
+        continue;
+      }
+      const phase = item.phase;
+      const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
+      lines.push(`${this.symbolForStatus(flow.id, phaseState?.status ?? "pending")} ${phase.id}`);
+      for (const step of phase.steps) {
+        const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
+        lines.push(`  ${this.symbolForStatus(flow.id, stepState?.status ?? "pending")} ${step.id}`);
+      }
+      lines.push("");
+    }
+    if (flowState?.terminated) {
+      lines.push(`Stopped: ${flowState.terminationReason ?? "flow terminated"}`);
+    }
+    this.progress.setContent(lines.join("\n").trimEnd());
+  }
+
+  private symbolForStatus(
+    flowId: string,
+    status: "pending" | "running" | "done" | "skipped",
+  ): string {
+    if (status === "done") {
+      return "✓";
+    }
+    if (status === "skipped") {
+      return "·";
+    }
+    if (status === "running") {
+      const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+      return this.failedFlowId === flowId && !this.busy ? "×" : (frames[this.spinnerFrame] ?? "▶");
+    }
+    return "○";
+  }
+
+  private symbolForGroup(
+    flowId: string,
+    phases: InteractiveFlowDefinition["phases"],
+    flowState: FlowExecutionState | null,
+  ): string {
+    const statuses = phases.map((phase) => flowState?.phases.find((candidate) => candidate.id === phase.id)?.status ?? "pending");
+    if (statuses.some((status) => status === "running")) {
+      return this.symbolForStatus(flowId, "running");
+    }
+    if (statuses.every((status) => status === "skipped")) {
+      return "·";
+    }
+    if (statuses.every((status) => status === "done" || status === "skipped")) {
+      return "✓";
+    }
+    return "○";
+  }
+
+  private groupPhases(flow: InteractiveFlowDefinition): Array<
+    | { kind: "phase"; phase: InteractiveFlowDefinition["phases"][number] }
+    | { kind: "group"; label: string; phases: InteractiveFlowDefinition["phases"]; seriesKey: string }
+  > {
+    const items: Array<
+      | { kind: "phase"; phase: InteractiveFlowDefinition["phases"][number] }
+      | { kind: "group"; label: string; phases: InteractiveFlowDefinition["phases"]; seriesKey: string }
+    > = [];
+
+    let index = 0;
+    while (index < flow.phases.length) {
+      const phase = flow.phases[index];
+      if (!phase) {
+        break;
+      }
+      const repeatLabel = this.repeatLabel(phase.repeatVars);
+      if (!repeatLabel) {
+        items.push({ kind: "phase", phase });
+        index += 1;
+        continue;
+      }
+
+      const phases = [phase];
+      let nextIndex = index + 1;
+      while (nextIndex < flow.phases.length) {
+        const candidate = flow.phases[nextIndex];
+        if (!candidate || this.repeatGroupKey(candidate.repeatVars) !== this.repeatGroupKey(phase.repeatVars)) {
+          break;
+        }
+        phases.push(candidate);
+        nextIndex += 1;
+      }
+      items.push({ kind: "group", label: repeatLabel, phases, seriesKey: this.repeatSeriesKey(phases) });
+      index = nextIndex;
+    }
+
+    return items;
+  }
+
+  private visiblePhaseItems(
+    flow: InteractiveFlowDefinition,
+    flowState: FlowExecutionState | null,
+  ): Array<
+    | { kind: "phase"; phase: InteractiveFlowDefinition["phases"][number] }
+    | { kind: "group"; label: string; phases: InteractiveFlowDefinition["phases"]; seriesKey: string }
+  > {
+    const pendingSeries = new Set<string>();
+    return this.groupPhases(flow).filter((item) => {
+      if (item.kind === "phase") {
+        return true;
+      }
+      const hasState = item.phases.some((phase) => flowState?.phases.some((candidate) => candidate.id === phase.id));
+      if (hasState) {
+        return true;
+      }
+      if (pendingSeries.has(item.seriesKey)) {
+        return false;
+      }
+      pendingSeries.add(item.seriesKey);
+      return true;
+    });
+  }
+
+  private repeatGroupKey(repeatVars: Record<string, string | number | boolean | null>): string {
+    const entries = Object.entries(repeatVars).sort(([left], [right]) => left.localeCompare(right));
+    return JSON.stringify(entries);
+  }
+
+  private repeatSeriesKey(phases: InteractiveFlowDefinition["phases"]): string {
+    const repeatVarNames = Object.keys(phases[0]?.repeatVars ?? {}).sort();
+    const phaseNames = phases.map((phase) => this.displayPhaseId(phase));
+    return JSON.stringify({
+      repeatVarNames,
+      phaseNames,
+    });
+  }
+
+  private repeatLabel(repeatVars: Record<string, string | number | boolean | null>): string | null {
+    const entries = Object.entries(repeatVars);
+    if (entries.length === 0) {
+      return null;
+    }
+    if (entries.length === 1) {
+      const [key, value] = entries[0] ?? ["repeat", ""];
+      return `${key} ${value}`;
+    }
+    return entries.map(([key, value]) => `${key}=${value}`).join(", ");
+  }
+
+  private displayPhaseId(phase: InteractiveFlowDefinition["phases"][number]): string {
+    let result = phase.id;
+    for (const value of Object.values(phase.repeatVars)) {
+      const suffix = `_${String(value)}`;
+      if (result.endsWith(suffix)) {
+        result = result.slice(0, -suffix.length);
+      }
+    }
+    return result;
+  }
+
+  private openConfirm(): void {
+    const flow = this.flowMap.get(this.selectedFlowId);
+    if (!flow) {
+      return;
+    }
+    this.confirm.setContent(`Run flow "${flow.label}"?\n\nEnter: yes    Esc: no`);
+    this.confirm.show();
+    this.confirm.setFront();
+    this.confirm.focus();
+    this.requestRender();
+  }
+
+  private closeConfirm(): void {
+    this.confirm.hide();
+    this.focusPane("flows");
+    this.requestRender();
   }
 
   mount(): void {
     setOutputAdapter(this.createAdapter());
-    this.focusPane("input");
+    this.focusPane("flows");
   }
 
   destroy(): void {
+    this.flushPendingLogLines();
     if (this.spinnerTimer) {
       clearInterval(this.spinnerTimer);
       this.spinnerTimer = null;
+    }
+    if (this.logFlushTimer) {
+      clearTimeout(this.logFlushTimer);
+      this.logFlushTimer = null;
     }
     setOutputAdapter(null);
     this.screen.destroy();
   }
 
-  setBusy(busy: boolean, command?: string): void {
+  setBusy(busy: boolean, flowId?: string): void {
     this.busy = busy;
-    this.currentCommand = command ?? (busy ? this.currentCommand : "idle");
+    this.currentFlowId = flowId ?? (busy ? this.currentFlowId : this.currentFlowId);
     if (busy && this.runningStartedAt === null) {
       this.runningStartedAt = Date.now();
     } else if (!busy && this.currentNode === null && this.currentExecutor === null) {
       this.runningStartedAt = null;
     }
+    if (!busy && flowId === undefined) {
+      this.currentFlowId = this.currentFlowId ?? this.selectedFlowId;
+    }
     this.updateHeader();
-    this.header.setContent(
-      `{bold}AgentWeaver{/bold}  {green-fg}${this.options.issueKey}{/green-fg}\n` +
-        `cwd: ${this.options.cwd}   current: ${this.currentCommand}${busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`,
-    );
     this.updateRunningPanel();
-    this.input.setLabel(busy ? " command [busy] " : " command ");
-    this.screen.render();
+    this.renderProgress();
+    this.requestRender();
+  }
+
+  setFlowFailed(flowId: string): void {
+    this.failedFlowId = flowId;
+    this.renderProgress();
+    this.requestRender();
+  }
+
+  clearFlowFailure(flowId: string): void {
+    if (this.failedFlowId === flowId) {
+      this.failedFlowId = null;
+    }
   }
 
   setStatus(status: string): void {
-    this.currentCommand = status;
+    this.currentFlowId = status;
     this.updateHeader();
-    this.screen.render();
+    this.requestRender();
   }
 
   setSummary(markdown: string): void {
     this.summaryText = markdown.trim();
     this.renderSummary();
-    this.screen.render();
+    this.requestRender();
   }
 
   appendLog(text: string): void {
@@ -552,14 +812,23 @@ export class InteractiveUi {
       .trimEnd();
 
     if (!normalized) {
-      this.log.add("");
+      this.pendingLogLines.push("");
     } else {
-      for (const line of normalized.split("\n")) {
-        this.log.add(line);
-      }
+      this.pendingLogLines.push(...normalized.split("\n"));
     }
-    this.log.setScrollPerc(100);
-    this.screen.render();
+    this.scheduleLogFlush();
+  }
+
+  private setFlowDisplayState(flowId: string | null, executionState: FlowExecutionState | null): void {
+    this.flowState = {
+      flowId,
+      executionState,
+    };
+    if (flowId) {
+      this.currentFlowId = flowId;
+    }
+    this.renderProgress();
+    this.requestRender();
   }
 
   private updateRunningPanel(): void {
@@ -572,7 +841,8 @@ export class InteractiveUi {
       this.spinnerTimer = setInterval(() => {
         this.spinnerFrame = (this.spinnerFrame + 1) % frames.length;
         this.updateRunningPanel();
-        this.screen.render();
+        this.renderProgress();
+        this.requestRender();
       }, 120);
     } else if (!running && this.spinnerTimer) {
       clearInterval(this.spinnerTimer);
@@ -588,7 +858,7 @@ export class InteractiveUi {
     const stateLine = `State: ${running ? `${spinner} running` : "idle"}`;
     const elapsedLine = `Time: ${elapsed}`;
     this.status.setContent([stateLine, elapsedLine, nodeLine, executorLine].join("\n"));
-    this.screen.render();
+    this.requestRender();
   }
 
   private formatElapsed(now: number | null): string {
@@ -597,8 +867,43 @@ export class InteractiveUi {
     }
     const totalSeconds = Math.max(0, Math.floor((now - this.runningStartedAt) / 1000));
     const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+    const minutes = String((totalSeconds % 3600) / 60 | 0).padStart(2, "0");
     const seconds = String(totalSeconds % 60).padStart(2, "0");
     return `${hours}:${minutes}:${seconds}`;
   }
+
+  private scheduleLogFlush(): void {
+    if (this.logFlushTimer) {
+      return;
+    }
+    this.logFlushTimer = setTimeout(() => {
+      this.logFlushTimer = null;
+      this.flushPendingLogLines();
+    }, 50);
+  }
+
+  private flushPendingLogLines(): void {
+    if (this.pendingLogLines.length === 0) {
+      return;
+    }
+    const lines = this.pendingLogLines.splice(0, this.pendingLogLines.length);
+    for (const line of lines) {
+      this.log.add(line);
+    }
+    this.log.setScrollPerc(100);
+    this.requestRender();
+  }
+
+  private requestRender(): void {
+    if (this.renderScheduled) {
+      return;
+    }
+    this.renderScheduled = true;
+    setImmediate(() => {
+      this.renderScheduled = false;
+      this.screen.render();
+    });
+  }
 }
+
+export type { InteractiveFlowDefinition };
