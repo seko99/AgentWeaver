@@ -9,6 +9,7 @@ type InteractiveFlowDefinition = {
   label: string;
   phases: Array<{
     id: string;
+    repeatVars: Record<string, string | number | boolean | null>;
     steps: Array<{
       id: string;
     }>;
@@ -53,6 +54,9 @@ export class InteractiveUi {
   private spinnerFrame = 0;
   private spinnerTimer: NodeJS.Timeout | null = null;
   private runningStartedAt: number | null = null;
+  private renderScheduled = false;
+  private logFlushTimer: NodeJS.Timeout | null = null;
+  private readonly pendingLogLines: string[] = [];
   private flowState: FlowStatusState = {
     flowId: null,
     executionState: null,
@@ -295,14 +299,14 @@ export class InteractiveUi {
       } else {
         this.focusPane("flows");
       }
-      this.screen.render();
+      this.requestRender();
     });
 
     this.screen.key(["escape"], () => {
       if (!this.help.hidden) {
         this.help.hide();
         this.focusPane("flows");
-        this.screen.render();
+        this.requestRender();
         return;
       }
       if (this.confirm.visible) {
@@ -336,7 +340,7 @@ export class InteractiveUi {
       }
       this.selectedFlowId = flow.id;
       this.renderProgress();
-      this.screen.render();
+      this.requestRender();
     });
 
     this.flowList.key(["enter"], () => {
@@ -348,62 +352,62 @@ export class InteractiveUi {
 
     this.flowList.key(["pageup"], () => {
       this.flowList.scroll(-(this.flowList.height - 2));
-      this.screen.render();
+      this.requestRender();
     });
 
     this.flowList.key(["pagedown"], () => {
       this.flowList.scroll(this.flowList.height - 2);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["up"], () => {
       this.log.scroll(-1);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["down"], () => {
       this.log.scroll(1);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["pageup"], () => {
       this.log.scroll(-(this.log.height - 2));
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["pagedown"], () => {
       this.log.scroll(this.log.height - 2);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["home"], () => {
       this.log.setScroll(0);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.log.key(["end"], () => {
       this.log.setScrollPerc(100);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.summary.key(["pageup"], () => {
       this.summary.scroll(-(this.summary.height - 2));
-      this.screen.render();
+      this.requestRender();
     });
 
     this.summary.key(["pagedown"], () => {
       this.summary.scroll(this.summary.height - 2);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.progress.key(["pageup"], () => {
       this.progress.scroll(-(this.progress.height - 2));
-      this.screen.render();
+      this.requestRender();
     });
 
     this.progress.key(["pagedown"], () => {
       this.progress.scroll(this.progress.height - 2);
-      this.screen.render();
+      this.requestRender();
     });
 
     this.confirm.key(["enter"], async () => {
@@ -463,7 +467,7 @@ export class InteractiveUi {
     this.footer.setContent(
       ` Focus: ${pane} | Up/Down: select flow | Enter: confirm run | h: help | Esc: close | Tab: switch pane | q: exit `,
     );
-    this.screen.render();
+    this.requestRender();
   }
 
   private renderStaticContent(): void {
@@ -521,7 +525,8 @@ export class InteractiveUi {
       },
       supportsTransientStatus: false,
       supportsPassthrough: false,
-      renderAuxiliaryOutput: false,
+      renderAuxiliaryOutput: true,
+      renderPanelsAsPlainText: true,
       setExecutionState: (state) => {
         this.currentNode = state.node;
         this.currentExecutor = state.executor;
@@ -557,7 +562,21 @@ export class InteractiveUi {
           : null;
 
     const lines: string[] = [flow.label, ""];
-    for (const phase of flow.phases) {
+    for (const item of this.visiblePhaseItems(flow, flowState)) {
+      if (item.kind === "group") {
+        lines.push(`${this.symbolForGroup(flow.id, item.phases, flowState)} ${item.label}`);
+        for (const phase of item.phases) {
+          const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
+          lines.push(`  ${this.symbolForStatus(flow.id, phaseState?.status ?? "pending")} ${this.displayPhaseId(phase)}`);
+          for (const step of phase.steps) {
+            const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
+            lines.push(`    ${this.symbolForStatus(flow.id, stepState?.status ?? "pending")} ${step.id}`);
+          }
+        }
+        lines.push("");
+        continue;
+      }
+      const phase = item.phase;
       const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
       lines.push(`${this.symbolForStatus(flow.id, phaseState?.status ?? "pending")} ${phase.id}`);
       for (const step of phase.steps) {
@@ -589,6 +608,124 @@ export class InteractiveUi {
     return "○";
   }
 
+  private symbolForGroup(
+    flowId: string,
+    phases: InteractiveFlowDefinition["phases"],
+    flowState: FlowExecutionState | null,
+  ): string {
+    const statuses = phases.map((phase) => flowState?.phases.find((candidate) => candidate.id === phase.id)?.status ?? "pending");
+    if (statuses.some((status) => status === "running")) {
+      return this.symbolForStatus(flowId, "running");
+    }
+    if (statuses.every((status) => status === "skipped")) {
+      return "·";
+    }
+    if (statuses.every((status) => status === "done" || status === "skipped")) {
+      return "✓";
+    }
+    return "○";
+  }
+
+  private groupPhases(flow: InteractiveFlowDefinition): Array<
+    | { kind: "phase"; phase: InteractiveFlowDefinition["phases"][number] }
+    | { kind: "group"; label: string; phases: InteractiveFlowDefinition["phases"]; seriesKey: string }
+  > {
+    const items: Array<
+      | { kind: "phase"; phase: InteractiveFlowDefinition["phases"][number] }
+      | { kind: "group"; label: string; phases: InteractiveFlowDefinition["phases"]; seriesKey: string }
+    > = [];
+
+    let index = 0;
+    while (index < flow.phases.length) {
+      const phase = flow.phases[index];
+      if (!phase) {
+        break;
+      }
+      const repeatLabel = this.repeatLabel(phase.repeatVars);
+      if (!repeatLabel) {
+        items.push({ kind: "phase", phase });
+        index += 1;
+        continue;
+      }
+
+      const phases = [phase];
+      let nextIndex = index + 1;
+      while (nextIndex < flow.phases.length) {
+        const candidate = flow.phases[nextIndex];
+        if (!candidate || this.repeatGroupKey(candidate.repeatVars) !== this.repeatGroupKey(phase.repeatVars)) {
+          break;
+        }
+        phases.push(candidate);
+        nextIndex += 1;
+      }
+      items.push({ kind: "group", label: repeatLabel, phases, seriesKey: this.repeatSeriesKey(phases) });
+      index = nextIndex;
+    }
+
+    return items;
+  }
+
+  private visiblePhaseItems(
+    flow: InteractiveFlowDefinition,
+    flowState: FlowExecutionState | null,
+  ): Array<
+    | { kind: "phase"; phase: InteractiveFlowDefinition["phases"][number] }
+    | { kind: "group"; label: string; phases: InteractiveFlowDefinition["phases"]; seriesKey: string }
+  > {
+    const pendingSeries = new Set<string>();
+    return this.groupPhases(flow).filter((item) => {
+      if (item.kind === "phase") {
+        return true;
+      }
+      const hasState = item.phases.some((phase) => flowState?.phases.some((candidate) => candidate.id === phase.id));
+      if (hasState) {
+        return true;
+      }
+      if (pendingSeries.has(item.seriesKey)) {
+        return false;
+      }
+      pendingSeries.add(item.seriesKey);
+      return true;
+    });
+  }
+
+  private repeatGroupKey(repeatVars: Record<string, string | number | boolean | null>): string {
+    const entries = Object.entries(repeatVars).sort(([left], [right]) => left.localeCompare(right));
+    return JSON.stringify(entries);
+  }
+
+  private repeatSeriesKey(phases: InteractiveFlowDefinition["phases"]): string {
+    const repeatVarNames = Object.keys(phases[0]?.repeatVars ?? {}).sort();
+    const phaseNames = phases.map((phase) => this.displayPhaseId(phase));
+    return JSON.stringify({
+      repeatVarNames,
+      phaseNames,
+    });
+  }
+
+  private repeatLabel(repeatVars: Record<string, string | number | boolean | null>): string | null {
+    const entries = Object.entries(repeatVars);
+    if (entries.length === 0) {
+      return null;
+    }
+    if (entries.length === 1) {
+      const [key, value] = entries[0] ?? ["repeat", ""];
+      return `${key} ${value}`;
+    }
+    return entries.map(([key, value]) => `${key}=${value}`).join(", ");
+  }
+
+  private displayPhaseId(phase: InteractiveFlowDefinition["phases"][number]): string {
+    let result = phase.id;
+    for (const value of Object.values(phase.repeatVars)) {
+      const suffix = `_${String(value)}`;
+      if (result.endsWith(suffix)) {
+        result = result.slice(0, -suffix.length);
+      }
+    }
+    return result;
+  }
+
   private openConfirm(): void {
     const flow = this.flowMap.get(this.selectedFlowId);
     if (!flow) {
@@ -598,13 +735,13 @@ export class InteractiveUi {
     this.confirm.show();
     this.confirm.setFront();
     this.confirm.focus();
-    this.screen.render();
+    this.requestRender();
   }
 
   private closeConfirm(): void {
     this.confirm.hide();
     this.focusPane("flows");
-    this.screen.render();
+    this.requestRender();
   }
 
   mount(): void {
@@ -613,9 +750,14 @@ export class InteractiveUi {
   }
 
   destroy(): void {
+    this.flushPendingLogLines();
     if (this.spinnerTimer) {
       clearInterval(this.spinnerTimer);
       this.spinnerTimer = null;
+    }
+    if (this.logFlushTimer) {
+      clearTimeout(this.logFlushTimer);
+      this.logFlushTimer = null;
     }
     setOutputAdapter(null);
     this.screen.destroy();
@@ -635,13 +777,13 @@ export class InteractiveUi {
     this.updateHeader();
     this.updateRunningPanel();
     this.renderProgress();
-    this.screen.render();
+    this.requestRender();
   }
 
   setFlowFailed(flowId: string): void {
     this.failedFlowId = flowId;
     this.renderProgress();
-    this.screen.render();
+    this.requestRender();
   }
 
   clearFlowFailure(flowId: string): void {
@@ -653,13 +795,13 @@ export class InteractiveUi {
   setStatus(status: string): void {
     this.currentFlowId = status;
     this.updateHeader();
-    this.screen.render();
+    this.requestRender();
   }
 
   setSummary(markdown: string): void {
     this.summaryText = markdown.trim();
     this.renderSummary();
-    this.screen.render();
+    this.requestRender();
   }
 
   appendLog(text: string): void {
@@ -670,14 +812,11 @@ export class InteractiveUi {
       .trimEnd();
 
     if (!normalized) {
-      this.log.add("");
+      this.pendingLogLines.push("");
     } else {
-      for (const line of normalized.split("\n")) {
-        this.log.add(line);
-      }
+      this.pendingLogLines.push(...normalized.split("\n"));
     }
-    this.log.setScrollPerc(100);
-    this.screen.render();
+    this.scheduleLogFlush();
   }
 
   private setFlowDisplayState(flowId: string | null, executionState: FlowExecutionState | null): void {
@@ -689,7 +828,7 @@ export class InteractiveUi {
       this.currentFlowId = flowId;
     }
     this.renderProgress();
-    this.screen.render();
+    this.requestRender();
   }
 
   private updateRunningPanel(): void {
@@ -703,7 +842,7 @@ export class InteractiveUi {
         this.spinnerFrame = (this.spinnerFrame + 1) % frames.length;
         this.updateRunningPanel();
         this.renderProgress();
-        this.screen.render();
+        this.requestRender();
       }, 120);
     } else if (!running && this.spinnerTimer) {
       clearInterval(this.spinnerTimer);
@@ -719,7 +858,7 @@ export class InteractiveUi {
     const stateLine = `State: ${running ? `${spinner} running` : "idle"}`;
     const elapsedLine = `Time: ${elapsed}`;
     this.status.setContent([stateLine, elapsedLine, nodeLine, executorLine].join("\n"));
-    this.screen.render();
+    this.requestRender();
   }
 
   private formatElapsed(now: number | null): string {
@@ -731,6 +870,39 @@ export class InteractiveUi {
     const minutes = String((totalSeconds % 3600) / 60 | 0).padStart(2, "0");
     const seconds = String(totalSeconds % 60).padStart(2, "0");
     return `${hours}:${minutes}:${seconds}`;
+  }
+
+  private scheduleLogFlush(): void {
+    if (this.logFlushTimer) {
+      return;
+    }
+    this.logFlushTimer = setTimeout(() => {
+      this.logFlushTimer = null;
+      this.flushPendingLogLines();
+    }, 50);
+  }
+
+  private flushPendingLogLines(): void {
+    if (this.pendingLogLines.length === 0) {
+      return;
+    }
+    const lines = this.pendingLogLines.splice(0, this.pendingLogLines.length);
+    for (const line of lines) {
+      this.log.add(line);
+    }
+    this.log.setScrollPerc(100);
+    this.requestRender();
+  }
+
+  private requestRender(): void {
+    if (this.renderScheduled) {
+      return;
+    }
+    this.renderScheduled = true;
+    setImmediate(() => {
+      this.renderScheduled = false;
+      this.screen.render();
+    });
   }
 }
 
