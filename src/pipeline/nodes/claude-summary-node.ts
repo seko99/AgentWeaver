@@ -11,8 +11,8 @@ export type ClaudeSummaryNodeParams = {
   prompt: string;
   outputFile: string;
   summaryTitle: string;
-  claudeCmd: string;
-  verbose: boolean;
+  claudeCmd?: string;
+  verbose?: boolean;
 };
 
 export const claudeSummaryNode: PipelineNodeDefinition<ClaudeSummaryNodeParams, ClaudeSummaryExecutorResult> = {
@@ -31,9 +31,9 @@ export const claudeSummaryNode: PipelineNodeDefinition<ClaudeSummaryNodeParams, 
       {
         prompt: params.prompt,
         outputFile: params.outputFile,
-        command: params.claudeCmd,
+        ...(params.claudeCmd ? { command: params.claudeCmd } : {}),
         env: { ...context.env },
-        verbose: params.verbose,
+        verbose: params.verbose ?? context.verbose,
       },
       executor.defaultConfig,
     );

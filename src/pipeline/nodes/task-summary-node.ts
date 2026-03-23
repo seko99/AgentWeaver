@@ -11,8 +11,8 @@ import { toExecutorContext } from "../types.js";
 export type TaskSummaryNodeParams = {
   jiraTaskFile: string;
   taskKey: string;
-  claudeCmd: string;
-  verbose: boolean;
+  claudeCmd?: string;
+  verbose?: boolean;
 };
 
 export const taskSummaryNode: PipelineNodeDefinition<TaskSummaryNodeParams, ClaudeSummaryExecutorResult> = {
@@ -34,9 +34,9 @@ export const taskSummaryNode: PipelineNodeDefinition<TaskSummaryNodeParams, Clau
       {
         prompt,
         outputFile,
-        command: params.claudeCmd,
+        ...(params.claudeCmd ? { command: params.claudeCmd } : {}),
         env: { ...context.env },
-        verbose: params.verbose,
+        verbose: params.verbose ?? context.verbose,
       },
       executor.defaultConfig,
     );

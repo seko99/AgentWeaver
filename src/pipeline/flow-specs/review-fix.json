@@ -1,0 +1,75 @@
+{
+  "kind": "review-fix-flow",
+  "version": 1,
+  "constants": {
+    "autoReviewFixExtraPrompt": "Исправлять только блокеры, критикалы и важные"
+  },
+  "phases": [
+    {
+      "id": "review-fix",
+      "steps": [
+        {
+          "id": "run_codex_review_fix",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "review-fix",
+            "vars": {
+              "review_reply_file": {
+                "artifact": {
+                  "kind": "review-reply-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.latestIteration" }
+                }
+              },
+              "items": { "ref": "params.reviewFixPoints" },
+              "review_fix_file": {
+                "artifact": {
+                  "kind": "review-fix-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.latestIteration" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "template": "Running Codex review-fix mode locally (iteration {iteration})",
+              "vars": {
+                "iteration": { "ref": "params.latestIteration" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "review-fix-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.latestIteration" }
+                    }
+                  }
+                ]
+              },
+              "message": "Review-fix mode did not produce the required review-fix artifact."
+            }
+          ]
+        },
+        {
+          "id": "verify_build_after_review_fix",
+          "when": { "ref": "params.runFollowupVerify" },
+          "node": "verify-build",
+          "params": {
+            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "labelText": { "const": "Running build verification in isolated Docker" }
+          }
+        }
+      ]
+    }
+  ]
+}
