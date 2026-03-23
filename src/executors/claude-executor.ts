@@ -6,6 +6,7 @@ export type ClaudeExecutorConfig = JsonObject & {
   commandEnvVar: string;
   defaultCommand: string;
   modelEnvVar: string;
+  legacyModelEnvVars?: string[];
   defaultModel: string;
   promptFlag: string;
   allowedTools: string;
@@ -17,6 +18,7 @@ export type ClaudeExecutorConfig = JsonObject & {
 export type ClaudeExecutorInput = {
   prompt: string;
   command?: string;
+  model?: string;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -27,7 +29,17 @@ export type ClaudeExecutorResult = {
 };
 
 function resolveModel(config: ClaudeExecutorConfig, env: NodeJS.ProcessEnv): string {
-  return env[config.modelEnvVar]?.trim() || config.defaultModel;
+  const primaryModel = env[config.modelEnvVar]?.trim();
+  if (primaryModel) {
+    return primaryModel;
+  }
+  for (const envVarName of config.legacyModelEnvVars ?? []) {
+    const legacyModel = env[envVarName]?.trim();
+    if (legacyModel) {
+      return legacyModel;
+    }
+  }
+  return config.defaultModel;
 }
 
 export const claudeExecutor: ExecutorDefinition<ClaudeExecutorConfig, ClaudeExecutorInput, ClaudeExecutorResult> = {
@@ -37,7 +49,7 @@ export const claudeExecutor: ExecutorDefinition<ClaudeExecutorConfig, ClaudeExec
   async execute(context: ExecutorContext, input: ClaudeExecutorInput, config: ClaudeExecutorConfig) {
     const env = input.env ?? context.env;
     const command = input.command ?? context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);
-    const model = resolveModel(config, env);
+    const model = input.model?.trim() || resolveModel(config, env);
     const argv = [command, "--model", model, config.promptFlag, `--allowedTools=${config.allowedTools}`];
     if (config.outputFormat) {
       argv.push("--output-format", config.outputFormat);

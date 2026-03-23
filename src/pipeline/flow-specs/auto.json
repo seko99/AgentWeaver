@@ -1,0 +1,471 @@
+{
+  "kind": "auto-flow",
+  "version": 1,
+  "constants": {
+    "autoReviewFixExtraPrompt": "Исправлять только блокеры, критикалы и важные"
+  },
+  "phases": [
+    {
+      "id": "plan",
+      "steps": [
+        {
+          "id": "fetch_jira",
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
+            }
+          ]
+        },
+        {
+          "id": "run_codex_plan",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "plan",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "qa_file": {
+                "artifact": {
+                  "kind": "qa-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running Codex planning mode" },
+            "model": { "const": "gpt-5.4" }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "artifactList": {
+                  "kind": "plan-artifacts",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Plan mode did not produce the required artifacts."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "implement",
+      "steps": [
+        {
+          "id": "run_codex_implement",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "implement",
+            "vars": {
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running Codex implementation mode locally" },
+            "model": { "const": "gpt-5.4" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "test_after_implement",
+      "steps": [
+        {
+          "id": "verify_build_after_implement",
+          "node": "verify-build",
+          "params": {
+            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "labelText": { "const": "Running build verification in isolated Docker" }
+          }
+        }
+      ]
+    },
+    {
+      "repeat": {
+        "var": "iteration",
+        "from": 1,
+        "to": 3
+      },
+      "phases": [
+        {
+          "id": "review_${iteration}",
+          "when": {
+            "not": {
+              "exists": {
+                "artifact": {
+                  "kind": "ready-to-merge-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            }
+          },
+          "steps": [
+            {
+              "id": "run_claude_review",
+              "node": "claude-prompt",
+              "prompt": {
+                "templateRef": "review",
+                "vars": {
+                  "jira_task_file": {
+                    "artifact": {
+                      "kind": "jira-task-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "design_file": {
+                    "artifact": {
+                      "kind": "design-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "plan_file": {
+                    "artifact": {
+                      "kind": "plan-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "review_file": {
+                    "artifact": {
+                      "kind": "review-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  }
+                },
+                "extraPrompt": { "ref": "params.extraPrompt" },
+                "format": "task-prompt"
+              },
+              "params": {
+                "labelText": {
+                  "template": "Running Claude review mode (iteration {iteration})",
+                  "vars": {
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "model": { "const": "opus" }
+              },
+              "expect": [
+                {
+                  "kind": "require-artifacts",
+                  "when": { "not": { "ref": "context.dryRun" } },
+                  "paths": {
+                    "list": [
+                      {
+                        "artifact": {
+                          "kind": "review-file",
+                          "taskKey": { "ref": "params.taskKey" },
+                          "iteration": { "ref": "repeat.iteration" }
+                        }
+                      }
+                    ]
+                  },
+                  "message": "Claude review did not produce the required review artifact."
+                }
+              ]
+            },
+            {
+              "id": "summarize_review",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "node": "claude-prompt",
+              "prompt": {
+                "templateRef": "review-summary",
+                "vars": {
+                  "review_file": {
+                    "artifact": {
+                      "kind": "review-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
+                  "review_summary_file": {
+                    "artifact": {
+                      "kind": "review-summary-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  }
+                },
+                "format": "plain"
+              },
+              "params": {
+                "labelText": { "const": "Preparing Claude review summary" },
+                "outputFile": {
+                  "artifact": {
+                    "kind": "review-summary-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "summaryTitle": { "const": "Claude Comments" },
+                "model": { "const": "haiku" }
+              }
+            },
+            {
+              "id": "run_codex_review_reply",
+              "node": "codex-local-prompt",
+              "prompt": {
+                "templateRef": "review-reply",
+                "vars": {
+                  "review_file": {
+                    "artifact": {
+                      "kind": "review-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
+                  "jira_task_file": {
+                    "artifact": {
+                      "kind": "jira-task-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "design_file": {
+                    "artifact": {
+                      "kind": "design-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "plan_file": {
+                    "artifact": {
+                      "kind": "plan-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "review_reply_file": {
+                    "artifact": {
+                      "kind": "review-reply-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  }
+                },
+                "extraPrompt": { "ref": "params.extraPrompt" },
+                "format": "task-prompt"
+              },
+              "params": {
+                "labelText": {
+                  "template": "Running Codex review reply mode (iteration {iteration})",
+                  "vars": {
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "model": { "const": "gpt-5.4" }
+              },
+              "expect": [
+                {
+                  "kind": "require-artifacts",
+                  "when": { "not": { "ref": "context.dryRun" } },
+                  "paths": {
+                    "list": [
+                      {
+                        "artifact": {
+                          "kind": "review-reply-file",
+                          "taskKey": { "ref": "params.taskKey" },
+                          "iteration": { "ref": "repeat.iteration" }
+                        }
+                      }
+                    ]
+                  },
+                  "message": "Codex review reply did not produce the required review-reply artifact."
+                }
+              ]
+            },
+            {
+              "id": "summarize_review_reply",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "node": "claude-prompt",
+              "prompt": {
+                "templateRef": "review-reply-summary",
+                "vars": {
+                  "review_reply_file": {
+                    "artifact": {
+                      "kind": "review-reply-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
+                  "review_reply_summary_file": {
+                    "artifact": {
+                      "kind": "review-reply-summary-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  }
+                },
+                "format": "plain"
+              },
+              "params": {
+                "labelText": { "const": "Preparing Codex reply summary" },
+                "outputFile": {
+                  "artifact": {
+                    "kind": "review-reply-summary-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "summaryTitle": { "const": "Codex Reply Summary" },
+                "model": { "const": "haiku" }
+              }
+            },
+            {
+              "id": "check_ready_to_merge",
+              "node": "file-check",
+              "stopFlowIf": {
+                "ref": "steps.review_${iteration}.check_ready_to_merge.outputs.exists"
+              },
+              "params": {
+                "path": {
+                  "artifact": {
+                    "kind": "ready-to-merge-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                },
+                "panelTitle": { "const": "Ready To Merge" },
+                "foundMessage": { "const": "Изменения готовы к merge\nФайл ready-to-merge.md создан." },
+                "tone": { "const": "green" }
+              }
+            }
+          ]
+        },
+        {
+          "id": "review_fix_${iteration}",
+          "when": {
+            "not": {
+              "ref": "steps.review_${iteration}.check_ready_to_merge.outputs.exists"
+            }
+          },
+          "steps": [
+            {
+              "id": "run_codex_review_fix",
+              "node": "codex-local-prompt",
+              "prompt": {
+                "templateRef": "review-fix",
+                "vars": {
+                  "review_reply_file": {
+                    "artifact": {
+                      "kind": "review-reply-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
+                  "items": { "ref": "params.reviewFixPoints" },
+                  "review_fix_file": {
+                    "artifact": {
+                      "kind": "review-fix-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  }
+                },
+                "extraPrompt": {
+                  "appendPrompt": {
+                    "base": { "ref": "params.extraPrompt" },
+                    "suffix": { "ref": "flow.autoReviewFixExtraPrompt" }
+                  }
+                },
+                "format": "task-prompt"
+              },
+              "params": {
+                "labelText": {
+                  "template": "Running Codex review-fix mode locally (iteration {iteration})",
+                  "vars": {
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "model": { "const": "gpt-5.4" }
+              },
+              "expect": [
+                {
+                  "kind": "require-artifacts",
+                  "when": { "not": { "ref": "context.dryRun" } },
+                  "paths": {
+                    "list": [
+                      {
+                        "artifact": {
+                          "kind": "review-fix-file",
+                          "taskKey": { "ref": "params.taskKey" },
+                          "iteration": { "ref": "repeat.iteration" }
+                        }
+                      }
+                    ]
+                  },
+                  "message": "Review-fix mode did not produce the required review-fix artifact."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "test_after_review_fix_${iteration}",
+          "when": {
+            "not": {
+              "ref": "steps.review_${iteration}.check_ready_to_merge.outputs.exists"
+            }
+          },
+          "steps": [
+            {
+              "id": "verify_build_after_review_fix",
+              "node": "verify-build",
+              "params": {
+                "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+                "labelText": { "const": "Running build verification in isolated Docker" }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
