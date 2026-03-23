@@ -1,4 +1,5 @@
 import process from "node:process";
+import type { FlowExecutionState } from "./pipeline/spec-types.js";
 
 const RESET = "\u001b[0m";
 const BOLD = "\u001b[1m";
@@ -17,6 +18,7 @@ export type OutputAdapter = {
   supportsPassthrough: boolean;
   renderAuxiliaryOutput?: boolean;
   setExecutionState?: (state: { node: string | null; executor: string | null }) => void;
+  setFlowState?: (state: { flowId: string | null; executionState: FlowExecutionState | null }) => void;
 };
 
 const defaultAdapter: OutputAdapter = {
@@ -36,6 +38,10 @@ let executionState: { node: string | null; executor: string | null } = {
   node: null,
   executor: null,
 };
+let flowState: { flowId: string | null; executionState: FlowExecutionState | null } = {
+  flowId: null,
+  executionState: null,
+};
 
 function color(text: string, ansi: string): string {
   return `${ansi}${text}${RESET}`;
@@ -52,6 +58,7 @@ function visibleLength(text: string): number {
 export function setOutputAdapter(adapter: OutputAdapter | null): void {
   outputAdapter = adapter ?? defaultAdapter;
   outputAdapter.setExecutionState?.(executionState);
+  outputAdapter.setFlowState?.(flowState);
 }
 
 export function getOutputAdapter(): OutputAdapter {
@@ -130,6 +137,14 @@ export function bye(): void {
 function updateExecutionState(next: { node: string | null; executor: string | null }): void {
   executionState = next;
   outputAdapter.setExecutionState?.(executionState);
+}
+
+export function setFlowExecutionState(flowId: string | null, executionState: FlowExecutionState | null): void {
+  flowState = {
+    flowId,
+    executionState,
+  };
+  outputAdapter.setFlowState?.(flowState);
 }
 
 export function setCurrentNode(node: string | null): void {
