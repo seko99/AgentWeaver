@@ -10,7 +10,7 @@ export type BuildFailureSummaryNodeResult = {
   summaryText: string;
 };
 
-const DEFAULT_CLAUDE_SUMMARY_MODEL = "haiku";
+const DEFAULT_CLAUDE_MODEL = "haiku";
 
 function truncateText(text: string, maxChars = 12000): string {
   return text.length <= maxChars ? text.trim() : text.trim().slice(-maxChars);
@@ -25,8 +25,8 @@ function fallbackBuildFailureSummary(output: string): string {
   return `Не удалось получить summary через Claude.\n\nПоследние строки лога:\n${tail.join("\n")}`;
 }
 
-function claudeSummaryModel(env: NodeJS.ProcessEnv): string {
-  return env.CLAUDE_SUMMARY_MODEL?.trim() || DEFAULT_CLAUDE_SUMMARY_MODEL;
+function claudeModel(env: NodeJS.ProcessEnv): string {
+  return env.CLAUDE_MODEL?.trim() || env.CLAUDE_SUMMARY_MODEL?.trim() || env.CLAUDE_REVIEW_MODEL?.trim() || DEFAULT_CLAUDE_MODEL;
 }
 
 export const buildFailureSummaryNode: PipelineNodeDefinition<BuildFailureSummaryNodeParams, BuildFailureSummaryNodeResult> = {
@@ -52,7 +52,7 @@ export const buildFailureSummaryNode: PipelineNodeDefinition<BuildFailureSummary
       };
     }
 
-    const model = claudeSummaryModel(context.env);
+    const model = claudeModel(context.env);
     const prompt =
       "Ниже лог упавшей build verification.\n" +
       "Сделай краткое резюме на русском языке, без воды.\n" +

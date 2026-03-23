@@ -16,6 +16,7 @@ export type CodexDockerExecutorConfig = JsonObject & {
 export type CodexDockerExecutorInput = {
   dockerComposeFile: string;
   prompt: string;
+  model?: string;
 };
 
 export type CodexDockerExecutorResult = {
@@ -39,7 +40,7 @@ export const codexDockerExecutor: ExecutorDefinition<
   async execute(context: ExecutorContext, input: CodexDockerExecutorInput, config: CodexDockerExecutorConfig) {
     const composeCommand = context.runtime.resolveDockerComposeCmd();
     const env = context.runtime.dockerRuntimeEnv();
-    const model = resolveModel(config, env);
+    const model = input.model?.trim() || resolveModel(config, env);
     env[config.promptEnvVar] = input.prompt;
     env[config.flagsEnvVar] = config.execFlagsTemplate.replace("{model}", model);
     const result = await processExecutor.execute(

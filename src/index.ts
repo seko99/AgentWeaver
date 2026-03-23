@@ -49,8 +49,6 @@ const COMMANDS = [
 
 type CommandName = (typeof COMMANDS)[number];
 
-const DEFAULT_CODEX_MODEL = "gpt-5.4";
-const DEFAULT_CLAUDE_REVIEW_MODEL = "opus";
 const HISTORY_FILE = path.join(os.homedir(), ".codex", "memories", "agentweaver-history");
 const AUTO_STATE_SCHEMA_VERSION = 2;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -147,8 +145,7 @@ Optional environment variables:
   CODEX_BIN
   CODEX_MODEL
   CLAUDE_BIN
-  CLAUDE_REVIEW_MODEL
-  CLAUDE_SUMMARY_MODEL`;
+  CLAUDE_MODEL`;
 }
 
 function packageVersion(): string {
@@ -486,14 +483,6 @@ function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): voi
   state.status = "pending";
   state.currentStep = null;
   state.lastError = null;
-}
-
-function codexModel(): string {
-  return process.env.CODEX_MODEL?.trim() || DEFAULT_CODEX_MODEL;
-}
-
-function claudeReviewModel(): string {
-  return process.env.CLAUDE_REVIEW_MODEL?.trim() || DEFAULT_CLAUDE_REVIEW_MODEL;
 }
 
 async function summarizeBuildFailure(output: string): Promise<string> {

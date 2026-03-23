@@ -88,6 +88,9 @@
 - `prompt` — как собрать prompt
 - `params` — какие runtime-параметры передать в node
 - `expect` — что должно быть истинно после выполнения step
+- `after` — какие side effects выполнить после успешного завершения step
+
+Для `codex-local`, `codex-docker` и `claude` модель теперь тоже считается частью `params`.
 
 Общий шаблон:
 
@@ -97,7 +100,8 @@
   "node": "codex-local-prompt",
   "prompt": { "...": "..." },
   "params": { "...": "..." },
-  "expect": [ { "...": "..." } ]
+  "expect": [ { "...": "..." } ],
+  "after": [ { "...": "..." } ]
 }
 ```
 
@@ -112,7 +116,6 @@
 - `jira-fetch`
 - `codex-local-prompt`
 - `claude-prompt`
-- `claude-summary`
 - `verify-build`
 
 Runtime находит node через registry:
@@ -185,6 +188,7 @@ Runtime находит node через registry:
 Для `codex-local-prompt`:
 
 - `labelText`
+- `model`
 
 Для `verify-build`:
 
@@ -200,6 +204,8 @@ Runtime находит node через registry:
 
 - `params` не должны описывать flow-level postconditions
 - если нужно сказать, какие файлы обязаны появиться после шага, для этого есть `expect`
+- для `codex-local`, `codex-docker`, `claude` именно `params.model` теперь определяет модель на уровне flow
+- `claude-prompt` может работать и в summary-режиме, если ему передать `outputFile` и `summaryTitle`
 
 ## Что делает `expect`
 
@@ -246,6 +252,40 @@ Runtime находит node через registry:
 - если step задаёт `expect`, declarative runner использует именно его как источник postconditions
 - встроенные node-level checks для такого шага пропускаются, чтобы не было дублирования
 - legacy flow, которые вызывают node напрямую, продолжают использовать built-in checks node
+
+## Что делает `after`
+
+`after` — это declarative post-step side effects.
+
+В отличие от `expect`, это не валидация, а изменение runtime state после успешного шага.
+
+Сейчас поддерживается:
+
+- `set-summary-from-file`
+
+Пример:
+
+```json
+"after": [
+  {
+    "kind": "set-summary-from-file",
+    "path": {
+      "artifact": {
+        "kind": "task-summary-file",
+        "taskKey": { "ref": "params.taskKey" }
+      }
+    }
+  }
+]
+```
+
+Это значит:
+
+1. вычислить путь к файлу
+2. прочитать файл
+3. передать текст в `context.setSummary(...)`
+
+Такой механизм нужен, когда flow должен обновить interactive runtime state без отдельной special-case node.
 
 ## Что делают `ref`, `artifact`, `artifactList`, `template`
 

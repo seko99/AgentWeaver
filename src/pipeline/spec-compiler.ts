@@ -22,6 +22,7 @@ function expandPhase(phase: DeclarativePhaseSpec, repeatVars: Record<string, Jso
       ...(step.prompt ? { prompt: step.prompt } : {}),
       ...(step.params ? { params: step.params } : {}),
       ...(step.expect ? { expect: step.expect } : {}),
+      ...(step.after ? { after: step.after } : {}),
       repeatVars,
     })),
   };

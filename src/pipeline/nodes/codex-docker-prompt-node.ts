@@ -11,6 +11,7 @@ export type CodexDockerPromptNodeParams = {
   prompt: string;
   dockerComposeFile: string;
   labelText: string;
+  model?: string;
   requiredArtifacts?: string[];
   missingArtifactsMessage?: string;
 };
@@ -29,6 +30,7 @@ export const codexDockerPromptNode: PipelineNodeDefinition<CodexDockerPromptNode
       {
         dockerComposeFile: params.dockerComposeFile,
         prompt: params.prompt,
+        ...(params.model ? { model: params.model } : {}),
       },
       executor.defaultConfig,
     );

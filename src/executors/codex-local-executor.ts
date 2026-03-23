@@ -14,6 +14,7 @@ export type CodexLocalExecutorConfig = JsonObject & {
 export type CodexLocalExecutorInput = {
   prompt: string;
   command?: string;
+  model?: string;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -38,7 +39,7 @@ export const codexLocalExecutor: ExecutorDefinition<
   async execute(context: ExecutorContext, input: CodexLocalExecutorInput, config: CodexLocalExecutorConfig) {
     const env = input.env ?? context.env;
     const command = input.command ?? context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);
-    const model = resolveModel(config, env);
+    const model = input.model?.trim() || resolveModel(config, env);
     const result = await processExecutor.execute(
       context,
       {

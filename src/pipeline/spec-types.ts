@@ -64,6 +64,12 @@ export type ExpectationSpec =
       message: string;
     };
 
+export type StepAfterActionSpec = {
+  kind: "set-summary-from-file";
+  when?: ConditionSpec;
+  path: ValueSpec;
+};
+
 export type DeclarativeStepSpec = {
   id: string;
   node: NodeKind;
@@ -71,6 +77,7 @@ export type DeclarativeStepSpec = {
   prompt?: PromptBindingSpec;
   params?: Record<string, ValueSpec>;
   expect?: ExpectationSpec[];
+  after?: StepAfterActionSpec[];
 };
 
 export type DeclarativePhaseSpec = {
@@ -109,5 +116,6 @@ export type ExpandedStepSpec = {
   prompt?: PromptBindingSpec;
   params?: Record<string, ValueSpec>;
   expect?: ExpectationSpec[];
+  after?: StepAfterActionSpec[];
   repeatVars: Record<string, JsonValue>;
 };

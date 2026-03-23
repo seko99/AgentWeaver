@@ -7,6 +7,7 @@ import type {
   DeclarativeStepSpec,
   ExpectationSpec,
   ExpandedPhaseSpec,
+  StepAfterActionSpec,
   ValueSpec,
 } from "./spec-types.js";
 
@@ -67,6 +68,9 @@ function validateStep(step: DeclarativeStepSpec, nodeRegistry: NodeRegistry, pat
   if (step.expect) {
     step.expect.forEach((expectation, index) => validateExpectation(expectation, `${path}.expect[${index}]`));
   }
+  if (step.after) {
+    step.after.forEach((action, index) => validateAfterAction(action, `${path}.after[${index}]`));
+  }
 }
 
 function validateExpectation(expectation: ExpectationSpec, path: string): void {
@@ -79,6 +83,14 @@ function validateExpectation(expectation: ExpectationSpec, path: string): void {
     return;
   }
   throw new TaskRunnerError(`Unsupported expectation at ${path}`);
+}
+
+function validateAfterAction(action: StepAfterActionSpec, path: string): void {
+  if (action.kind === "set-summary-from-file") {
+    validateValueSpec(action.path, `${path}.path`);
+    return;
+  }
+  throw new TaskRunnerError(`Unsupported after action at ${path}`);
 }
 
 function validatePhase(phase: DeclarativePhaseSpec, nodeRegistry: NodeRegistry, path: string): void {

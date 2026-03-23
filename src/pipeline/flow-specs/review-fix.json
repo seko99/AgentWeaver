@@ -39,7 +39,8 @@
               "vars": {
                 "iteration": { "ref": "params.latestIteration" }
               }
-            }
+            },
+            "model": { "const": "gpt-5.4" }
           },
           "expect": [
             {
