@@ -249,6 +249,11 @@ function saveAutoPipelineState(state: AutoPipelineState): void {
   writeFileSync(autoStateFile(state.issueKey), `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
+function syncAndSaveAutoPipelineState(state: AutoPipelineState): void {
+  syncAutoStepsFromExecutionState(state);
+  saveAutoPipelineState(state);
+}
+
 function resetAutoPipelineState(config: Config): boolean {
   const filePath = autoStateFile(config.taskKey);
   if (!existsSync(filePath)) {
@@ -540,11 +545,7 @@ async function runAutoPhaseViaSpec(
     });
     if (state) {
       state.executionState = result.executionState;
-      syncAutoStepsFromExecutionState(state);
-      if (result.stopped) {
-        state.status = "completed";
-      }
-      saveAutoPipelineState(state);
+      syncAndSaveAutoPipelineState(state);
     }
     return result.status === "skipped" ? "skipped" : "done";
   } catch (error) {
@@ -773,9 +774,7 @@ async function runAutoPipeline(config: Config): Promise<void> {
   while (true) {
     const step = nextAutoStep(state);
     if (!step) {
-      state.status = deriveAutoPipelineStatus(state);
-      state.currentStep = findCurrentExecutionStep(state);
-      saveAutoPipelineState(state);
+      syncAndSaveAutoPipelineState(state);
       if (state.status === "completed") {
         printPanel("Auto", "Auto pipeline finished", "green");
       } else {
@@ -803,7 +802,7 @@ async function runAutoPipeline(config: Config): Promise<void> {
       if (status === "skipped") {
         step.note = "condition not met";
       }
-      syncAutoStepsFromExecutionState(state);
+      syncAndSaveAutoPipelineState(state);
     } catch (error) {
       const returnCode = Number((error as { returnCode?: number }).returnCode ?? 1);
       step.status = "failed";
@@ -821,13 +820,10 @@ async function runAutoPipeline(config: Config): Promise<void> {
     }
 
     if (state.executionState.terminated) {
-      syncAutoStepsFromExecutionState(state);
-      saveAutoPipelineState(state);
+      syncAndSaveAutoPipelineState(state);
       printPanel("Auto", "Auto pipeline finished", "green");
       return;
     }
-
-    saveAutoPipelineState(state);
   }
 }
 
