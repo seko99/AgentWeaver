@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import {
   artifactFile,
   designFile,
+  jiraDescriptionFile,
   jiraTaskFile,
   planArtifacts,
   planFile,
@@ -96,6 +97,8 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
   switch (spec.kind) {
     case "design-file":
       return designFile(taskKey);
+    case "jira-description-file":
+      return jiraDescriptionFile(taskKey);
     case "jira-task-file":
       return jiraTaskFile(taskKey);
     case "plan-file":

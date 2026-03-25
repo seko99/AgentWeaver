@@ -64,6 +64,7 @@
 Примеры:
 
 - `plan`
+- `task_describe`
 - `implement`
 - `test_after_implement`
 - `review_1`
