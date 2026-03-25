@@ -23,7 +23,7 @@ The CLI now uses an executor + node + declarative flow architecture.
 - `src/index.ts` remains the CLI entrypoint and high-level orchestration layer
 - `src/executors/` contains first-class executors for external actions such as Jira fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
-- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `test-linter-fix`, and `auto`
+- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `test-linter-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
 - `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
 
 This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
@@ -41,7 +41,9 @@ This keeps command handlers focused on choosing a flow and providing parameters 
 - `src/runtime/` — shared runtime services used by executors
 - `docker-compose.yml` — runtime services for Codex and build verification
 - `Dockerfile.codex` — container image for Codex runtime
-- `verify_build.sh` — project-specific verification entrypoint used by `verify-build`
+- `verify_build.sh` — aggregated verification entrypoint used by `verify-build`
+- `run_tests.sh` — isolated test and coverage verification entrypoint
+- `run_linter.sh` — isolated generate + lint verification entrypoint
 - `package.json` — npm package metadata and scripts
 - `tsconfig.json` — TypeScript configuration
 
@@ -115,6 +117,8 @@ agentweaver plan DEMO-3288
 agentweaver task-describe DEMO-3288
 agentweaver implement DEMO-3288
 agentweaver review DEMO-3288
+agentweaver run-tests-loop DEMO-3288
+agentweaver run-linter-loop DEMO-3288
 agentweaver auto DEMO-3288
 ```
 
@@ -185,6 +189,8 @@ Main services:
 - `codex` — interactive Codex container
 - `codex-exec` — non-interactive `codex exec`
 - `verify-build` — project verification script inside container
+- `run-tests` — isolated `run_tests.sh` execution inside container
+- `run-linter` — isolated `run_linter.sh` execution inside container
 - `codex-login` — interactive login container
 - `dockerd` — internal Docker daemon for testcontainers/build flows
 
@@ -212,6 +218,18 @@ Build verification:
 
 ```bash
 PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm verify-build
+```
+
+Tests only:
+
+```bash
+PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-tests
+```
+
+Linter only:
+
+```bash
+PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-linter
 ```
 
 ## Development

@@ -209,6 +209,128 @@ services:
       - /tmp:exec,mode=1777
       - /root
 
+  run-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.codex
+    working_dir: /workspace
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      PATH: /usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/codex-home/go/bin:/go/bin
+      CODEX_HOME: /codex-home
+      HOME: /codex-home/home
+      XDG_CACHE_HOME: /codex-home/cache/xdg
+      GOPATH: /codex-home/go
+      GOBIN: /codex-home/go/bin
+      GOCACHE: /codex-home/cache/go-build
+      GOMODCACHE: /codex-home/cache/gomod
+      GOLANGCI_LINT_CACHE: /codex-home/cache/golangci-lint
+      GOPRIVATE: ${GOPRIVATE:-gitlab.yourdomain.org/*}
+      GONOSUMDB: ${GONOSUMDB:-gitlab.yourdomain.org/*}
+      GONOPROXY: ${GONOPROXY:-gitlab.yourdomain.org/*}
+      GIT_ALLOW_PROTOCOL: ${GIT_ALLOW_PROTOCOL:-file:https:ssh}
+      GIT_TERMINAL_PROMPT: "0"
+      DOCKER_HOST: tcp://dockerd:2375
+      TESTCONTAINERS_HOST_OVERRIDE: dockerd
+      VERIFY_BUILD_ROOT_DIR: /workspace
+    depends_on:
+      dockerd:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ${PROJECT_DIR:-./}
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CODEX_HOME_DIR:-~/.codex}
+        target: /codex-home
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOST_SSH_DIR:-~/.ssh}
+        target: /codex-home/home/.ssh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOST_GITCONFIG:-~/.gitconfig}
+        target: /codex-home/home/.gitconfig
+        read_only: true
+        bind:
+          create_host_path: false
+    entrypoint: ["/usr/local/bin/run_tests.sh"]
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:exec,mode=1777
+      - /root
+
+  run-linter:
+    build:
+      context: .
+      dockerfile: Dockerfile.codex
+    working_dir: /workspace
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      PATH: /usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/codex-home/go/bin:/go/bin
+      CODEX_HOME: /codex-home
+      HOME: /codex-home/home
+      XDG_CACHE_HOME: /codex-home/cache/xdg
+      GOPATH: /codex-home/go
+      GOBIN: /codex-home/go/bin
+      GOCACHE: /codex-home/cache/go-build
+      GOMODCACHE: /codex-home/cache/gomod
+      GOLANGCI_LINT_CACHE: /codex-home/cache/golangci-lint
+      GOPRIVATE: ${GOPRIVATE:-gitlab.yourdomain.org/*}
+      GONOSUMDB: ${GONOSUMDB:-gitlab.yourdomain.org/*}
+      GONOPROXY: ${GONOPROXY:-gitlab.yourdomain.org/*}
+      GIT_ALLOW_PROTOCOL: ${GIT_ALLOW_PROTOCOL:-file:https:ssh}
+      GIT_TERMINAL_PROMPT: "0"
+      DOCKER_HOST: tcp://dockerd:2375
+      TESTCONTAINERS_HOST_OVERRIDE: dockerd
+      VERIFY_BUILD_ROOT_DIR: /workspace
+    depends_on:
+      dockerd:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ${PROJECT_DIR:-./}
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CODEX_HOME_DIR:-~/.codex}
+        target: /codex-home
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOST_SSH_DIR:-~/.ssh}
+        target: /codex-home/home/.ssh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOST_GITCONFIG:-~/.gitconfig}
+        target: /codex-home/home/.gitconfig
+        read_only: true
+        bind:
+          create_host_path: false
+    entrypoint: ["/usr/local/bin/run_linter.sh"]
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:exec,mode=1777
+      - /root
+
   codex-login:
     build:
       context: .

@@ -564,31 +564,73 @@ export class InteractiveUi {
     const lines: string[] = [flow.label, ""];
     for (const item of this.visiblePhaseItems(flow, flowState)) {
       if (item.kind === "group") {
-        lines.push(`${this.symbolForGroup(flow.id, item.phases, flowState)} ${item.label}`);
-        for (const phase of item.phases) {
+        const visiblePhases = item.phases.filter((phase) => this.shouldDisplayPhase(flow, flowState, phase));
+        if (visiblePhases.length === 0) {
+          continue;
+        }
+        lines.push(`${this.symbolForGroup(flow.id, flow, visiblePhases, flowState)} ${item.label}`);
+        for (const phase of visiblePhases) {
           const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
-          lines.push(`  ${this.symbolForStatus(flow.id, phaseState?.status ?? "pending")} ${this.displayPhaseId(phase)}`);
+          const phaseStatus = this.displayStatusForPhase(flowState, flow, phase, phaseState?.status ?? null);
+          lines.push(`  ${this.symbolForStatus(flow.id, phaseStatus)} ${this.displayPhaseId(phase)}`);
           for (const step of phase.steps) {
             const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
-            lines.push(`    ${this.symbolForStatus(flow.id, stepState?.status ?? "pending")} ${step.id}`);
+            const stepStatus = this.displayStatusForStep(flowState, flow, phase, stepState?.status ?? null);
+            lines.push(`    ${this.symbolForStatus(flow.id, stepStatus)} ${step.id}`);
           }
         }
         lines.push("");
         continue;
       }
       const phase = item.phase;
+      if (!this.shouldDisplayPhase(flow, flowState, phase)) {
+        continue;
+      }
       const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
-      lines.push(`${this.symbolForStatus(flow.id, phaseState?.status ?? "pending")} ${phase.id}`);
+      const phaseStatus = this.displayStatusForPhase(flowState, flow, phase, phaseState?.status ?? null);
+      lines.push(`${this.symbolForStatus(flow.id, phaseStatus)} ${this.displayPhaseId(phase)}`);
       for (const step of phase.steps) {
         const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
-        lines.push(`  ${this.symbolForStatus(flow.id, stepState?.status ?? "pending")} ${step.id}`);
+        const stepStatus = this.displayStatusForStep(flowState, flow, phase, stepState?.status ?? null);
+        lines.push(`  ${this.symbolForStatus(flow.id, stepStatus)} ${step.id}`);
       }
       lines.push("");
     }
     if (flowState?.terminated) {
-      lines.push(`Stopped: ${flowState.terminationReason ?? "flow terminated"}`);
+      lines.push(`✓ Flow completed successfully`);
+      lines.push(`Reason: ${flowState.terminationReason ?? "flow terminated"}`);
     }
     this.progress.setContent(lines.join("\n").trimEnd());
+  }
+
+  private displayStatusForPhase(
+    flowState: FlowExecutionState | null,
+    flow: InteractiveFlowDefinition,
+    phase: InteractiveFlowDefinition["phases"][number],
+    actualStatus: "pending" | "running" | "done" | "skipped" | null,
+  ): "pending" | "running" | "done" | "skipped" {
+    if (actualStatus) {
+      return actualStatus;
+    }
+    if (!flowState?.terminated) {
+      return "pending";
+    }
+    return this.isAfterTermination(flowState, flow, phase) ? "skipped" : "pending";
+  }
+
+  private displayStatusForStep(
+    flowState: FlowExecutionState | null,
+    flow: InteractiveFlowDefinition,
+    phase: InteractiveFlowDefinition["phases"][number],
+    actualStatus: "pending" | "running" | "done" | "skipped" | null,
+  ): "pending" | "running" | "done" | "skipped" {
+    if (actualStatus) {
+      return actualStatus;
+    }
+    if (!flowState?.terminated) {
+      return "pending";
+    }
+    return this.isAfterTermination(flowState, flow, phase) ? "skipped" : "pending";
   }
 
   private symbolForStatus(
@@ -610,10 +652,18 @@ export class InteractiveUi {
 
   private symbolForGroup(
     flowId: string,
+    flow: InteractiveFlowDefinition,
     phases: InteractiveFlowDefinition["phases"],
     flowState: FlowExecutionState | null,
   ): string {
-    const statuses = phases.map((phase) => flowState?.phases.find((candidate) => candidate.id === phase.id)?.status ?? "pending");
+    const statuses = phases.map((phase) =>
+      this.displayStatusForPhase(
+        flowState,
+        flow,
+        phase,
+        flowState?.phases.find((candidate) => candidate.id === phase.id)?.status ?? null,
+      ),
+    );
     if (statuses.some((status) => status === "running")) {
       return this.symbolForStatus(flowId, "running");
     }
@@ -675,9 +725,13 @@ export class InteractiveUi {
     const pendingSeries = new Set<string>();
     return this.groupPhases(flow).filter((item) => {
       if (item.kind === "phase") {
-        return true;
+        return this.shouldDisplayPhase(flow, flowState, item.phase);
       }
-      const hasState = item.phases.some((phase) => flowState?.phases.some((candidate) => candidate.id === phase.id));
+      const visiblePhases = item.phases.filter((phase) => this.shouldDisplayPhase(flow, flowState, phase));
+      const hasState = visiblePhases.some((phase) => flowState?.phases.some((candidate) => candidate.id === phase.id));
+      if (visiblePhases.length === 0) {
+        return false;
+      }
       if (hasState) {
         return true;
       }
@@ -694,6 +748,51 @@ export class InteractiveUi {
     return JSON.stringify(entries);
   }
 
+  private shouldDisplayPhase(
+    flow: InteractiveFlowDefinition,
+    flowState: FlowExecutionState | null,
+    phase: InteractiveFlowDefinition["phases"][number],
+  ): boolean {
+    const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id) ?? null;
+    if (!flowState) {
+      if (Object.keys(phase.repeatVars).length > 0) {
+        return false;
+      }
+      return !this.hasPreviousRepeatPhase(flow, phase);
+    }
+    if (Object.keys(phase.repeatVars).length === 0) {
+      if (!phaseState) {
+        return false;
+      }
+      if (phaseState?.status === "skipped" && flowState.terminated && this.isAfterTermination(flowState, flow, phase)) {
+        return false;
+      }
+      return true;
+    }
+    if (!phaseState) {
+      return false;
+    }
+    if (phaseState.status === "skipped" && flowState.terminated && this.isAfterTermination(flowState, flow, phase)) {
+      return false;
+    }
+    return true;
+  }
+
+  private hasPreviousRepeatPhase(
+    flow: InteractiveFlowDefinition,
+    phase: InteractiveFlowDefinition["phases"][number],
+  ): boolean {
+    for (const candidate of flow.phases) {
+      if (candidate.id === phase.id) {
+        return false;
+      }
+      if (Object.keys(candidate.repeatVars).length > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private repeatSeriesKey(phases: InteractiveFlowDefinition["phases"]): string {
     const repeatVarNames = Object.keys(phases[0]?.repeatVars ?? {}).sort();
     const phaseNames = phases.map((phase) => this.displayPhaseId(phase));
@@ -704,7 +803,7 @@ export class InteractiveUi {
   }
 
   private repeatLabel(repeatVars: Record<string, string | number | boolean | null>): string | null {
-    const entries = Object.entries(repeatVars);
+    const entries = Object.entries(repeatVars).filter(([key]) => !key.endsWith("_minus_one"));
     if (entries.length === 0) {
       return null;
     }
@@ -717,13 +816,35 @@ export class InteractiveUi {
 
   private displayPhaseId(phase: InteractiveFlowDefinition["phases"][number]): string {
     let result = phase.id;
-    for (const value of Object.values(phase.repeatVars)) {
+    const values = Object.entries(phase.repeatVars)
+      .filter(([key]) => !key.endsWith("_minus_one"))
+      .map(([, value]) => value);
+    for (const value of values) {
       const suffix = `_${String(value)}`;
       if (result.endsWith(suffix)) {
         result = result.slice(0, -suffix.length);
       }
     }
     return result;
+  }
+
+  private isAfterTermination(
+    flowState: FlowExecutionState,
+    flow: InteractiveFlowDefinition,
+    phase: InteractiveFlowDefinition["phases"][number],
+  ): boolean {
+    const terminationReason = flowState.terminationReason ?? "";
+    const match = /^Stopped by ([^:]+):/.exec(terminationReason);
+    if (!match) {
+      return false;
+    }
+    const stoppedPhaseId = match[1];
+    const stoppedIndex = flow.phases.findIndex((candidate) => candidate.id === stoppedPhaseId);
+    const currentIndex = flow.phases.findIndex((candidate) => candidate.id === phase.id);
+    if (stoppedIndex < 0 || currentIndex < 0) {
+      return false;
+    }
+    return currentIndex > stoppedIndex;
   }
 
   private openConfirm(): void {

@@ -42,6 +42,8 @@ const COMMANDS = [
   "test",
   "test-fix",
   "test-linter-fix",
+  "run-tests-loop",
+  "run-linter-loop",
   "auto",
   "auto-status",
   "auto-reset",
@@ -119,6 +121,8 @@ function usage(): string {
   agentweaver test [--dry] [--verbose] <jira-browse-url|jira-issue-key>
   agentweaver test-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver test-linter-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver run-tests-loop [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver run-linter-loop [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver auto [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver auto [--dry] [--verbose] [--prompt <text>] --from <phase> <jira-browse-url|jira-issue-key>
   agentweaver auto --help-phases
@@ -487,13 +491,19 @@ function buildConfig(
 }
 
 function checkPrerequisites(config: Config): void {
-  if (config.command === "plan" || config.command === "task-describe" || config.command === "review") {
+  if (
+    config.command === "plan" ||
+    config.command === "task-describe" ||
+    config.command === "review" ||
+    config.command === "run-tests-loop" ||
+    config.command === "run-linter-loop"
+  ) {
     resolveCmd("codex", "CODEX_BIN");
   }
   if (config.command === "review") {
     resolveCmd("claude", "CLAUDE_BIN");
   }
-  if (["implement", "review-fix", "test"].includes(config.command)) {
+  if (["implement", "review-fix", "test", "run-tests-loop", "run-linter-loop"].includes(config.command)) {
     resolveDockerComposeCmd();
     if (!existsSync(config.dockerComposeFile)) {
       throw new TaskRunnerError(`docker-compose file not found: ${config.dockerComposeFile}`);
@@ -565,6 +575,8 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
     declarativeFlowDefinition("test", "test", "test.json"),
     declarativeFlowDefinition("test-fix", "test-fix", "test-fix.json"),
     declarativeFlowDefinition("test-linter-fix", "test-linter-fix", "test-linter-fix.json"),
+    declarativeFlowDefinition("run-tests-loop", "run-tests-loop", "run-tests-loop.json"),
+    declarativeFlowDefinition("run-linter-loop", "run-linter-loop", "run-linter-loop.json"),
   ];
 }
 
@@ -828,6 +840,19 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
     });
+    return false;
+  }
+
+  if (config.command === "run-tests-loop" || config.command === "run-linter-loop") {
+    await runDeclarativeFlowBySpecFile(
+      config.command === "run-tests-loop" ? "run-tests-loop.json" : "run-linter-loop.json",
+      config,
+      {
+        taskKey: config.taskKey,
+        dockerComposeFile: config.dockerComposeFile,
+        extraPrompt: config.extraPrompt,
+      },
+    );
     return false;
   }
 

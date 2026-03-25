@@ -2,46 +2,103 @@
 
 set -euo pipefail
 
-ROOT_DIR="${VERIFY_BUILD_ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-MIN_COVERAGE=70
-COVER_FILE="$ROOT_DIR/build/coverage.out"
+ROOT_DIR="${VERIFY_BUILD_ROOT_DIR:-$(pwd)}"
+BUILD_TARGET="./cmd/user-service"
+BUILD_OUTPUT="$ROOT_DIR/user-service"
+
+log() {
+  printf '%s\n' "$*" >&2
+}
+
+details_json() {
+  local template="$1"
+  shift
+  if command -v jq >/dev/null 2>&1; then
+    jq -cn "$@" "$template"
+  else
+    printf '{}'
+  fi
+}
+
+emit_result() {
+  local ok="$1"
+  local kind="$2"
+  local stage="$3"
+  local exit_code="$4"
+  local summary="$5"
+  local command="$6"
+  local details_json="${7:-{}}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '{"ok":%s,"kind":"%s","stage":"%s","exitCode":%s,"summary":"%s","command":"%s","details":{"error":"jq is required for structured output"}}\n' \
+      "$ok" "$kind" "$stage" "$exit_code" "$summary" "$command"
+    return
+  fi
+
+  jq -cn \
+    --arg ok "$ok" \
+    --arg kind "$kind" \
+    --arg stage "$stage" \
+    --arg exitCode "$exit_code" \
+    --arg summary "$summary" \
+    --arg command "$command" \
+    --arg details "$details_json" \
+    '{
+      ok: ($ok == "true"),
+      kind: $kind,
+      stage: $stage,
+      exitCode: ($exitCode | tonumber),
+      summary: $summary,
+      command: $command,
+      details: ($details | fromjson? // {raw: $details})
+    }'
+}
+
+fail() {
+  local exit_code="$1"
+  local summary="$2"
+  local command="$3"
+  local details_json="${4:-{}}"
+
+  emit_result false "verify-build" "verify_build" "$exit_code" "$summary" "$command" "$details_json"
+  exit "$exit_code"
+}
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "Missing required command: $1" >&2
-    exit 1
+    fail 2 "Missing required command: $1" "$1" "$(details_json --arg failedStage "require_cmd" --arg missingCommand "$1" '{failedStage: $failedStage, missingCommand: $missingCommand}')"
+  fi
+}
+
+run_stage() {
+  local stage_name="$1"
+  local script_path="$2"
+  local output
+  local exit_code=0
+
+  if output=$("$script_path"); then
+    :
+  else
+    exit_code=$?
+  fi
+
+  printf '%s\n' "$output" >&2
+
+  if [[ "$exit_code" -ne 0 ]]; then
+    fail "$exit_code" "${stage_name} stage failed" "$script_path" "$(details_json --arg failedStage "$stage_name" --arg rawOutput "$output" '{failedStage: $failedStage, stageResult: ($rawOutput | fromjson? // {raw: $rawOutput})}')"
   fi
 }
 
 require_cmd go
-require_cmd golangci-lint
 
 cd "$ROOT_DIR"
 
-echo "==> Generating code (go generate ./...)"
-go generate ./...
+run_stage "run_linter" "$ROOT_DIR/run_linter.sh"
+run_stage "run_tests" "$ROOT_DIR/run_tests.sh"
 
-echo "==> Running linter (golangci-lint run)"
-golangci-lint run
-
-echo "==> Running unit tests with coverage (go test -coverprofile)"
-PKGS=$(go list ./... | grep -vE '/mocks/|/cmd($|/)|/tests($|/)' | paste -sd "," -)
-go test -coverpkg=$PKGS -coverprofile="$COVER_FILE" -count=1 ./...
-
-coverage=$(go tool cover -func "$COVER_FILE" | awk '/^total:/{print substr($3, 1, length($3)-1)}')
-if [[ -z "$coverage" ]]; then
-  echo "Failed to parse coverage from $COVER_FILE" >&2
-  exit 1
+log "==> Building binary (go build ${BUILD_TARGET})"
+if ! go build -o "$BUILD_OUTPUT" "$BUILD_TARGET" >&2; then
+  fail 1 "go build failed" "go build -o <output> ./cmd/user-service" "$(details_json --arg failedStage "go-build" --arg buildTarget "$BUILD_TARGET" --arg buildOutput "$BUILD_OUTPUT" '{failedStage: $failedStage, buildTarget: $buildTarget, buildOutput: $buildOutput}')"
 fi
 
-if awk -v c="$coverage" -v min="$MIN_COVERAGE" 'BEGIN {exit (c >= min ? 0 : 1)}'; then
-  echo "==> Coverage ${coverage}% (min ${MIN_COVERAGE}%)"
-else
-  echo "Coverage ${coverage}% is below required ${MIN_COVERAGE}%." >&2
-  exit 1
-fi
-
-echo "==> Building binary (go build ./cmd/user-service)"
-go build -o "${ROOT_DIR}/user-service" ./cmd/user-service
-
-echo "==> All checks passed"
+emit_result true "verify-build" "verify_build" 0 "All verification stages passed" "run_linter.sh && run_tests.sh && go build -o <output> ./cmd/user-service" "$(details_json --arg buildTarget "$BUILD_TARGET" --arg buildOutput "$BUILD_OUTPUT" '{completedStages: ["run_linter", "run_tests", "go-build"], buildTarget: $buildTarget, buildOutput: $buildOutput}')"
