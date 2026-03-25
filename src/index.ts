@@ -35,6 +35,7 @@ import { bye, getOutputAdapter, printError, printInfo, printPanel, printPrompt, 
 
 const COMMANDS = [
   "plan",
+  "task-describe",
   "implement",
   "review",
   "review-fix",
@@ -111,6 +112,7 @@ function usage(): string {
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver task-describe [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver implement [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver review [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver review-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -485,7 +487,7 @@ function buildConfig(
 }
 
 function checkPrerequisites(config: Config): void {
-  if (config.command === "plan" || config.command === "review") {
+  if (config.command === "plan" || config.command === "task-describe" || config.command === "review") {
     resolveCmd("codex", "CODEX_BIN");
   }
   if (config.command === "review") {
@@ -556,6 +558,7 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
   return [
     autoFlowDefinition(),
     declarativeFlowDefinition("plan", "plan", "plan.json"),
+    declarativeFlowDefinition("task-describe", "task-describe", "task-describe.json"),
     declarativeFlowDefinition("implement", "implement", "implement.json"),
     declarativeFlowDefinition("review", "review", "review.json"),
     declarativeFlowDefinition("review-fix", "review-fix", "review-fix.json"),
@@ -726,6 +729,15 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     }
     await runDeclarativeFlowBySpecFile("plan.json", config, {
       jiraApiUrl: config.jiraApiUrl,
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+    });
+    return false;
+  }
+
+  if (config.command === "task-describe") {
+    requireJiraTaskFile(config.jiraTaskFile);
+    await runDeclarativeFlowBySpecFile("task-describe.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
     });
