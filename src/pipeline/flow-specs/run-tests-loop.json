@@ -1,0 +1,149 @@
+{
+  "kind": "run-tests-loop-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "run_tests_try_1",
+      "steps": [
+        {
+          "id": "run_tests",
+          "node": "verify-build",
+          "params": {
+            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "labelText": {
+              "const": "Running run_tests.sh in isolated Docker (attempt 1)"
+            },
+            "service": { "const": "run-tests" }
+          },
+          "stopFlowIf": {
+            "equals": [
+              { "ref": "steps.run_tests_try_1.run_tests.outputs.parsed.ok" },
+              { "const": true }
+            ]
+          }
+        },
+        {
+          "id": "fix_tests",
+          "when": {
+            "equals": [
+              { "ref": "steps.run_tests_try_1.run_tests.outputs.parsed.ok" },
+              { "const": false }
+            ]
+          },
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "run-tests-loop-fix",
+            "extraPrompt": {
+              "appendPrompt": {
+                "base": { "ref": "params.extraPrompt" },
+                "suffix": {
+                  "template": "Последний результат run_tests.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
+                  "vars": {
+                    "exit_code": { "ref": "steps.run_tests_try_1.run_tests.outputs.parsed.exitCode" },
+                    "summary": { "ref": "steps.run_tests_try_1.run_tests.outputs.parsed.summary" }
+                  }
+                }
+              }
+            },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "const": "Running Codex tests loop fix (attempt 1)"
+            },
+            "model": { "const": "gpt-5.4" }
+          }
+        }
+      ]
+    },
+    {
+      "repeat": {
+        "var": "attempt",
+        "from": 2,
+        "to": 5
+      },
+      "phases": [
+        {
+          "id": "run_tests_try_${attempt}",
+          "when": {
+            "equals": [
+              { "ref": "steps.run_tests_try_${attempt_minus_one}.run_tests.outputs.parsed.ok" },
+              { "const": false }
+            ]
+          },
+          "steps": [
+            {
+              "id": "run_tests",
+              "node": "verify-build",
+              "params": {
+                "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+                "labelText": {
+                  "template": "Running run_tests.sh in isolated Docker (attempt ${attempt})"
+                },
+                "service": { "const": "run-tests" }
+              },
+              "stopFlowIf": {
+                "equals": [
+                  { "ref": "steps.run_tests_try_${attempt}.run_tests.outputs.parsed.ok" },
+                  { "const": true }
+                ]
+              }
+            },
+            {
+              "id": "fix_tests",
+              "when": {
+                "equals": [
+                  { "ref": "steps.run_tests_try_${attempt}.run_tests.outputs.parsed.ok" },
+                  { "const": false }
+                ]
+              },
+              "node": "codex-local-prompt",
+              "prompt": {
+                "templateRef": "run-tests-loop-fix",
+                "extraPrompt": {
+                  "appendPrompt": {
+                    "base": { "ref": "params.extraPrompt" },
+                    "suffix": {
+                      "template": "Последний результат run_tests.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
+                      "vars": {
+                        "exit_code": { "ref": "steps.run_tests_try_${attempt}.run_tests.outputs.parsed.exitCode" },
+                        "summary": { "ref": "steps.run_tests_try_${attempt}.run_tests.outputs.parsed.summary" }
+                      }
+                    }
+                  }
+                },
+                "format": "task-prompt"
+              },
+              "params": {
+                "labelText": {
+                  "template": "Running Codex tests loop fix (attempt ${attempt})"
+                },
+                "model": { "const": "gpt-5.4" }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "run_tests_failed",
+      "steps": [
+        {
+          "id": "assert_run_tests_success",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.dockerComposeFile" }
+          },
+          "expect": [
+            {
+              "kind": "step-output",
+              "value": { "ref": "steps.run_tests_try_5.run_tests.outputs.parsed.ok" },
+              "equals": { "const": true },
+              "message": "run-tests-loop exhausted all attempts without a successful run_tests.sh execution."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

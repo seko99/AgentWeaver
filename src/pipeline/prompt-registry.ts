@@ -6,6 +6,8 @@ import {
   REVIEW_REPLY_PROMPT_TEMPLATE,
   REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   REVIEW_SUMMARY_PROMPT_TEMPLATE,
+  RUN_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
+  RUN_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
   TASK_SUMMARY_PROMPT_TEMPLATE,
   TEST_FIX_PROMPT_TEMPLATE,
   TEST_LINTER_FIX_PROMPT_TEMPLATE,
@@ -19,6 +21,8 @@ export type PromptTemplateRef =
   | "review-reply"
   | "review-reply-summary"
   | "review-summary"
+  | "run-linter-loop-fix"
+  | "run-tests-loop-fix"
   | "task-summary"
   | "test-fix"
   | "test-linter-fix";
@@ -31,6 +35,8 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "review-reply": REVIEW_REPLY_PROMPT_TEMPLATE,
   "review-reply-summary": REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   "review-summary": REVIEW_SUMMARY_PROMPT_TEMPLATE,
+  "run-linter-loop-fix": RUN_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
+  "run-tests-loop-fix": RUN_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
   "task-summary": TASK_SUMMARY_PROMPT_TEMPLATE,
   "test-fix": TEST_FIX_PROMPT_TEMPLATE,
   "test-linter-fix": TEST_LINTER_FIX_PROMPT_TEMPLATE,
