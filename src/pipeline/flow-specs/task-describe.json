@@ -1,0 +1,61 @@
+{
+  "kind": "task-describe-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "task_describe",
+      "steps": [
+        {
+          "id": "run_codex_task_describe",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "inlineTemplate": "Посмотри задачу в {jira_task_file}. Проанализируй код и оформи описание для Jira, без лишних подробностей. Запиши в {jira_description_file}.",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "jira_description_file": {
+                "artifact": {
+                  "kind": "jira-description-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running Codex task description mode" },
+            "model": { "const": "gpt-5.4" },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "jira-description-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "path": {
+                "artifact": {
+                  "kind": "jira-description-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Task describe mode did not produce the Jira description artifact."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
