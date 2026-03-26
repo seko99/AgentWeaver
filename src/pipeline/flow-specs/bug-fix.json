@@ -1,47 +1,16 @@
 {
-  "kind": "bug-analyze-flow",
+  "kind": "bug-fix-flow",
   "version": 1,
   "phases": [
     {
-      "id": "bug_analyze",
+      "id": "bug_fix",
       "steps": [
         {
-          "id": "fetch_jira",
-          "node": "jira-fetch",
-          "params": {
-            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
-            "outputFile": {
-              "artifact": {
-                "kind": "jira-task-file",
-                "taskKey": { "ref": "params.taskKey" }
-              }
-            }
-          },
-          "expect": [
-            {
-              "kind": "require-file",
-              "path": {
-                "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "message": "Jira fetch node did not produce the Jira task file."
-            }
-          ]
-        },
-        {
-          "id": "run_codex_bug_analyze",
+          "id": "run_codex_bug_fix",
           "node": "codex-local-prompt",
           "prompt": {
-            "templateRef": "bug-analyze",
+            "templateRef": "bug-fix",
             "vars": {
-              "jira_task_file": {
-                "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
               "bug_analyze_file": {
                 "artifact": {
                   "kind": "bug-analyze-file",
@@ -83,22 +52,9 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex bug analysis mode" },
+            "labelText": { "const": "Running Codex bug fix mode locally" },
             "model": { "const": "gpt-5.4" }
-          },
-          "expect": [
-            {
-              "kind": "require-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
-              "paths": {
-                "artifactList": {
-                  "kind": "bug-analyze-artifacts",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "message": "Bug analyze mode did not produce the required artifacts."
-            }
-          ]
+          }
         }
       ]
     }

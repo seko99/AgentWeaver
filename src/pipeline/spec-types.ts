@@ -15,8 +15,11 @@ export type ValueSpec =
 export type ArtifactRefSpec = {
   kind:
     | "bug-analyze-file"
+    | "bug-analyze-json-file"
     | "bug-fix-design-file"
+    | "bug-fix-design-json-file"
     | "bug-fix-plan-file"
+    | "bug-fix-plan-json-file"
     | "design-file"
     | "jira-description-file"
     | "jira-task-file"

@@ -1,5 +1,6 @@
 import {
   BUG_ANALYZE_PROMPT_TEMPLATE,
+  BUG_FIX_PROMPT_TEMPLATE,
   IMPLEMENT_PROMPT_TEMPLATE,
   PLAN_PROMPT_TEMPLATE,
   REVIEW_FIX_PROMPT_TEMPLATE,
@@ -16,6 +17,7 @@ import {
 
 export type PromptTemplateRef =
   | "bug-analyze"
+  | "bug-fix"
   | "implement"
   | "plan"
   | "review"
@@ -31,6 +33,7 @@ export type PromptTemplateRef =
 
 const promptTemplates: Record<PromptTemplateRef, string> = {
   "bug-analyze": BUG_ANALYZE_PROMPT_TEMPLATE,
+  "bug-fix": BUG_FIX_PROMPT_TEMPLATE,
   implement: IMPLEMENT_PROMPT_TEMPLATE,
   plan: PLAN_PROMPT_TEMPLATE,
   review: REVIEW_PROMPT_TEMPLATE,

@@ -4,8 +4,11 @@ import {
   artifactFile,
   bugAnalyzeArtifacts,
   bugAnalyzeFile,
+  bugAnalyzeJsonFile,
   bugFixDesignFile,
+  bugFixDesignJsonFile,
   bugFixPlanFile,
+  bugFixPlanJsonFile,
   designFile,
   jiraDescriptionFile,
   jiraTaskFile,
@@ -101,10 +104,16 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
   switch (spec.kind) {
     case "bug-analyze-file":
       return bugAnalyzeFile(taskKey);
+    case "bug-analyze-json-file":
+      return bugAnalyzeJsonFile(taskKey);
     case "bug-fix-design-file":
       return bugFixDesignFile(taskKey);
+    case "bug-fix-design-json-file":
+      return bugFixDesignJsonFile(taskKey);
     case "bug-fix-plan-file":
       return bugFixPlanFile(taskKey);
+    case "bug-fix-plan-json-file":
+      return bugFixPlanJsonFile(taskKey);
     case "design-file":
       return designFile(taskKey);
     case "jira-description-file":
