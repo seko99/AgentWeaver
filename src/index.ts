@@ -51,7 +51,7 @@ const COMMANDS = [
 
 type CommandName = (typeof COMMANDS)[number];
 
-const AUTO_STATE_SCHEMA_VERSION = 2;
+const AUTO_STATE_SCHEMA_VERSION = 3;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(MODULE_DIR, "..");
 const runtimeServices: RuntimeServices = {

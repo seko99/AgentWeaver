@@ -123,11 +123,25 @@
       "id": "test_after_implement",
       "steps": [
         {
-          "id": "verify_build_after_implement",
-          "node": "verify-build",
+          "id": "run_linter_loop_after_implement",
+          "node": "flow-run",
           "params": {
+            "fileName": { "const": "run-linter-loop.json" },
+            "labelText": { "const": "Running run-linter-loop after implement" },
+            "taskKey": { "ref": "params.taskKey" },
             "dockerComposeFile": { "ref": "params.dockerComposeFile" },
-            "labelText": { "const": "Running build verification in isolated Docker" }
+            "extraPrompt": { "ref": "params.extraPrompt" }
+          }
+        },
+        {
+          "id": "run_tests_loop_after_implement",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "run-tests-loop.json" },
+            "labelText": { "const": "Running run-tests-loop after implement" },
+            "taskKey": { "ref": "params.taskKey" },
+            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "extraPrompt": { "ref": "params.extraPrompt" }
           }
         }
       ]
