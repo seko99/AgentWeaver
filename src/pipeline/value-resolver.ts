@@ -12,6 +12,7 @@ import {
   designFile,
   jiraDescriptionFile,
   jiraTaskFile,
+  mrDescriptionFile,
   planArtifacts,
   planFile,
   qaFile,
@@ -120,6 +121,8 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return jiraDescriptionFile(taskKey);
     case "jira-task-file":
       return jiraTaskFile(taskKey);
+    case "mr-description-file":
+      return mrDescriptionFile(taskKey);
     case "plan-file":
       return planFile(taskKey);
     case "qa-file":

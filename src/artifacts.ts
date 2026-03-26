@@ -78,6 +78,10 @@ export function jiraDescriptionFile(taskKey: string): string {
   return taskWorkspaceFile(taskKey, `jira-${taskKey}-description.md`);
 }
 
+export function mrDescriptionFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `mr-description-${taskKey}.md`);
+}
+
 export function autoStateFile(taskKey: string): string {
   return taskWorkspaceFile(taskKey, `.agentweaver-state-${taskKey}.json`);
 }

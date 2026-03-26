@@ -41,6 +41,7 @@ import { bye, getOutputAdapter, printError, printInfo, printPanel, printPrompt, 
 const COMMANDS = [
   "bug-analyze",
   "bug-fix",
+  "mr-description",
   "plan",
   "task-describe",
   "implement",
@@ -122,6 +123,7 @@ function usage(): string {
   agentweaver --force <jira-browse-url|jira-issue-key>
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver implement [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -503,6 +505,7 @@ function checkPrerequisites(config: Config): void {
   if (
     config.command === "bug-analyze" ||
     config.command === "bug-fix" ||
+    config.command === "mr-description" ||
     config.command === "plan" ||
     config.command === "task-describe" ||
     config.command === "review" ||
@@ -580,6 +583,7 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
     autoFlowDefinition(),
     declarativeFlowDefinition("bug-analyze", "bug-analyze", "bug-analyze.json"),
     declarativeFlowDefinition("bug-fix", "bug-fix", "bug-fix.json"),
+    declarativeFlowDefinition("mr-description", "mr-description", "mr-description.json"),
     declarativeFlowDefinition("plan", "plan", "plan.json"),
     declarativeFlowDefinition("task-describe", "task-describe", "task-describe.json"),
     declarativeFlowDefinition("implement", "implement", "implement.json"),
@@ -786,6 +790,15 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       "Bug-fix mode requires valid structured artifacts from the bug analysis phase.",
     );
     await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+    });
+    return false;
+  }
+
+  if (config.command === "mr-description") {
+    requireJiraTaskFile(config.jiraTaskFile);
+    await runDeclarativeFlowBySpecFile("mr-description.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
     });
