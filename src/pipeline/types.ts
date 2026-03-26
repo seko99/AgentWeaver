@@ -1,4 +1,5 @@
 import type { ExecutorContext, RuntimeServices } from "../executors/types.js";
+import type { StructuredArtifactCheck } from "../structured-artifacts.js";
 import type { OutputAdapter } from "../tui.js";
 import type { NodeRegistry } from "./node-registry.js";
 import type { ExecutorRegistry } from "./registry.js";
@@ -19,6 +20,11 @@ export type NodeCheckSpec =
   | {
       kind: "require-artifacts";
       paths: string[];
+      message: string;
+    }
+  | {
+      kind: "require-structured-artifacts";
+      items: StructuredArtifactCheck[];
       message: string;
     }
   | {

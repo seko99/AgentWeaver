@@ -1,0 +1,44 @@
+{
+  "kind": "bug-fix-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "bug_fix",
+      "steps": [
+        {
+          "id": "run_codex_bug_fix",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "bug-fix",
+            "vars": {
+              "bug_analyze_json_file": {
+                "artifact": {
+                  "kind": "bug-analyze-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "bug_fix_design_json_file": {
+                "artifact": {
+                  "kind": "bug-fix-design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "bug_fix_plan_json_file": {
+                "artifact": {
+                  "kind": "bug-fix-plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running Codex bug fix mode locally" },
+            "model": { "const": "gpt-5.4" }
+          }
+        }
+      ]
+    }
+  ]
+}

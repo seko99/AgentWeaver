@@ -1,0 +1,140 @@
+{
+  "kind": "bug-analyze-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "bug_analyze",
+      "steps": [
+        {
+          "id": "fetch_jira",
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
+            }
+          ]
+        },
+        {
+          "id": "run_codex_bug_analyze",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "bug-analyze",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "bug_analyze_file": {
+                "artifact": {
+                  "kind": "bug-analyze-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "bug_analyze_json_file": {
+                "artifact": {
+                  "kind": "bug-analyze-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "bug_fix_design_file": {
+                "artifact": {
+                  "kind": "bug-fix-design-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "bug_fix_design_json_file": {
+                "artifact": {
+                  "kind": "bug-fix-design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "bug_fix_plan_file": {
+                "artifact": {
+                  "kind": "bug-fix-plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "bug_fix_plan_json_file": {
+                "artifact": {
+                  "kind": "bug-fix-plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running Codex bug analysis mode" },
+            "model": { "const": "gpt-5.4" }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "artifactList": {
+                  "kind": "bug-analyze-artifacts",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Bug analyze mode did not produce the required artifacts."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "bug-analyze-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "bug-analysis/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "bug-fix-design-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "bug-fix-design/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "bug-fix-plan-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "bug-fix-plan/v1"
+                }
+              ],
+              "message": "Bug analyze mode produced invalid structured artifacts."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

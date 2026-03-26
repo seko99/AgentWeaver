@@ -34,6 +34,30 @@ export function planFile(taskKey: string): string {
   return artifactFile("plan", taskKey, 1);
 }
 
+export function bugAnalyzeFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-analyze-${taskKey}.md`);
+}
+
+export function bugAnalyzeJsonFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-analyze-${taskKey}.json`);
+}
+
+export function bugFixDesignFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-fix-design-${taskKey}.md`);
+}
+
+export function bugFixDesignJsonFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-fix-design-${taskKey}.json`);
+}
+
+export function bugFixPlanFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-fix-plan-${taskKey}.md`);
+}
+
+export function bugFixPlanJsonFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-fix-plan-${taskKey}.json`);
+}
+
 export function qaFile(taskKey: string): string {
   return artifactFile("qa", taskKey, 1);
 }
@@ -60,6 +84,17 @@ export function autoStateFile(taskKey: string): string {
 
 export function planArtifacts(taskKey: string): string[] {
   return [designFile(taskKey), planFile(taskKey), qaFile(taskKey)];
+}
+
+export function bugAnalyzeArtifacts(taskKey: string): string[] {
+  return [
+    bugAnalyzeFile(taskKey),
+    bugAnalyzeJsonFile(taskKey),
+    bugFixDesignFile(taskKey),
+    bugFixDesignJsonFile(taskKey),
+    bugFixPlanFile(taskKey),
+    bugFixPlanJsonFile(taskKey),
+  ];
 }
 
 export function requireArtifacts(paths: string[], message: string): void {
