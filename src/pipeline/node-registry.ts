@@ -4,6 +4,7 @@ import { codexDockerPromptNode } from "./nodes/codex-docker-prompt-node.js";
 import { codexLocalPromptNode } from "./nodes/codex-local-prompt-node.js";
 import { commandCheckNode } from "./nodes/command-check-node.js";
 import { fileCheckNode } from "./nodes/file-check-node.js";
+import { flowRunNode } from "./nodes/flow-run-node.js";
 import { jiraFetchNode } from "./nodes/jira-fetch-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { reviewClaudeNode } from "./nodes/review-claude-node.js";
@@ -19,6 +20,7 @@ export type NodeKind =
   | "codex-local-prompt"
   | "command-check"
   | "file-check"
+  | "flow-run"
   | "jira-fetch"
   | "plan-codex"
   | "review-claude"
@@ -49,6 +51,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "codex-local-prompt": codexLocalPromptNode as unknown as AnyNodeDefinition,
   "command-check": commandCheckNode as unknown as AnyNodeDefinition,
   "file-check": fileCheckNode as unknown as AnyNodeDefinition,
+  "flow-run": flowRunNode as unknown as AnyNodeDefinition,
   "jira-fetch": jiraFetchNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
   "review-claude": reviewClaudeNode as unknown as AnyNodeDefinition,
@@ -69,6 +72,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
   "codex-local-prompt": { kind: "codex-local-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },
   "command-check": { kind: "command-check", version: 1, prompt: "forbidden", requiredParams: ["commands"] },
   "file-check": { kind: "file-check", version: 1, prompt: "forbidden", requiredParams: ["path"] },
+  "flow-run": { kind: "flow-run", version: 1, prompt: "forbidden", requiredParams: ["fileName"] },
   "jira-fetch": { kind: "jira-fetch", version: 1, prompt: "forbidden", requiredParams: ["jiraApiUrl", "outputFile"] },
   "plan-codex": { kind: "plan-codex", version: 1, prompt: "forbidden", requiredParams: ["prompt", "requiredArtifacts"] },
   "review-claude": {

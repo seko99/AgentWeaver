@@ -206,6 +206,7 @@ function expandRepeat(block: RepeatPhaseSpec): ExpandedPhaseSpec[] {
   for (let index = block.repeat.from; index <= block.repeat.to; index += 1) {
     const repeatVars: Record<string, JsonValue> = {
       [block.repeat.var]: index,
+      [`${block.repeat.var}_minus_one`]: index - 1,
     };
     for (const phase of block.phases) {
       phases.push(expandPhase(phase, repeatVars));
