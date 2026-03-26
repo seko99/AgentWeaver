@@ -13,7 +13,7 @@ The package is designed to run as an npm CLI and includes an interactive termina
 - Fetches a Jira issue by key or browse URL
 - Generates workflow artifacts such as design, implementation plan, QA plan, bug analysis, reviews, and summaries
 - For bug-analysis flows, structured JSON artifacts are the machine-readable source of truth, while Markdown artifacts are for human inspection
-- Runs workflow stages like `bug-analyze`, `bug-fix`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, and `auto`
+- Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, and `auto`
 - Persists compact `auto` pipeline state on disk so runs can resume without storing large agent outputs
 - Uses Docker runtime services for isolated Codex execution and build verification
 
@@ -24,7 +24,7 @@ The CLI now uses an executor + node + declarative flow architecture.
 - `src/index.ts` remains the CLI entrypoint and high-level orchestration layer
 - `src/executors/` contains first-class executors for external actions such as Jira fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
-- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `test-linter-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
+- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `test-linter-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
 - `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
 
 This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
@@ -53,7 +53,7 @@ This keeps command handlers focused on choosing a flow and providing parameters 
 - Node.js `>= 18.19.0`
 - npm
 - Docker with `docker compose` or `docker-compose`
-- `codex` CLI for `bug-analyze`, `bug-fix`, `plan`, and other Codex-driven steps
+- `codex` CLI for `bug-analyze`, `bug-fix`, `mr-description`, `plan`, and other Codex-driven steps
 - `claude` CLI for review and summary steps
 
 ## Installation
@@ -117,6 +117,7 @@ Direct CLI usage:
 agentweaver plan DEMO-3288
 agentweaver bug-analyze DEMO-3288
 agentweaver bug-fix DEMO-3288
+agentweaver mr-description DEMO-3288
 agentweaver task-describe DEMO-3288
 agentweaver implement DEMO-3288
 agentweaver review DEMO-3288
@@ -131,6 +132,7 @@ From source checkout:
 node dist/index.js plan DEMO-3288
 node dist/index.js bug-analyze DEMO-3288
 node dist/index.js bug-fix DEMO-3288
+node dist/index.js mr-description DEMO-3288
 node dist/index.js task-describe DEMO-3288
 node dist/index.js auto DEMO-3288
 ```

@@ -24,6 +24,7 @@ export type ArtifactRefSpec = {
     | "design-file"
     | "jira-description-file"
     | "jira-task-file"
+    | "mr-description-file"
     | "plan-file"
     | "qa-file"
     | "ready-to-merge-file"
