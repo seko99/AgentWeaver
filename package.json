@@ -1,6 +1,6 @@
 {
   "name": "agentweaver",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "CLI orchestrator for Jira/Codex/Claude engineering workflows",
   "keywords": [
     "agent",
