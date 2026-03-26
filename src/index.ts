@@ -10,6 +10,10 @@ import {
   REVIEW_FILE_RE,
   REVIEW_REPLY_FILE_RE,
   autoStateFile,
+  bugAnalyzeArtifacts,
+  bugAnalyzeJsonFile,
+  bugFixDesignJsonFile,
+  bugFixPlanJsonFile,
   ensureTaskWorkspaceDir,
   jiraTaskFile,
   planArtifacts,
@@ -20,6 +24,7 @@ import {
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
 import { buildJiraApiUrl, buildJiraBrowseUrl, extractIssueKey, requireJiraTaskFile } from "./jira.js";
+import { validateStructuredArtifacts } from "./structured-artifacts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { createPipelineContext } from "./pipeline/context.js";
 import { loadAutoFlow } from "./pipeline/auto-flow.js";
@@ -34,6 +39,8 @@ import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.
 import { bye, getOutputAdapter, printError, printInfo, printPanel, printPrompt, printSummary, setFlowExecutionState } from "./tui.js";
 
 const COMMANDS = [
+  "bug-analyze",
+  "bug-fix",
   "plan",
   "task-describe",
   "implement",
@@ -113,6 +120,8 @@ function usage(): string {
   return `Usage:
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
+  agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver implement [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -141,7 +150,7 @@ Flags:
   --prompt        Extra prompt text appended to the base prompt
 
 Required environment variables:
-  JIRA_API_KEY    Jira API key used in Authorization: Bearer <token> for plan
+  JIRA_API_KEY    Jira API key used in Authorization: Bearer <token> for Jira-backed flows
 
 Optional environment variables:
   JIRA_BASE_URL
@@ -492,6 +501,8 @@ function buildConfig(
 
 function checkPrerequisites(config: Config): void {
   if (
+    config.command === "bug-analyze" ||
+    config.command === "bug-fix" ||
     config.command === "plan" ||
     config.command === "task-describe" ||
     config.command === "review" ||
@@ -567,6 +578,8 @@ function autoFlowDefinition(): InteractiveFlowDefinition {
 function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
   return [
     autoFlowDefinition(),
+    declarativeFlowDefinition("bug-analyze", "bug-analyze", "bug-analyze.json"),
+    declarativeFlowDefinition("bug-fix", "bug-fix", "bug-fix.json"),
     declarativeFlowDefinition("plan", "plan", "plan.json"),
     declarativeFlowDefinition("task-describe", "task-describe", "task-describe.json"),
     declarativeFlowDefinition("implement", "implement", "implement.json"),
@@ -741,6 +754,38 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     }
     await runDeclarativeFlowBySpecFile("plan.json", config, {
       jiraApiUrl: config.jiraApiUrl,
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+    });
+    return false;
+  }
+
+  if (config.command === "bug-analyze") {
+    if (config.verbose) {
+      process.stdout.write(`Fetching Jira issue from browse URL: ${config.jiraBrowseUrl}\n`);
+      process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
+      process.stdout.write(`Saving Jira issue JSON to: ${config.jiraTaskFile}\n`);
+    }
+    await runDeclarativeFlowBySpecFile("bug-analyze.json", config, {
+      jiraApiUrl: config.jiraApiUrl,
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+    });
+    return false;
+  }
+
+  if (config.command === "bug-fix") {
+    requireJiraTaskFile(config.jiraTaskFile);
+    requireArtifacts(bugAnalyzeArtifacts(config.taskKey), "Bug-fix mode requires bug-analyze artifacts from the bug analysis phase.");
+    validateStructuredArtifacts(
+      [
+        { path: bugAnalyzeJsonFile(config.taskKey), schemaId: "bug-analysis/v1" },
+        { path: bugFixDesignJsonFile(config.taskKey), schemaId: "bug-fix-design/v1" },
+        { path: bugFixPlanJsonFile(config.taskKey), schemaId: "bug-fix-plan/v1" },
+      ],
+      "Bug-fix mode requires valid structured artifacts from the bug analysis phase.",
+    );
+    await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
     });

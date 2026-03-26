@@ -1,4 +1,5 @@
 import type { JsonValue } from "../executors/types.js";
+import type { StructuredArtifactSchemaId } from "../structured-artifacts.js";
 import type { NodeKind } from "./node-registry.js";
 import type { PromptTemplateRef } from "./prompt-registry.js";
 
@@ -14,6 +15,12 @@ export type ValueSpec =
 
 export type ArtifactRefSpec = {
   kind:
+    | "bug-analyze-file"
+    | "bug-analyze-json-file"
+    | "bug-fix-design-file"
+    | "bug-fix-design-json-file"
+    | "bug-fix-plan-file"
+    | "bug-fix-plan-json-file"
     | "design-file"
     | "jira-description-file"
     | "jira-task-file"
@@ -31,7 +38,7 @@ export type ArtifactRefSpec = {
 };
 
 export type ArtifactListRefSpec = {
-  kind: "plan-artifacts";
+  kind: "bug-analyze-artifacts" | "plan-artifacts";
   taskKey: ValueSpec;
 };
 
@@ -56,6 +63,15 @@ export type ExpectationSpec =
       kind: "require-artifacts";
       when?: ConditionSpec;
       paths: ValueSpec;
+      message: string;
+    }
+  | {
+      kind: "require-structured-artifacts";
+      when?: ConditionSpec;
+      items: Array<{
+        path: ValueSpec;
+        schemaId: StructuredArtifactSchemaId;
+      }>;
       message: string;
     }
   | {

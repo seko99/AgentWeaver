@@ -127,6 +127,12 @@ function validateExpectation(expectation: ExpectationSpec, path: string): void {
     validateValueSpec(expectation.paths, `${path}.paths`);
     return;
   }
+  if (expectation.kind === "require-structured-artifacts") {
+    expectation.items.forEach((item, index) => {
+      validateValueSpec(item.path, `${path}.items[${index}].path`);
+    });
+    return;
+  }
   if (expectation.kind === "require-file") {
     validateValueSpec(expectation.path, `${path}.path`);
     return;
@@ -328,6 +334,18 @@ export function validateExpandedPhases(phases: ExpandedPhaseSpec[]): void {
           validateExpandedCondition(expectation.when, phases, phaseIndex, stepIndex, `phases.${phase.id}.steps.${step.id}.expect[${index}].when`);
           if (expectation.kind === "require-artifacts") {
             validateExpandedValueSpec(expectation.paths, phases, phaseIndex, stepIndex, `phases.${phase.id}.steps.${step.id}.expect[${index}].paths`);
+            return;
+          }
+          if (expectation.kind === "require-structured-artifacts") {
+            expectation.items.forEach((item, itemIndex) => {
+              validateExpandedValueSpec(
+                item.path,
+                phases,
+                phaseIndex,
+                stepIndex,
+                `phases.${phase.id}.steps.${step.id}.expect[${index}].items[${itemIndex}].path`,
+              );
+            });
             return;
           }
           if (expectation.kind === "require-file") {

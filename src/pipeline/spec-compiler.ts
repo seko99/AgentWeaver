@@ -144,6 +144,18 @@ function interpolateExpectation(expectation: ExpectationSpec, repeatVars: Record
       message: interpolateText(expectation.message, repeatVars),
     };
   }
+  if (expectation.kind === "require-structured-artifacts") {
+    const when = expectation.when ? interpolateCondition(expectation.when, repeatVars) : undefined;
+    return {
+      kind: expectation.kind,
+      ...(when ? { when } : {}),
+      items: expectation.items.map((item) => ({
+        path: interpolateValueSpec(item.path, repeatVars),
+        schemaId: item.schemaId,
+      })),
+      message: interpolateText(expectation.message, repeatVars),
+    };
+  }
   const when = expectation.when ? interpolateCondition(expectation.when, repeatVars) : undefined;
   if (expectation.kind === "require-file") {
     return {

@@ -125,6 +125,22 @@ function resolveExpectation(expectation: ExpectationSpec, context: DeclarativeRe
       message: expectation.message,
     };
   }
+  if (expectation.kind === "require-structured-artifacts") {
+    return {
+      kind: "require-structured-artifacts",
+      items: expectation.items.map((item) => {
+        const value = resolveValue(item.path, context);
+        if (typeof value !== "string") {
+          throw new TaskRunnerError("Expectation 'require-structured-artifacts' item path must resolve to string");
+        }
+        return {
+          path: value,
+          schemaId: item.schemaId,
+        };
+      }),
+      message: expectation.message,
+    };
+  }
   if (expectation.kind === "require-file") {
     const value = resolveValue(expectation.path, context);
     if (typeof value !== "string") {
