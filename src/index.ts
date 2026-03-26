@@ -11,6 +11,9 @@ import {
   REVIEW_REPLY_FILE_RE,
   autoStateFile,
   bugAnalyzeArtifacts,
+  bugAnalyzeJsonFile,
+  bugFixDesignJsonFile,
+  bugFixPlanJsonFile,
   ensureTaskWorkspaceDir,
   jiraTaskFile,
   planArtifacts,
@@ -21,6 +24,7 @@ import {
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
 import { buildJiraApiUrl, buildJiraBrowseUrl, extractIssueKey, requireJiraTaskFile } from "./jira.js";
+import { validateStructuredArtifacts } from "./structured-artifacts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { createPipelineContext } from "./pipeline/context.js";
 import { loadAutoFlow } from "./pipeline/auto-flow.js";
@@ -773,6 +777,14 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
   if (config.command === "bug-fix") {
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(bugAnalyzeArtifacts(config.taskKey), "Bug-fix mode requires bug-analyze artifacts from the bug analysis phase.");
+    validateStructuredArtifacts(
+      [
+        { path: bugAnalyzeJsonFile(config.taskKey), schemaId: "bug-analysis/v1" },
+        { path: bugFixDesignJsonFile(config.taskKey), schemaId: "bug-fix-design/v1" },
+        { path: bugFixPlanJsonFile(config.taskKey), schemaId: "bug-fix-plan/v1" },
+      ],
+      "Bug-fix mode requires valid structured artifacts from the bug analysis phase.",
+    );
     await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
