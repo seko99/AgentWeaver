@@ -10,6 +10,7 @@ import {
   REVIEW_FILE_RE,
   REVIEW_REPLY_FILE_RE,
   autoStateFile,
+  bugAnalyzeArtifacts,
   ensureTaskWorkspaceDir,
   jiraTaskFile,
   planArtifacts,
@@ -35,6 +36,7 @@ import { bye, getOutputAdapter, printError, printInfo, printPanel, printPrompt, 
 
 const COMMANDS = [
   "bug-analyze",
+  "bug-fix",
   "plan",
   "task-describe",
   "implement",
@@ -115,6 +117,7 @@ function usage(): string {
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver implement [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -495,6 +498,7 @@ function buildConfig(
 function checkPrerequisites(config: Config): void {
   if (
     config.command === "bug-analyze" ||
+    config.command === "bug-fix" ||
     config.command === "plan" ||
     config.command === "task-describe" ||
     config.command === "review" ||
@@ -571,6 +575,7 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
   return [
     autoFlowDefinition(),
     declarativeFlowDefinition("bug-analyze", "bug-analyze", "bug-analyze.json"),
+    declarativeFlowDefinition("bug-fix", "bug-fix", "bug-fix.json"),
     declarativeFlowDefinition("plan", "plan", "plan.json"),
     declarativeFlowDefinition("task-describe", "task-describe", "task-describe.json"),
     declarativeFlowDefinition("implement", "implement", "implement.json"),
@@ -759,6 +764,16 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     }
     await runDeclarativeFlowBySpecFile("bug-analyze.json", config, {
       jiraApiUrl: config.jiraApiUrl,
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+    });
+    return false;
+  }
+
+  if (config.command === "bug-fix") {
+    requireJiraTaskFile(config.jiraTaskFile);
+    requireArtifacts(bugAnalyzeArtifacts(config.taskKey), "Bug-fix mode requires bug-analyze artifacts from the bug analysis phase.");
+    await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
     });

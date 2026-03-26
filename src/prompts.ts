@@ -9,9 +9,20 @@ export const PLAN_PROMPT_TEMPLATE =
 
 export const BUG_ANALYZE_PROMPT_TEMPLATE =
   "Посмотри и проанализируй баг в {jira_task_file}. " +
-  "Определи вероятный источник бага, затронутые компоненты, сценарий воспроизведения и ключевые технические причины, запиши результат в {bug_analyze_file}. " +
-  "Разработай дизайн исправления бага и запиши его в {bug_fix_design_file}. " +
-  "Разработай подробный план реализации исправления и запиши его в {bug_fix_plan_file}. ";
+  "Определи вероятный источник бага, затронутые компоненты, сценарий воспроизведения и ключевые технические причины, " +
+  "запиши человекочитаемый результат в {bug_analyze_file}, а структурированный JSON — в {bug_analyze_json_file}. " +
+  "Разработай дизайн исправления бага и запиши его в {bug_fix_design_file}, а структурированный JSON дизайна — в {bug_fix_design_json_file}. " +
+  "Разработай подробный план реализации исправления и запиши его в {bug_fix_plan_file}, а структурированный JSON плана — в {bug_fix_plan_json_file}. " +
+  "JSON-файлы должны быть валидными и содержать только JSON без markdown-обёртки. " +
+  "Для {bug_analyze_json_file} используй объект с полями: summary, suspected_root_cause, reproduction_steps, affected_components, evidence, risks, open_questions. " +
+  "Для {bug_fix_design_json_file} используй объект с полями: summary, goals, non_goals, target_components, proposed_changes, alternatives_considered, risks, validation_strategy. " +
+  "Для {bug_fix_plan_json_file} используй объект с полями: summary, prerequisites, implementation_steps, tests, rollout_notes. ";
+
+export const BUG_FIX_PROMPT_TEMPLATE =
+  "Проанализируй баг по артефактам {bug_analyze_file} и {bug_analyze_json_file}. " +
+  "Используй дизайн исправления из {bug_fix_design_file} и {bug_fix_design_json_file}. " +
+  "Используй план реализации из {bug_fix_plan_file} и {bug_fix_plan_json_file}. " +
+  "После этого приступай к реализации исправления в коде. ";
 
 export const IMPLEMENT_PROMPT_TEMPLATE =
   "Проанализируй системный дизайн {design_file}, план реализации {plan_file} и приступай к реализации по плану. ";
