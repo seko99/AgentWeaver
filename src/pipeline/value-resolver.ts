@@ -2,6 +2,10 @@ import { existsSync } from "node:fs";
 
 import {
   artifactFile,
+  bugAnalyzeArtifacts,
+  bugAnalyzeFile,
+  bugFixDesignFile,
+  bugFixPlanFile,
   designFile,
   jiraDescriptionFile,
   jiraTaskFile,
@@ -95,6 +99,12 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
   const taskKey = String(resolveValue(spec.taskKey, context));
   const iteration = spec.iteration === undefined ? undefined : Number(resolveValue(spec.iteration, context));
   switch (spec.kind) {
+    case "bug-analyze-file":
+      return bugAnalyzeFile(taskKey);
+    case "bug-fix-design-file":
+      return bugFixDesignFile(taskKey);
+    case "bug-fix-plan-file":
+      return bugFixPlanFile(taskKey);
     case "design-file":
       return designFile(taskKey);
     case "jira-description-file":
@@ -140,6 +150,8 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
 function resolveArtifactList(spec: ArtifactListRefSpec, context: ResolverContext): string[] {
   const taskKey = String(resolveValue(spec.taskKey, context));
   switch (spec.kind) {
+    case "bug-analyze-artifacts":
+      return bugAnalyzeArtifacts(taskKey);
     case "plan-artifacts":
       return planArtifacts(taskKey);
   }

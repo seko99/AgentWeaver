@@ -34,6 +34,18 @@ export function planFile(taskKey: string): string {
   return artifactFile("plan", taskKey, 1);
 }
 
+export function bugAnalyzeFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-analyze-${taskKey}.md`);
+}
+
+export function bugFixDesignFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-fix-design-${taskKey}.md`);
+}
+
+export function bugFixPlanFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `bug-fix-plan-${taskKey}.md`);
+}
+
 export function qaFile(taskKey: string): string {
   return artifactFile("qa", taskKey, 1);
 }
@@ -60,6 +72,10 @@ export function autoStateFile(taskKey: string): string {
 
 export function planArtifacts(taskKey: string): string[] {
   return [designFile(taskKey), planFile(taskKey), qaFile(taskKey)];
+}
+
+export function bugAnalyzeArtifacts(taskKey: string): string[] {
+  return [bugAnalyzeFile(taskKey), bugFixDesignFile(taskKey), bugFixPlanFile(taskKey)];
 }
 
 export function requireArtifacts(paths: string[], message: string): void {
