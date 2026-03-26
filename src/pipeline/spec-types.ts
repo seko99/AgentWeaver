@@ -1,4 +1,5 @@
 import type { JsonValue } from "../executors/types.js";
+import type { StructuredArtifactSchemaId } from "../structured-artifacts.js";
 import type { NodeKind } from "./node-registry.js";
 import type { PromptTemplateRef } from "./prompt-registry.js";
 
@@ -62,6 +63,15 @@ export type ExpectationSpec =
       kind: "require-artifacts";
       when?: ConditionSpec;
       paths: ValueSpec;
+      message: string;
+    }
+  | {
+      kind: "require-structured-artifacts";
+      when?: ConditionSpec;
+      items: Array<{
+        path: ValueSpec;
+        schemaId: StructuredArtifactSchemaId;
+      }>;
       message: string;
     }
   | {

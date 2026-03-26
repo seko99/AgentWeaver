@@ -9,19 +9,22 @@ export const PLAN_PROMPT_TEMPLATE =
 
 export const BUG_ANALYZE_PROMPT_TEMPLATE =
   "Посмотри и проанализируй баг в {jira_task_file}. " +
-  "Определи вероятный источник бага, затронутые компоненты, сценарий воспроизведения и ключевые технические причины, " +
-  "запиши человекочитаемый результат в {bug_analyze_file}, а структурированный JSON — в {bug_analyze_json_file}. " +
-  "Разработай дизайн исправления бага и запиши его в {bug_fix_design_file}, а структурированный JSON дизайна — в {bug_fix_design_json_file}. " +
-  "Разработай подробный план реализации исправления и запиши его в {bug_fix_plan_file}, а структурированный JSON плана — в {bug_fix_plan_json_file}. " +
+  "Сначала создай структурированные JSON-артефакты, они являются source of truth для следующих flow. " +
+  "Человекочитаемые markdown-файлы сделай как краткое производное представление этих JSON-артефактов для пользователя. " +
+  "Запиши структурированный анализ бага в {bug_analyze_json_file}, затем краткую markdown-версию в {bug_analyze_file}. " +
+  "Запиши структурированный дизайн исправления в {bug_fix_design_json_file}, затем краткую markdown-версию в {bug_fix_design_file}. " +
+  "Запиши структурированный план реализации в {bug_fix_plan_json_file}, затем краткую markdown-версию в {bug_fix_plan_file}. " +
   "JSON-файлы должны быть валидными и содержать только JSON без markdown-обёртки. " +
-  "Для {bug_analyze_json_file} используй объект с полями: summary, suspected_root_cause, reproduction_steps, affected_components, evidence, risks, open_questions. " +
-  "Для {bug_fix_design_json_file} используй объект с полями: summary, goals, non_goals, target_components, proposed_changes, alternatives_considered, risks, validation_strategy. " +
-  "Для {bug_fix_plan_json_file} используй объект с полями: summary, prerequisites, implementation_steps, tests, rollout_notes. ";
+  "Для {bug_analyze_json_file} используй объект: { summary: string, suspected_root_cause: { hypothesis: string, confidence: string }, reproduction_steps: string[], affected_components: string[], evidence: string[], risks: string[], open_questions: string[] }. " +
+  "Для {bug_fix_design_json_file} используй объект: { summary: string, goals: string[], non_goals: string[], target_components: string[], proposed_changes: [{ component: string, change: string, rationale: string }], alternatives_considered: [{ option: string, decision: string, rationale: string }], risks: string[], validation_strategy: string[] }. " +
+  "Для {bug_fix_plan_json_file} используй объект: { summary: string, prerequisites: string[], implementation_steps: [{ id: string, title: string, details: string }], tests: string[], rollout_notes: string[] }. ";
 
 export const BUG_FIX_PROMPT_TEMPLATE =
-  "Проанализируй баг по артефактам {bug_analyze_file} и {bug_analyze_json_file}. " +
-  "Используй дизайн исправления из {bug_fix_design_file} и {bug_fix_design_json_file}. " +
-  "Используй план реализации из {bug_fix_plan_file} и {bug_fix_plan_json_file}. " +
+  "Используй только структурированные артефакты как source of truth. " +
+  "Проанализируй баг по {bug_analyze_json_file}. " +
+  "Используй дизайн исправления из {bug_fix_design_json_file}. " +
+  "Используй план реализации из {bug_fix_plan_json_file}. " +
+  "Markdown-артефакты предназначены только для чтения человеком и не должны определять реализацию. " +
   "После этого приступай к реализации исправления в коде. ";
 
 export const IMPLEMENT_PROMPT_TEMPLATE =

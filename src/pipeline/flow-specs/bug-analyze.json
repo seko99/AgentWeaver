@@ -97,6 +97,40 @@
                 }
               },
               "message": "Bug analyze mode did not produce the required artifacts."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "bug-analyze-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "bug-analysis/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "bug-fix-design-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "bug-fix-design/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "bug-fix-plan-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "bug-fix-plan/v1"
+                }
+              ],
+              "message": "Bug analyze mode produced invalid structured artifacts."
             }
           ]
         }

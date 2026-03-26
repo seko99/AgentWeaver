@@ -11,33 +11,15 @@
           "prompt": {
             "templateRef": "bug-fix",
             "vars": {
-              "bug_analyze_file": {
-                "artifact": {
-                  "kind": "bug-analyze-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
               "bug_analyze_json_file": {
                 "artifact": {
                   "kind": "bug-analyze-json-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
-              "bug_fix_design_file": {
-                "artifact": {
-                  "kind": "bug-fix-design-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
               "bug_fix_design_json_file": {
                 "artifact": {
                   "kind": "bug-fix-design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "bug_fix_plan_file": {
-                "artifact": {
-                  "kind": "bug-fix-plan-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
