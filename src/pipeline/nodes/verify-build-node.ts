@@ -10,6 +10,7 @@ import { toExecutorContext } from "../types.js";
 export type VerifyBuildNodeParams = {
   dockerComposeFile: string;
   labelText: string;
+  service?: string;
 };
 
 export const verifyBuildNode: PipelineNodeDefinition<VerifyBuildNodeParams, VerifyBuildExecutorResult> = {
@@ -24,6 +25,7 @@ export const verifyBuildNode: PipelineNodeDefinition<VerifyBuildNodeParams, Veri
       toExecutorContext(context),
       {
         dockerComposeFile: params.dockerComposeFile,
+        ...(params.service ? { service: params.service } : {}),
       },
       executor.defaultConfig,
     );

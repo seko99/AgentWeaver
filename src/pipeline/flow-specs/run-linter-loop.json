@@ -1,0 +1,149 @@
+{
+  "kind": "run-linter-loop-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "run_linter_try_1",
+      "steps": [
+        {
+          "id": "run_linter",
+          "node": "verify-build",
+          "params": {
+            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "labelText": {
+              "const": "Running run_linter.sh in isolated Docker (attempt 1)"
+            },
+            "service": { "const": "run-linter" }
+          },
+          "stopFlowIf": {
+            "equals": [
+              { "ref": "steps.run_linter_try_1.run_linter.outputs.parsed.ok" },
+              { "const": true }
+            ]
+          }
+        },
+        {
+          "id": "fix_linter",
+          "when": {
+            "equals": [
+              { "ref": "steps.run_linter_try_1.run_linter.outputs.parsed.ok" },
+              { "const": false }
+            ]
+          },
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "run-linter-loop-fix",
+            "extraPrompt": {
+              "appendPrompt": {
+                "base": { "ref": "params.extraPrompt" },
+                "suffix": {
+                  "template": "Последний результат run_linter.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
+                  "vars": {
+                    "exit_code": { "ref": "steps.run_linter_try_1.run_linter.outputs.parsed.exitCode" },
+                    "summary": { "ref": "steps.run_linter_try_1.run_linter.outputs.parsed.summary" }
+                  }
+                }
+              }
+            },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "const": "Running Codex linter loop fix (attempt 1)"
+            },
+            "model": { "const": "gpt-5.4" }
+          }
+        }
+      ]
+    },
+    {
+      "repeat": {
+        "var": "attempt",
+        "from": 2,
+        "to": 5
+      },
+      "phases": [
+        {
+          "id": "run_linter_try_${attempt}",
+          "when": {
+            "equals": [
+              { "ref": "steps.run_linter_try_${attempt_minus_one}.run_linter.outputs.parsed.ok" },
+              { "const": false }
+            ]
+          },
+          "steps": [
+            {
+              "id": "run_linter",
+              "node": "verify-build",
+              "params": {
+                "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+                "labelText": {
+                  "template": "Running run_linter.sh in isolated Docker (attempt ${attempt})"
+                },
+                "service": { "const": "run-linter" }
+              },
+              "stopFlowIf": {
+                "equals": [
+                  { "ref": "steps.run_linter_try_${attempt}.run_linter.outputs.parsed.ok" },
+                  { "const": true }
+                ]
+              }
+            },
+            {
+              "id": "fix_linter",
+              "when": {
+                "equals": [
+                  { "ref": "steps.run_linter_try_${attempt}.run_linter.outputs.parsed.ok" },
+                  { "const": false }
+                ]
+              },
+              "node": "codex-local-prompt",
+              "prompt": {
+                "templateRef": "run-linter-loop-fix",
+                "extraPrompt": {
+                  "appendPrompt": {
+                    "base": { "ref": "params.extraPrompt" },
+                    "suffix": {
+                      "template": "Последний результат run_linter.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
+                      "vars": {
+                        "exit_code": { "ref": "steps.run_linter_try_${attempt}.run_linter.outputs.parsed.exitCode" },
+                        "summary": { "ref": "steps.run_linter_try_${attempt}.run_linter.outputs.parsed.summary" }
+                      }
+                    }
+                  }
+                },
+                "format": "task-prompt"
+              },
+              "params": {
+                "labelText": {
+                  "template": "Running Codex linter loop fix (attempt ${attempt})"
+                },
+                "model": { "const": "gpt-5.4" }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "run_linter_failed",
+      "steps": [
+        {
+          "id": "assert_run_linter_success",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.dockerComposeFile" }
+          },
+          "expect": [
+            {
+              "kind": "step-output",
+              "value": { "ref": "steps.run_linter_try_5.run_linter.outputs.parsed.ok" },
+              "equals": { "const": true },
+              "message": "run-linter-loop exhausted all attempts without a successful run_linter.sh execution."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

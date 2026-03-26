@@ -45,6 +45,10 @@ export const TASK_SUMMARY_PROMPT_TEMPLATE =
 
 export const TEST_FIX_PROMPT_TEMPLATE = "Прогони тесты, исправь ошибки.";
 export const TEST_LINTER_FIX_PROMPT_TEMPLATE = "Прогони линтер, исправь замечания.";
+export const RUN_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
+  "Запусти ./run_tests.sh, проанализируй последнюю ошибку проверки, исправь код и подготовь изменения так, чтобы следующий прогон run_tests.sh прошёл успешно.";
+export const RUN_LINTER_LOOP_FIX_PROMPT_TEMPLATE =
+  "Запусти ./run_linter.sh, проанализируй последнюю ошибку линтера или генерации, исправь код и подготовь изменения так, чтобы следующий прогон run_linter.sh прошёл успешно.";
 export const AUTO_REVIEW_FIX_EXTRA_PROMPT = "Исправлять только блокеры, критикалы и важные";
 
 export function formatTemplate(template: string, values: Record<string, string>): string {
