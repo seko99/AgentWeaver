@@ -7,6 +7,7 @@ import { setOutputAdapter, stripAnsi, type OutputAdapter } from "./tui.js";
 type InteractiveFlowDefinition = {
   id: string;
   label: string;
+  description: string;
   phases: Array<{
     id: string;
     repeatVars: Record<string, string | number | boolean | null>;
@@ -37,6 +38,7 @@ export class InteractiveUi {
   private readonly header: any;
   private readonly progress: any;
   private readonly flowList: any;
+  private readonly description: any;
   private readonly status: any;
   private readonly summary: any;
   private readonly log: any;
@@ -124,7 +126,7 @@ export class InteractiveUi {
       top: "50%+2",
       left: 0,
       width: "34%",
-      bottom: 10,
+      bottom: 11,
       keys: true,
       vi: true,
       mouse: true,
@@ -175,12 +177,33 @@ export class InteractiveUi {
       valign: "middle",
     });
 
-    this.status = blessed.box({
+    this.description = blessed.box({
       parent: this.screen,
-      bottom: 4,
+      bottom: 6,
       left: 0,
       width: "34%",
-      height: 6,
+      height: 5,
+      tags: true,
+      label: " Flow Description ",
+      padding: {
+        left: 1,
+        right: 1,
+      },
+      border: "line",
+      scrollable: true,
+      alwaysScroll: true,
+      style: {
+        border: { fg: "magenta" },
+        fg: "white",
+      },
+    });
+
+    this.status = blessed.box({
+      parent: this.screen,
+      bottom: 1,
+      left: 0,
+      width: "34%",
+      height: 5,
       tags: true,
       label: " Status ",
       padding: {
@@ -199,7 +222,7 @@ export class InteractiveUi {
       top: 3,
       left: "34%",
       width: "66%",
-      height: 12,
+      height: 16,
       tags: true,
       label: " Task Summary ",
       padding: {
@@ -219,8 +242,8 @@ export class InteractiveUi {
 
     this.log = blessed.log({
       parent: this.screen,
-      top: 15,
-      bottom: 4,
+      top: 19,
+      bottom: 1,
       left: "34%",
       width: "66%",
       tags: false,
@@ -339,6 +362,7 @@ export class InteractiveUi {
         return;
       }
       this.selectedFlowId = flow.id;
+      this.renderDescription();
       this.renderProgress();
       this.requestRender();
     });
@@ -475,6 +499,7 @@ export class InteractiveUi {
     this.updateHeader();
     this.flowList.setItems(this.options.flows.map((flow) => flow.label));
     this.flowList.select(this.options.flows.findIndex((flow) => flow.id === this.selectedFlowId));
+    this.renderDescription();
     this.renderSummary();
     this.renderProgress();
 
@@ -513,6 +538,12 @@ export class InteractiveUi {
   private renderSummary(): void {
     const summaryBody = this.summaryText || "Task summary is not available yet.";
     this.summary.setContent(renderMarkdownToTerminal(stripAnsi(summaryBody)));
+  }
+
+  private renderDescription(): void {
+    const flow = this.flowMap.get(this.selectedFlowId);
+    const description = flow?.description?.trim() || "Описание для этого flow пока не задано.";
+    this.description.setContent(renderMarkdownToTerminal(stripAnsi(description)));
   }
 
   private createAdapter(): OutputAdapter {

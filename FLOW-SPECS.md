@@ -223,6 +223,7 @@ Runtime находит node через registry:
 Сейчас поддерживаются:
 
 - `require-artifacts`
+- `require-structured-artifacts`
 - `require-file`
 - `step-output`
 
@@ -249,6 +250,36 @@ Runtime находит node через registry:
 2. вычислить `paths`
 3. проверить, что все эти файлы существуют
 4. если нет, упасть с `message`
+
+Для structured JSON-артефактов есть отдельная postcondition:
+
+```json
+"expect": [
+  {
+    "kind": "require-structured-artifacts",
+    "items": [
+      {
+        "path": {
+          "artifact": {
+            "kind": "review-json-file",
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "ref": "params.iteration" }
+          }
+        },
+        "schemaId": "review-findings/v1"
+      }
+    ],
+    "message": "Claude review produced invalid structured artifacts."
+  }
+]
+```
+
+Это значит:
+
+1. выполнить node
+2. вычислить пути к JSON-артефактам
+3. провалидировать каждый файл по указанной schema
+4. если JSON отсутствует или невалиден, упасть с `message`
 
 Где это реализовано:
 

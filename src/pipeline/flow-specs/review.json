@@ -23,15 +23,34 @@
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "review_file": {
                 "artifact": {
                   "kind": "review-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_json_file": {
+                "artifact": {
+                  "kind": "review-json-file",
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.iteration" }
                 }
@@ -65,6 +84,23 @@
                 ]
               },
               "message": "Claude review did not produce the required review artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  },
+                  "schemaId": "review-findings/v1"
+                }
+              ],
+              "message": "Claude review produced invalid structured artifacts."
             }
           ]
         },
@@ -118,6 +154,13 @@
                   "iteration": { "ref": "params.iteration" }
                 }
               },
+              "review_json_file": {
+                "artifact": {
+                  "kind": "review-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
               "jira_task_file": {
                 "artifact": {
                   "kind": "jira-task-file",
@@ -130,15 +173,34 @@
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "review_reply_file": {
                 "artifact": {
                   "kind": "review-reply-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_reply_json_file": {
+                "artifact": {
+                  "kind": "review-reply-json-file",
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.iteration" }
                 }
@@ -172,6 +234,23 @@
                 ]
               },
               "message": "Codex review reply did not produce the required review-reply artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-reply-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  },
+                  "schemaId": "review-reply/v1"
+                }
+              ],
+              "message": "Codex review reply produced invalid structured artifacts."
             }
           ]
         },

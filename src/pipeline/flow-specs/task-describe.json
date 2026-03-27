@@ -9,7 +9,7 @@
           "id": "run_codex_task_describe",
           "node": "codex-local-prompt",
           "prompt": {
-            "inlineTemplate": "Посмотри задачу в {jira_task_file}. Проанализируй код и оформи описание для Jira, без лишних подробностей. Запиши в {jira_description_file}.",
+            "inlineTemplate": "Посмотри задачу в {jira_task_file}. Проанализируй код и оформи краткое описание для Jira, без лишних подробностей. Сначала запиши source-of-truth JSON в {jira_description_json_file} в виде объекта { summary: string }, затем markdown-версию в {jira_description_file}.",
             "vars": {
               "jira_task_file": {
                 "artifact": {
@@ -20,6 +20,12 @@
               "jira_description_file": {
                 "artifact": {
                   "kind": "jira-description-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "jira_description_json_file": {
+                "artifact": {
+                  "kind": "jira-description-json-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               }
@@ -37,6 +43,12 @@
                     "kind": "jira-description-file",
                     "taskKey": { "ref": "params.taskKey" }
                   }
+                },
+                {
+                  "artifact": {
+                    "kind": "jira-description-json-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
                 }
               ]
             }
@@ -52,6 +64,22 @@
                 }
               },
               "message": "Task describe mode did not produce the Jira description artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "jira-description-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "jira-description/v1"
+                }
+              ],
+              "message": "Task describe mode produced invalid structured artifacts."
             }
           ]
         }
