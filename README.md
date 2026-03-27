@@ -1,6 +1,6 @@
 # AgentWeaver
 
-`AgentWeaver` is a TypeScript/Node.js CLI for engineering workflows around Jira, Codex, and Claude.
+`AgentWeaver` is a TypeScript/Node.js CLI for engineering workflows around Jira, GitLab review artifacts, Codex, and Claude.
 
 It orchestrates a flow like:
 
@@ -11,6 +11,7 @@ The package is designed to run as an npm CLI and includes an interactive termina
 ## What It Does
 
 - Fetches a Jira issue by key or browse URL
+- Fetches GitLab merge request review comments into reusable markdown and JSON artifacts
 - Generates workflow artifacts such as design, implementation plan, QA plan, bug analysis, reviews, and summaries
 - Machine-readable JSON artifacts are stored under `.agentweaver-<TASK>/.artifacts/` and act as the source of truth between workflow steps; Markdown artifacts remain for human inspection
 - Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, and `auto`
@@ -22,9 +23,9 @@ The package is designed to run as an npm CLI and includes an interactive termina
 The CLI now uses an executor + node + declarative flow architecture.
 
 - `src/index.ts` remains the CLI entrypoint and high-level orchestration layer
-- `src/executors/` contains first-class executors for external actions such as Jira fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
+- `src/executors/` contains first-class executors for external actions such as Jira fetch, GitLab review fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
-- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `test-linter-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
+- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `test-linter-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
 - `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
 
 This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
@@ -86,6 +87,7 @@ Required:
 Common optional variables:
 
 - `JIRA_BASE_URL` — required when you pass only an issue key like `DEMO-123`
+- `GITLAB_TOKEN` — personal access token for `gitlab-review`
 - `AGENTWEAVER_HOME` — path to the AgentWeaver installation directory
 - `DOCKER_COMPOSE_BIN` — override compose command, for example `docker compose`
 - `CODEX_BIN` — override `codex` executable path
@@ -117,6 +119,7 @@ Direct CLI usage:
 agentweaver plan DEMO-3288
 agentweaver bug-analyze DEMO-3288
 agentweaver bug-fix DEMO-3288
+agentweaver gitlab-review DEMO-3288
 agentweaver mr-description DEMO-3288
 agentweaver task-describe DEMO-3288
 agentweaver implement DEMO-3288
@@ -132,6 +135,7 @@ From source checkout:
 node dist/index.js plan DEMO-3288
 node dist/index.js bug-analyze DEMO-3288
 node dist/index.js bug-fix DEMO-3288
+node dist/index.js gitlab-review DEMO-3288
 node dist/index.js mr-description DEMO-3288
 node dist/index.js task-describe DEMO-3288
 node dist/index.js auto DEMO-3288
