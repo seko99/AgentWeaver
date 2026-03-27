@@ -21,10 +21,24 @@
                   "iteration": { "ref": "params.latestIteration" }
                 }
               },
+              "review_reply_json_file": {
+                "artifact": {
+                  "kind": "review-reply-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.latestIteration" }
+                }
+              },
               "items": { "ref": "params.reviewFixPoints" },
               "review_fix_file": {
                 "artifact": {
                   "kind": "review-fix-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.latestIteration" }
+                }
+              },
+              "review_fix_json_file": {
+                "artifact": {
+                  "kind": "review-fix-json-file",
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.latestIteration" }
                 }
@@ -58,6 +72,23 @@
                 ]
               },
               "message": "Review-fix mode did not produce the required review-fix artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-fix-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.latestIteration" }
+                    }
+                  },
+                  "schemaId": "review-fix-report/v1"
+                }
+              ],
+              "message": "Review-fix mode produced invalid structured artifacts."
             }
           ]
         },

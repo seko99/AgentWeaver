@@ -124,6 +124,12 @@
                   "kind": "task-summary-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
+              },
+              "task_summary_json_file": {
+                "artifact": {
+                  "kind": "task-summary-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
               }
             },
             "format": "plain"
@@ -135,6 +141,16 @@
                 "kind": "task-summary-file",
                 "taskKey": { "ref": "params.taskKey" }
               }
+            },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "task-summary-json-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              ]
             },
             "model": { "const": "haiku" }
           },
@@ -153,6 +169,22 @@
                 ]
               },
               "message": "Claude summary did not produce the task summary artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "task-summary-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "task-summary/v1"
+                }
+              ],
+              "message": "Claude summary produced invalid structured artifacts."
             }
           ],
           "after": [

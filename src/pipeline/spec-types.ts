@@ -22,18 +22,27 @@ export type ArtifactRefSpec = {
     | "bug-fix-plan-file"
     | "bug-fix-plan-json-file"
     | "design-file"
+    | "design-json-file"
     | "jira-description-file"
+    | "jira-description-json-file"
     | "jira-task-file"
     | "mr-description-file"
+    | "mr-description-json-file"
     | "plan-file"
+    | "plan-json-file"
     | "qa-file"
+    | "qa-json-file"
     | "ready-to-merge-file"
     | "review-file"
+    | "review-json-file"
     | "review-fix-file"
+    | "review-fix-json-file"
     | "review-reply-file"
+    | "review-reply-json-file"
     | "review-reply-summary-file"
     | "review-summary-file"
-    | "task-summary-file";
+    | "task-summary-file"
+    | "task-summary-json-file";
   taskKey: ValueSpec;
   iteration?: ValueSpec;
 };

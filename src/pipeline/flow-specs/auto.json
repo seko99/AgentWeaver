@@ -51,15 +51,33 @@
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "qa_file": {
                 "artifact": {
                   "kind": "qa-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "qa_json_file": {
+                "artifact": {
+                  "kind": "qa-json-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               }
@@ -82,6 +100,40 @@
                 }
               },
               "message": "Plan mode did not produce the required artifacts."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "design-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "implementation-design/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "plan-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "implementation-plan/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "qa-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "qa-plan/v1"
+                }
+              ],
+              "message": "Plan mode produced invalid structured artifacts."
             }
           ]
         }
@@ -102,9 +154,21 @@
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               }
@@ -184,15 +248,34 @@
                       "taskKey": { "ref": "params.taskKey" }
                     }
                   },
+                  "design_json_file": {
+                    "artifact": {
+                      "kind": "design-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
                   "plan_file": {
                     "artifact": {
                       "kind": "plan-file",
                       "taskKey": { "ref": "params.taskKey" }
                     }
                   },
+                  "plan_json_file": {
+                    "artifact": {
+                      "kind": "plan-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
                   "review_file": {
                     "artifact": {
                       "kind": "review-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
+                  "review_json_file": {
+                    "artifact": {
+                      "kind": "review-json-file",
                       "taskKey": { "ref": "params.taskKey" },
                       "iteration": { "ref": "repeat.iteration" }
                     }
@@ -226,6 +309,23 @@
                     ]
                   },
                   "message": "Claude review did not produce the required review artifact."
+                },
+                {
+                  "kind": "require-structured-artifacts",
+                  "when": { "not": { "ref": "context.dryRun" } },
+                  "items": [
+                    {
+                      "path": {
+                        "artifact": {
+                          "kind": "review-json-file",
+                          "taskKey": { "ref": "params.taskKey" },
+                          "iteration": { "ref": "repeat.iteration" }
+                        }
+                      },
+                      "schemaId": "review-findings/v1"
+                    }
+                  ],
+                  "message": "Claude review produced invalid structured artifacts."
                 }
               ]
             },
@@ -279,6 +379,13 @@
                       "iteration": { "ref": "repeat.iteration" }
                     }
                   },
+                  "review_json_file": {
+                    "artifact": {
+                      "kind": "review-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
                   "jira_task_file": {
                     "artifact": {
                       "kind": "jira-task-file",
@@ -291,15 +398,34 @@
                       "taskKey": { "ref": "params.taskKey" }
                     }
                   },
+                  "design_json_file": {
+                    "artifact": {
+                      "kind": "design-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
                   "plan_file": {
                     "artifact": {
                       "kind": "plan-file",
                       "taskKey": { "ref": "params.taskKey" }
                     }
                   },
+                  "plan_json_file": {
+                    "artifact": {
+                      "kind": "plan-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
                   "review_reply_file": {
                     "artifact": {
                       "kind": "review-reply-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
+                  "review_reply_json_file": {
+                    "artifact": {
+                      "kind": "review-reply-json-file",
                       "taskKey": { "ref": "params.taskKey" },
                       "iteration": { "ref": "repeat.iteration" }
                     }
@@ -333,6 +459,23 @@
                     ]
                   },
                   "message": "Codex review reply did not produce the required review-reply artifact."
+                },
+                {
+                  "kind": "require-structured-artifacts",
+                  "when": { "not": { "ref": "context.dryRun" } },
+                  "items": [
+                    {
+                      "path": {
+                        "artifact": {
+                          "kind": "review-reply-json-file",
+                          "taskKey": { "ref": "params.taskKey" },
+                          "iteration": { "ref": "repeat.iteration" }
+                        }
+                      },
+                      "schemaId": "review-reply/v1"
+                    }
+                  ],
+                  "message": "Codex review reply produced invalid structured artifacts."
                 }
               ]
             },
@@ -414,10 +557,24 @@
                       "iteration": { "ref": "repeat.iteration" }
                     }
                   },
+                  "review_reply_json_file": {
+                    "artifact": {
+                      "kind": "review-reply-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
                   "items": { "ref": "params.reviewFixPoints" },
                   "review_fix_file": {
                     "artifact": {
                       "kind": "review-fix-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.iteration" }
+                    }
+                  },
+                  "review_fix_json_file": {
+                    "artifact": {
+                      "kind": "review-fix-json-file",
                       "taskKey": { "ref": "params.taskKey" },
                       "iteration": { "ref": "repeat.iteration" }
                     }
@@ -456,6 +613,23 @@
                     ]
                   },
                   "message": "Review-fix mode did not produce the required review-fix artifact."
+                },
+                {
+                  "kind": "require-structured-artifacts",
+                  "when": { "not": { "ref": "context.dryRun" } },
+                  "items": [
+                    {
+                      "path": {
+                        "artifact": {
+                          "kind": "review-fix-json-file",
+                          "taskKey": { "ref": "params.taskKey" },
+                          "iteration": { "ref": "repeat.iteration" }
+                        }
+                      },
+                      "schemaId": "review-fix-report/v1"
+                    }
+                  ],
+                  "message": "Review-fix mode produced invalid structured artifacts."
                 }
               ]
             }

@@ -48,15 +48,33 @@
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "qa_file": {
                 "artifact": {
                   "kind": "qa-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "qa_json_file": {
+                "artifact": {
+                  "kind": "qa-json-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               }
@@ -79,6 +97,40 @@
                 }
               },
               "message": "Plan mode did not produce the required artifacts."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "design-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "implementation-design/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "plan-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "implementation-plan/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "qa-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "qa-plan/v1"
+                }
+              ],
+              "message": "Plan mode produced invalid structured artifacts."
             }
           ]
         }

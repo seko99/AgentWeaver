@@ -22,6 +22,12 @@
                   "kind": "mr-description-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
+              },
+              "mr_description_json_file": {
+                "artifact": {
+                  "kind": "mr-description-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
               }
             },
             "extraPrompt": { "ref": "params.extraPrompt" },
@@ -35,6 +41,12 @@
                 {
                   "artifact": {
                     "kind": "mr-description-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                },
+                {
+                  "artifact": {
+                    "kind": "mr-description-json-file",
                     "taskKey": { "ref": "params.taskKey" }
                   }
                 }
@@ -52,6 +64,22 @@
                 }
               },
               "message": "MR description mode did not produce the MR description artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "mr-description-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "mr-description/v1"
+                }
+              ],
+              "message": "MR description mode produced invalid structured artifacts."
             }
           ]
         }

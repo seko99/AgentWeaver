@@ -5,7 +5,16 @@ import { TaskRunnerError } from "./errors.js";
 export type StructuredArtifactSchemaId =
   | "bug-analysis/v1"
   | "bug-fix-design/v1"
-  | "bug-fix-plan/v1";
+  | "bug-fix-plan/v1"
+  | "implementation-design/v1"
+  | "implementation-plan/v1"
+  | "jira-description/v1"
+  | "mr-description/v1"
+  | "qa-plan/v1"
+  | "review-findings/v1"
+  | "review-fix-report/v1"
+  | "review-reply/v1"
+  | "task-summary/v1";
 
 type ValidationIssue = string;
 
@@ -34,16 +43,10 @@ function expectNonEmptyString(value: unknown, path: string, issues: ValidationIs
   }
 }
 
-function expectStringArray(value: unknown, path: string, issues: ValidationIssue[]): void {
-  if (!Array.isArray(value)) {
-    issues.push(`${path} must be an array`);
-    return;
+function expectBoolean(value: unknown, path: string, issues: ValidationIssue[]): void {
+  if (typeof value !== "boolean") {
+    issues.push(`${path} must be a boolean`);
   }
-  if (value.length === 0) {
-    issues.push(`${path} must not be empty`);
-    return;
-  }
-  value.forEach((item, index) => expectNonEmptyString(item, `${path}[${index}]`, issues));
 }
 
 function expectObject(value: unknown, path: string, issues: ValidationIssue[]): value is Record<string, unknown> {
@@ -52,6 +55,115 @@ function expectObject(value: unknown, path: string, issues: ValidationIssue[]): 
     return false;
   }
   return true;
+}
+
+function expectStringArray(value: unknown, path: string, issues: ValidationIssue[], allowEmpty = false): void {
+  if (!Array.isArray(value)) {
+    issues.push(`${path} must be an array`);
+    return;
+  }
+  if (!allowEmpty && value.length === 0) {
+    issues.push(`${path} must not be empty`);
+    return;
+  }
+  value.forEach((item, index) => expectNonEmptyString(item, `${path}[${index}]`, issues));
+}
+
+function expectObjectArray(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+  validateItem: (item: Record<string, unknown>, itemPath: string, issues: ValidationIssue[]) => void,
+  allowEmpty = false,
+): void {
+  if (!Array.isArray(value)) {
+    issues.push(`${path} must be an array`);
+    return;
+  }
+  if (!allowEmpty && value.length === 0) {
+    issues.push(`${path} must not be empty`);
+    return;
+  }
+  value.forEach((item, index) => {
+    const itemPath = `${path}[${index}]`;
+    if (!expectObject(item, itemPath, issues)) {
+      return;
+    }
+    validateItem(item, itemPath, issues);
+  });
+}
+
+function validateBriefText(value: unknown, path: string, issues: ValidationIssue[]): void {
+  if (!expectObject(value, path, issues)) {
+    return;
+  }
+  expectNonEmptyString(value.summary, `${path}.summary`, issues);
+}
+
+function implementationDesignSchema(): StructuredArtifactSchema {
+  return {
+    id: "implementation-design/v1",
+    validate({ path, value }) {
+      const issues: ValidationIssue[] = [];
+      if (!expectObject(value, path, issues)) {
+        return issues;
+      }
+      expectNonEmptyString(value.summary, `${path}.summary`, issues);
+      expectStringArray(value.goals, `${path}.goals`, issues);
+      expectStringArray(value.non_goals, `${path}.non_goals`, issues, true);
+      expectStringArray(value.components, `${path}.components`, issues);
+      expectObjectArray(value.decisions, `${path}.decisions`, issues, (item, itemPath, currentIssues) => {
+        expectNonEmptyString(item.component, `${itemPath}.component`, currentIssues);
+        expectNonEmptyString(item.decision, `${itemPath}.decision`, currentIssues);
+        expectNonEmptyString(item.rationale, `${itemPath}.rationale`, currentIssues);
+      });
+      expectStringArray(value.risks, `${path}.risks`, issues, true);
+      expectStringArray(value.open_questions, `${path}.open_questions`, issues, true);
+      return issues;
+    },
+  };
+}
+
+function implementationPlanSchema(): StructuredArtifactSchema {
+  return {
+    id: "implementation-plan/v1",
+    validate({ path, value }) {
+      const issues: ValidationIssue[] = [];
+      if (!expectObject(value, path, issues)) {
+        return issues;
+      }
+      expectNonEmptyString(value.summary, `${path}.summary`, issues);
+      expectStringArray(value.prerequisites, `${path}.prerequisites`, issues, true);
+      expectObjectArray(value.implementation_steps, `${path}.implementation_steps`, issues, (item, itemPath, currentIssues) => {
+        expectNonEmptyString(item.id, `${itemPath}.id`, currentIssues);
+        expectNonEmptyString(item.title, `${itemPath}.title`, currentIssues);
+        expectNonEmptyString(item.details, `${itemPath}.details`, currentIssues);
+      });
+      expectStringArray(value.tests, `${path}.tests`, issues);
+      expectStringArray(value.rollout_notes, `${path}.rollout_notes`, issues, true);
+      return issues;
+    },
+  };
+}
+
+function qaPlanSchema(): StructuredArtifactSchema {
+  return {
+    id: "qa-plan/v1",
+    validate({ path, value }) {
+      const issues: ValidationIssue[] = [];
+      if (!expectObject(value, path, issues)) {
+        return issues;
+      }
+      expectNonEmptyString(value.summary, `${path}.summary`, issues);
+      expectObjectArray(value.test_scenarios, `${path}.test_scenarios`, issues, (item, itemPath, currentIssues) => {
+        expectNonEmptyString(item.id, `${itemPath}.id`, currentIssues);
+        expectNonEmptyString(item.title, `${itemPath}.title`, currentIssues);
+        expectNonEmptyString(item.expected_result, `${itemPath}.expected_result`, currentIssues);
+      });
+      expectStringArray(value.non_functional_checks, `${path}.non_functional_checks`, issues, true);
+      return issues;
+    },
+  };
 }
 
 function bugAnalysisSchema(): StructuredArtifactSchema {
@@ -70,12 +182,8 @@ function bugAnalysisSchema(): StructuredArtifactSchema {
       expectStringArray(value.reproduction_steps, `${path}.reproduction_steps`, issues);
       expectStringArray(value.affected_components, `${path}.affected_components`, issues);
       expectStringArray(value.evidence, `${path}.evidence`, issues);
-      expectStringArray(value.risks, `${path}.risks`, issues);
-      if (!Array.isArray(value.open_questions)) {
-        issues.push(`${path}.open_questions must be an array`);
-      } else {
-        value.open_questions.forEach((item, index) => expectNonEmptyString(item, `${path}.open_questions[${index}]`, issues));
-      }
+      expectStringArray(value.risks, `${path}.risks`, issues, true);
+      expectStringArray(value.open_questions, `${path}.open_questions`, issues, true);
       return issues;
     },
   };
@@ -84,86 +192,68 @@ function bugAnalysisSchema(): StructuredArtifactSchema {
 function bugFixDesignSchema(): StructuredArtifactSchema {
   return {
     id: "bug-fix-design/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      expectStringArray(value.goals, `${path}.goals`, issues);
-      if (!Array.isArray(value.non_goals)) {
-        issues.push(`${path}.non_goals must be an array`);
-      } else {
-        value.non_goals.forEach((item, index) => expectNonEmptyString(item, `${path}.non_goals[${index}]`, issues));
-      }
-      expectStringArray(value.target_components, `${path}.target_components`, issues);
-      if (!Array.isArray(value.proposed_changes)) {
-        issues.push(`${path}.proposed_changes must be an array`);
-      } else if (value.proposed_changes.length === 0) {
-        issues.push(`${path}.proposed_changes must not be empty`);
-      } else {
-        value.proposed_changes.forEach((item, index) => {
-          if (!expectObject(item, `${path}.proposed_changes[${index}]`, issues)) {
-            return;
-          }
-          expectNonEmptyString(item.component, `${path}.proposed_changes[${index}].component`, issues);
-          expectNonEmptyString(item.change, `${path}.proposed_changes[${index}].change`, issues);
-          expectNonEmptyString(item.rationale, `${path}.proposed_changes[${index}].rationale`, issues);
-        });
-      }
-      if (!Array.isArray(value.alternatives_considered)) {
-        issues.push(`${path}.alternatives_considered must be an array`);
-      } else {
-        value.alternatives_considered.forEach((item, index) => {
-          if (!expectObject(item, `${path}.alternatives_considered[${index}]`, issues)) {
-            return;
-          }
-          expectNonEmptyString(item.option, `${path}.alternatives_considered[${index}].option`, issues);
-          expectNonEmptyString(item.decision, `${path}.alternatives_considered[${index}].decision`, issues);
-          expectNonEmptyString(item.rationale, `${path}.alternatives_considered[${index}].rationale`, issues);
-        });
-      }
-      expectStringArray(value.risks, `${path}.risks`, issues);
-      expectStringArray(value.validation_strategy, `${path}.validation_strategy`, issues);
-      return issues;
-    },
+    validate: implementationDesignSchema().validate,
   };
 }
 
 function bugFixPlanSchema(): StructuredArtifactSchema {
   return {
     id: "bug-fix-plan/v1",
+    validate: implementationPlanSchema().validate,
+  };
+}
+
+function reviewFindingsSchema(): StructuredArtifactSchema {
+  return {
+    id: "review-findings/v1",
     validate({ path, value }) {
       const issues: ValidationIssue[] = [];
       if (!expectObject(value, path, issues)) {
         return issues;
       }
       expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      if (!Array.isArray(value.prerequisites)) {
-        issues.push(`${path}.prerequisites must be an array`);
-      } else {
-        value.prerequisites.forEach((item, index) => expectNonEmptyString(item, `${path}.prerequisites[${index}]`, issues));
+      expectBoolean(value.ready_to_merge, `${path}.ready_to_merge`, issues);
+      expectObjectArray(value.findings, `${path}.findings`, issues, (item, itemPath, currentIssues) => {
+        expectNonEmptyString(item.severity, `${itemPath}.severity`, currentIssues);
+        expectNonEmptyString(item.title, `${itemPath}.title`, currentIssues);
+        expectNonEmptyString(item.description, `${itemPath}.description`, currentIssues);
+      }, true);
+      return issues;
+    },
+  };
+}
+
+function reviewReplySchema(): StructuredArtifactSchema {
+  return {
+    id: "review-reply/v1",
+    validate({ path, value }) {
+      const issues: ValidationIssue[] = [];
+      if (!expectObject(value, path, issues)) {
+        return issues;
       }
-      if (!Array.isArray(value.implementation_steps)) {
-        issues.push(`${path}.implementation_steps must be an array`);
-      } else if (value.implementation_steps.length === 0) {
-        issues.push(`${path}.implementation_steps must not be empty`);
-      } else {
-        value.implementation_steps.forEach((item, index) => {
-          if (!expectObject(item, `${path}.implementation_steps[${index}]`, issues)) {
-            return;
-          }
-          expectNonEmptyString(item.id, `${path}.implementation_steps[${index}].id`, issues);
-          expectNonEmptyString(item.title, `${path}.implementation_steps[${index}].title`, issues);
-          expectNonEmptyString(item.details, `${path}.implementation_steps[${index}].details`, issues);
-        });
+      expectNonEmptyString(value.summary, `${path}.summary`, issues);
+      expectObjectArray(value.responses, `${path}.responses`, issues, (item, itemPath, currentIssues) => {
+        expectNonEmptyString(item.finding_title, `${itemPath}.finding_title`, currentIssues);
+        expectNonEmptyString(item.disposition, `${itemPath}.disposition`, currentIssues);
+        expectNonEmptyString(item.action, `${itemPath}.action`, currentIssues);
+      }, true);
+      expectBoolean(value.ready_to_merge, `${path}.ready_to_merge`, issues);
+      return issues;
+    },
+  };
+}
+
+function reviewFixReportSchema(): StructuredArtifactSchema {
+  return {
+    id: "review-fix-report/v1",
+    validate({ path, value }) {
+      const issues: ValidationIssue[] = [];
+      if (!expectObject(value, path, issues)) {
+        return issues;
       }
-      expectStringArray(value.tests, `${path}.tests`, issues);
-      if (!Array.isArray(value.rollout_notes)) {
-        issues.push(`${path}.rollout_notes must be an array`);
-      } else {
-        value.rollout_notes.forEach((item, index) => expectNonEmptyString(item, `${path}.rollout_notes[${index}]`, issues));
-      }
+      expectNonEmptyString(value.summary, `${path}.summary`, issues);
+      expectStringArray(value.completed_actions, `${path}.completed_actions`, issues);
+      expectStringArray(value.validation_steps, `${path}.validation_steps`, issues, true);
       return issues;
     },
   };
@@ -173,6 +263,27 @@ const schemas: Record<StructuredArtifactSchemaId, StructuredArtifactSchema> = {
   "bug-analysis/v1": bugAnalysisSchema(),
   "bug-fix-design/v1": bugFixDesignSchema(),
   "bug-fix-plan/v1": bugFixPlanSchema(),
+  "implementation-design/v1": implementationDesignSchema(),
+  "implementation-plan/v1": implementationPlanSchema(),
+  "jira-description/v1": { id: "jira-description/v1", validate: ({ path, value }) => {
+    const issues: ValidationIssue[] = [];
+    validateBriefText(value, path, issues);
+    return issues;
+  } },
+  "mr-description/v1": { id: "mr-description/v1", validate: ({ path, value }) => {
+    const issues: ValidationIssue[] = [];
+    validateBriefText(value, path, issues);
+    return issues;
+  } },
+  "qa-plan/v1": qaPlanSchema(),
+  "review-findings/v1": reviewFindingsSchema(),
+  "review-fix-report/v1": reviewFixReportSchema(),
+  "review-reply/v1": reviewReplySchema(),
+  "task-summary/v1": { id: "task-summary/v1", validate: ({ path, value }) => {
+    const issues: ValidationIssue[] = [];
+    validateBriefText(value, path, issues);
+    return issues;
+  } },
 };
 
 export function validateStructuredArtifact(path: string, schemaId: StructuredArtifactSchemaId): void {
