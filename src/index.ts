@@ -16,6 +16,8 @@ import {
   bugFixPlanJsonFile,
   designJsonFile,
   ensureTaskWorkspaceDir,
+  gitlabReviewFile,
+  gitlabReviewJsonFile,
   jiraTaskFile,
   planJsonFile,
   planArtifacts,
@@ -58,6 +60,7 @@ import { requestUserInputInTerminal, type UserInputRequester } from "./user-inpu
 const COMMANDS = [
   "bug-analyze",
   "bug-fix",
+  "gitlab-review",
   "mr-description",
   "plan",
   "task-describe",
@@ -179,6 +182,7 @@ function usage(): string {
   return `Usage:
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
+  agentweaver gitlab-review <jira-browse-url|jira-issue-key>
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -214,6 +218,7 @@ Required environment variables:
 
 Optional environment variables:
   JIRA_BASE_URL
+  GITLAB_TOKEN
   AGENTWEAVER_HOME
   DOCKER_COMPOSE_BIN
   CODEX_BIN
@@ -606,6 +611,8 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   auto: "Полный пайплайн задачи: планирование, реализация, проверки, ревью, ответы на ревью и повторные итерации до готовности к merge.",
   "bug-analyze":
     "Анализирует баг по Jira и создаёт структурированные артефакты: гипотезу причины, дизайн исправления и план работ.",
+  "gitlab-review":
+    "Запрашивает GitLab MR URL через user-input, загружает комментарии код-ревью по API и сохраняет markdown плюс structured JSON artifact.",
   "bug-fix":
     "Берёт результаты bug-analyze как source of truth и реализует исправление бага в коде.",
   "mr-description":
@@ -671,6 +678,7 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
     autoFlowDefinition(),
     declarativeFlowDefinition("bug-analyze", "bug-analyze", "bug-analyze.json"),
     declarativeFlowDefinition("bug-fix", "bug-fix", "bug-fix.json"),
+    declarativeFlowDefinition("gitlab-review", "gitlab-review", "gitlab-review.json"),
     declarativeFlowDefinition("mr-description", "mr-description", "mr-description.json"),
     declarativeFlowDefinition("plan", "plan", "plan.json"),
     declarativeFlowDefinition("task-describe", "task-describe", "task-describe.json"),
@@ -871,6 +879,21 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
     }, requestUserInput);
+    return false;
+  }
+
+  if (config.command === "gitlab-review") {
+    await runDeclarativeFlowBySpecFile(
+      "gitlab-review.json",
+      config,
+      {
+        taskKey: config.taskKey,
+      },
+      requestUserInput,
+    );
+    if (!config.dryRun) {
+      printSummary("GitLab Review", `Artifacts:\n${gitlabReviewFile(config.taskKey)}\n${gitlabReviewJsonFile(config.taskKey)}`);
+    }
     return false;
   }
 
