@@ -12,8 +12,6 @@ import {
   RUN_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
   RUN_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
   TASK_SUMMARY_PROMPT_TEMPLATE,
-  TEST_FIX_PROMPT_TEMPLATE,
-  TEST_LINTER_FIX_PROMPT_TEMPLATE,
 } from "../prompts.js";
 
 export type PromptTemplateRef =
@@ -29,9 +27,7 @@ export type PromptTemplateRef =
   | "review-summary"
   | "run-linter-loop-fix"
   | "run-tests-loop-fix"
-  | "task-summary"
-  | "test-fix"
-  | "test-linter-fix";
+  | "task-summary";
 
 const promptTemplates: Record<PromptTemplateRef, string> = {
   "bug-analyze": BUG_ANALYZE_PROMPT_TEMPLATE,
@@ -47,8 +43,6 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "run-linter-loop-fix": RUN_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
   "run-tests-loop-fix": RUN_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
   "task-summary": TASK_SUMMARY_PROMPT_TEMPLATE,
-  "test-fix": TEST_FIX_PROMPT_TEMPLATE,
-  "test-linter-fix": TEST_LINTER_FIX_PROMPT_TEMPLATE,
 };
 
 export function isPromptTemplateRef(value: string): value is PromptTemplateRef {

@@ -7,13 +7,16 @@
       "steps": [
         {
           "id": "run_tests",
-          "node": "verify-build",
+          "node": "local-script-check",
           "params": {
-            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
-            "labelText": {
-              "const": "Running run_tests.sh in isolated Docker (attempt 1)"
+            "argv": {
+              "list": [
+                { "ref": "params.runTestsScript" }
+              ]
             },
-            "service": { "const": "run-tests" }
+            "labelText": {
+              "const": "Running run_tests.sh locally (attempt 1)"
+            }
           },
           "stopFlowIf": {
             "equals": [
@@ -74,13 +77,16 @@
           "steps": [
             {
               "id": "run_tests",
-              "node": "verify-build",
+              "node": "local-script-check",
               "params": {
-                "dockerComposeFile": { "ref": "params.dockerComposeFile" },
-                "labelText": {
-                  "template": "Running run_tests.sh in isolated Docker (attempt ${attempt})"
+                "argv": {
+                  "list": [
+                    { "ref": "params.runTestsScript" }
+                  ]
                 },
-                "service": { "const": "run-tests" }
+                "labelText": {
+                  "template": "Running run_tests.sh locally (attempt ${attempt})"
+                }
               },
               "stopFlowIf": {
                 "equals": [
@@ -132,7 +138,7 @@
           "id": "assert_run_tests_success",
           "node": "file-check",
           "params": {
-            "path": { "ref": "params.dockerComposeFile" }
+            "path": { "ref": "params.runTestsScript" }
           },
           "expect": [
             {

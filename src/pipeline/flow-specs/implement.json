@@ -43,15 +43,6 @@
             "labelText": { "const": "Running Codex implementation mode locally" },
             "model": { "const": "gpt-5.4" }
           }
-        },
-        {
-          "id": "verify_build_after_implement",
-          "when": { "ref": "params.runFollowupVerify" },
-          "node": "verify-build",
-          "params": {
-            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
-            "labelText": { "const": "Running build verification in isolated Docker" }
-          }
         }
       ]
     }

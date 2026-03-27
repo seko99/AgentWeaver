@@ -11,11 +11,19 @@ log() {
   printf '%s\n' "$*" >&2
 }
 
+list_test_packages() {
+  go list -f '{{if or (gt (len .TestGoFiles) 0) (gt (len .XTestGoFiles) 0)}}{{.ImportPath}}{{end}}' ./... | sed '/^$/d'
+}
+
 details_json() {
-  local template="$1"
-  shift
+  local template="${@: -1}"
+  local argc=$#
+  local jq_args=()
+  if (( argc > 1 )); then
+    jq_args=("${@:1:argc-1}")
+  fi
   if command -v jq >/dev/null 2>&1; then
-    jq -cn "$@" "$template"
+    jq -cn "${jq_args[@]}" "$template"
   else
     printf '{}'
   fi
@@ -76,12 +84,12 @@ cd "$ROOT_DIR"
 mkdir -p "$COVER_DIR"
 
 log "==> Resolving package list for coverage"
-if ! PKGS=$(go list ./... | grep -vE '/mocks/|/cmd($|/)|/tests($|/)' | paste -sd "," -); then
+if ! PKGS=$(list_test_packages | paste -sd "," -); then
   fail 2 "Failed to resolve package list for coverage" "go list ./..." '{"failedStep":"go-list"}'
 fi
 
 if [[ -z "$PKGS" ]]; then
-  fail 2 "Coverage package list is empty" "go list ./..." '{"failedStep":"go-list"}'
+  fail 2 "Coverage package list is empty" "go list ./..." '{"failedStep":"go-list","reason":"no-test-packages"}'
 fi
 
 log "==> Running unit tests with coverage (go test -coverprofile)"
