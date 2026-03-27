@@ -10,14 +10,26 @@ import {
   bugFixPlanFile,
   bugFixPlanJsonFile,
   designFile,
+  designJsonFile,
   jiraDescriptionFile,
+  jiraDescriptionJsonFile,
   jiraTaskFile,
   mrDescriptionFile,
+  mrDescriptionJsonFile,
   planArtifacts,
   planFile,
+  planJsonFile,
   qaFile,
+  qaJsonFile,
   readyToMergeFile,
+  reviewFile,
+  reviewFixFile,
+  reviewFixJsonFile,
+  reviewJsonFile,
+  reviewReplyFile,
+  reviewReplyJsonFile,
   taskSummaryFile,
+  taskSummaryJsonFile,
 } from "../artifacts.js";
 import { TaskRunnerError } from "../errors.js";
 import { formatTemplate } from "../prompts.js";
@@ -117,33 +129,58 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return bugFixPlanJsonFile(taskKey);
     case "design-file":
       return designFile(taskKey);
+    case "design-json-file":
+      return designJsonFile(taskKey);
     case "jira-description-file":
       return jiraDescriptionFile(taskKey);
+    case "jira-description-json-file":
+      return jiraDescriptionJsonFile(taskKey);
     case "jira-task-file":
       return jiraTaskFile(taskKey);
     case "mr-description-file":
       return mrDescriptionFile(taskKey);
+    case "mr-description-json-file":
+      return mrDescriptionJsonFile(taskKey);
     case "plan-file":
       return planFile(taskKey);
+    case "plan-json-file":
+      return planJsonFile(taskKey);
     case "qa-file":
       return qaFile(taskKey);
+    case "qa-json-file":
+      return qaJsonFile(taskKey);
     case "ready-to-merge-file":
       return readyToMergeFile(taskKey);
     case "review-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("review-file requires iteration");
       }
-      return artifactFile("review", taskKey, iteration);
+      return reviewFile(taskKey, iteration);
+    case "review-json-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("review-json-file requires iteration");
+      }
+      return reviewJsonFile(taskKey, iteration);
     case "review-fix-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("review-fix-file requires iteration");
       }
-      return artifactFile("review-fix", taskKey, iteration);
+      return reviewFixFile(taskKey, iteration);
+    case "review-fix-json-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("review-fix-json-file requires iteration");
+      }
+      return reviewFixJsonFile(taskKey, iteration);
     case "review-reply-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("review-reply-file requires iteration");
       }
-      return artifactFile("review-reply", taskKey, iteration);
+      return reviewReplyFile(taskKey, iteration);
+    case "review-reply-json-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("review-reply-json-file requires iteration");
+      }
+      return reviewReplyJsonFile(taskKey, iteration);
     case "review-reply-summary-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("review-reply-summary-file requires iteration");
@@ -156,6 +193,8 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return artifactFile("review-summary", taskKey, iteration);
     case "task-summary-file":
       return taskSummaryFile(taskKey);
+    case "task-summary-json-file":
+      return taskSummaryJsonFile(taskKey);
   }
 }
 

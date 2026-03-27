@@ -12,7 +12,7 @@ The package is designed to run as an npm CLI and includes an interactive termina
 
 - Fetches a Jira issue by key or browse URL
 - Generates workflow artifacts such as design, implementation plan, QA plan, bug analysis, reviews, and summaries
-- For bug-analysis flows, structured JSON artifacts are the machine-readable source of truth, while Markdown artifacts are for human inspection
+- Machine-readable JSON artifacts are stored under `.agentweaver-<TASK>/.artifacts/` and act as the source of truth between workflow steps; Markdown artifacts remain for human inspection
 - Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, and `auto`
 - Persists compact `auto` pipeline state on disk so runs can resume without storing large agent outputs
 - Uses Docker runtime services for isolated Codex execution and build verification

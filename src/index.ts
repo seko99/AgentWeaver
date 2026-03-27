@@ -14,11 +14,15 @@ import {
   bugAnalyzeJsonFile,
   bugFixDesignJsonFile,
   bugFixPlanJsonFile,
+  designJsonFile,
   ensureTaskWorkspaceDir,
   jiraTaskFile,
+  planJsonFile,
   planArtifacts,
+  qaJsonFile,
   readyToMergeFile,
   requireArtifacts,
+  reviewReplyJsonFile,
   taskWorkspaceDir,
   taskSummaryFile,
 } from "./artifacts.js";
@@ -36,7 +40,17 @@ import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolutio
 import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
-import { bye, getOutputAdapter, printError, printInfo, printPanel, printPrompt, printSummary, setFlowExecutionState } from "./tui.js";
+import {
+  bye,
+  getOutputAdapter,
+  printError,
+  printInfo,
+  printPanel,
+  printPrompt,
+  printSummary,
+  setFlowExecutionState,
+  stripAnsi,
+} from "./tui.js";
 
 const COMMANDS = [
   "bug-analyze",
@@ -116,6 +130,47 @@ type ParsedArgs = {
   autoFromPhase?: string;
   helpPhases: boolean;
 };
+
+type ProcessFailureLike = {
+  returnCode?: number;
+  output?: string;
+  message?: string;
+};
+
+function buildFailureOutputPreview(output: string): string {
+  const normalized = stripAnsi(output).replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const lines = normalized
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+  if (lines.length === 0) {
+    return "";
+  }
+
+  const previewLines = lines.slice(-8);
+  let preview = previewLines.join("\n");
+  const maxLength = 1200;
+  if (preview.length > maxLength) {
+    preview = `...${preview.slice(-(maxLength - 3))}`;
+  }
+  return preview;
+}
+
+function formatProcessFailure(error: ProcessFailureLike): string {
+  const returnCode = Number(error.returnCode);
+  const baseMessage = !Number.isNaN(returnCode)
+    ? `Command failed with exit code ${returnCode}`
+    : error.message?.trim() || "Command failed";
+  const preview = buildFailureOutputPreview(String(error.output ?? ""));
+  if (!preview) {
+    return baseMessage;
+  }
+  return `${baseMessage}\nПричина:\n${preview}`;
+}
 
 function usage(): string {
   return `Usage:
@@ -544,11 +599,40 @@ function autoFlowParams(config: Config): Record<string, unknown> {
   };
 }
 
+const FLOW_DESCRIPTIONS: Record<string, string> = {
+  auto: "Полный пайплайн задачи: планирование, реализация, проверки, ревью, ответы на ревью и повторные итерации до готовности к merge.",
+  "bug-analyze":
+    "Анализирует баг по Jira и создаёт структурированные артефакты: гипотезу причины, дизайн исправления и план работ.",
+  "bug-fix":
+    "Берёт результаты bug-analyze как source of truth и реализует исправление бага в коде.",
+  "mr-description":
+    "Готовит краткое intent-описание для merge request на основе задачи и текущих изменений.",
+  plan: "Загружает задачу из Jira и создаёт дизайн, план реализации и QA-план в structured JSON и markdown.",
+  "task-describe": "Строит короткое резюме задачи на основе Jira-артефакта для быстрого ознакомления.",
+  implement: "Реализует задачу по утверждённым design/plan артефактам и при необходимости запускает post-verify сборки.",
+  review:
+    "Запускает Claude-код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания через Codex.",
+  "review-fix":
+    "Исправляет замечания после review-reply, обновляет код и прогоняет обязательные проверки после правок.",
+  test: "Запускает verify/build-проверку в контейнере и показывает результат с краткой сводкой при падении.",
+  "test-fix": "Прогоняет тесты, исправляет найденные проблемы и готовит код к следующей успешной проверке.",
+  "test-linter-fix": "Прогоняет линтер и генерацию, затем исправляет замечания для чистого прогона.",
+  "run-tests-loop":
+    "Циклически запускает `./run_tests.sh`, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
+  "run-linter-loop":
+    "Циклически запускает `./run_linter.sh`, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
+};
+
+function flowDescription(id: string): string {
+  return FLOW_DESCRIPTIONS[id] ?? "Описание для этого flow пока не задано.";
+}
+
 function declarativeFlowDefinition(id: string, label: string, fileName: string): InteractiveFlowDefinition {
   const flow = loadDeclarativeFlow(fileName);
   return {
     id,
     label,
+    description: flowDescription(id),
     phases: flow.phases.map((phase) => ({
       id: phase.id,
       repeatVars: Object.fromEntries(
@@ -566,6 +650,7 @@ function autoFlowDefinition(): InteractiveFlowDefinition {
   return {
     id: "auto",
     label: "auto",
+    description: flowDescription("auto"),
     phases: flow.phases.map((phase) => ({
       id: phase.id,
       repeatVars: Object.fromEntries(
@@ -817,6 +902,14 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
   if (config.command === "implement") {
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(planArtifacts(config.taskKey), "Implement mode requires plan artifacts from the planning phase.");
+    validateStructuredArtifacts(
+      [
+        { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
+        { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
+        { path: qaJsonFile(config.taskKey), schemaId: "qa-plan/v1" },
+      ],
+      "Implement mode requires valid structured plan artifacts from the planning phase.",
+    );
     try {
       await runDeclarativeFlowBySpecFile("implement.json", config, {
         taskKey: config.taskKey,
@@ -839,6 +932,13 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
 
   if (config.command === "review") {
     requireJiraTaskFile(config.jiraTaskFile);
+    validateStructuredArtifacts(
+      [
+        { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
+        { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
+      ],
+      "Review mode requires valid structured plan artifacts from the planning phase.",
+    );
     const iteration = nextReviewIterationForTask(config.taskKey);
     await runDeclarativeFlowBySpecFile("review.json", config, {
       taskKey: config.taskKey,
@@ -850,11 +950,21 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
 
   if (config.command === "review-fix") {
     requireJiraTaskFile(config.jiraTaskFile);
+    const latestIteration = latestReviewReplyIteration(config.taskKey);
+    if (latestIteration === null) {
+      throw new TaskRunnerError("Review-fix mode requires at least one review-reply artifact.");
+    }
+    validateStructuredArtifacts(
+      [
+        { path: reviewReplyJsonFile(config.taskKey, latestIteration), schemaId: "review-reply/v1" },
+      ],
+      "Review-fix mode requires valid structured review-reply artifacts.",
+    );
     try {
       await runDeclarativeFlowBySpecFile("review-fix.json", config, {
         taskKey: config.taskKey,
         dockerComposeFile: config.dockerComposeFile,
-        latestIteration: latestReviewReplyIteration(config.taskKey),
+        latestIteration,
         runFollowupVerify,
         extraPrompt: config.extraPrompt,
         reviewFixPoints: config.reviewFixPoints,
@@ -1120,7 +1230,7 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
           const returnCode = Number((error as { returnCode?: number }).returnCode);
           if (!Number.isNaN(returnCode)) {
             ui.setFlowFailed(flowId);
-            printError(`Command failed with exit code ${returnCode}`);
+            printError(formatProcessFailure(error as ProcessFailureLike));
             return;
           }
           throw error;
@@ -1225,7 +1335,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     const returnCode = Number((error as { returnCode?: number }).returnCode);
     if (!Number.isNaN(returnCode)) {
-      printError(`Command failed with exit code ${returnCode}`);
+      printError(formatProcessFailure(error as ProcessFailureLike));
       return returnCode || 1;
     }
     throw error;

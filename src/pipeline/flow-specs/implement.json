@@ -17,9 +17,21 @@
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               }
