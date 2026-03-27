@@ -138,15 +138,6 @@
               "message": "Review-fix mode produced invalid structured artifacts."
             }
           ]
-        },
-        {
-          "id": "verify_build_after_review_fix",
-          "when": { "ref": "params.runFollowupVerify" },
-          "node": "verify-build",
-          "params": {
-            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
-            "labelText": { "const": "Running build verification in isolated Docker" }
-          }
         }
       ]
     }

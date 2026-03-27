@@ -9,10 +9,14 @@ log() {
 }
 
 details_json() {
-  local template="$1"
-  shift
+  local template="${@: -1}"
+  local argc=$#
+  local jq_args=()
+  if (( argc > 1 )); then
+    jq_args=("${@:1:argc-1}")
+  fi
   if command -v jq >/dev/null 2>&1; then
-    jq -cn "$@" "$template"
+    jq -cn "${jq_args[@]}" "$template"
   else
     printf '{}'
   fi

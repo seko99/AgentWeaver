@@ -28,7 +28,12 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "docker-compose.yml",
+    "Dockerfile.codex",
+    "verify_build.sh",
+    "run_tests.sh",
+    "run_linter.sh"
   ],
   "publishConfig": {
     "access": "public"

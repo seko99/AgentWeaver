@@ -41,7 +41,7 @@ import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-run
 import { runPreflightFlow } from "./pipeline/flows/preflight-flow.js";
 import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
-import { defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
+import { agentweaverHome, defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
 import {
@@ -67,9 +67,6 @@ const COMMANDS = [
   "implement",
   "review",
   "review-fix",
-  "test",
-  "test-fix",
-  "test-linter-fix",
   "run-tests-loop",
   "run-linter-loop",
   "auto",
@@ -103,6 +100,8 @@ type Config = {
   jiraBrowseUrl: string;
   jiraApiUrl: string;
   jiraTaskFile: string;
+  runTestsScript: string;
+  runLinterScript: string;
 };
 
 type AutoStepState = {
@@ -191,9 +190,6 @@ function usage(): string {
   agentweaver implement [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver review [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver review-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver test [--dry] [--verbose] <jira-browse-url|jira-issue-key>
-  agentweaver test-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver test-linter-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver run-tests-loop [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver run-linter-loop [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver auto [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -547,6 +543,7 @@ function buildConfig(
 ): Config {
   const jiraIssueKey = extractIssueKey(jiraRef);
   ensureTaskWorkspaceDir(jiraIssueKey);
+  const homeDir = agentweaverHome(PACKAGE_ROOT);
   return {
     command,
     jiraRef,
@@ -561,6 +558,8 @@ function buildConfig(
     jiraBrowseUrl: buildJiraBrowseUrl(jiraRef),
     jiraApiUrl: buildJiraApiUrl(jiraRef),
     jiraTaskFile: jiraTaskFile(jiraIssueKey),
+    runTestsScript: path.join(homeDir, "run_tests.sh"),
+    runLinterScript: path.join(homeDir, "run_linter.sh"),
   };
 }
 
@@ -580,21 +579,11 @@ function checkPrerequisites(config: Config): void {
   if (config.command === "review") {
     resolveCmd("claude", "CLAUDE_BIN");
   }
-  if (["implement", "review-fix", "test", "run-tests-loop", "run-linter-loop"].includes(config.command)) {
-    resolveDockerComposeCmd();
-    if (!existsSync(config.dockerComposeFile)) {
-      throw new TaskRunnerError(`docker-compose file not found: ${config.dockerComposeFile}`);
-    }
-  }
 }
 
 function checkAutoPrerequisites(config: Config): void {
   resolveCmd("codex", "CODEX_BIN");
   resolveCmd("claude", "CLAUDE_BIN");
-  resolveDockerComposeCmd();
-  if (!existsSync(config.dockerComposeFile)) {
-    throw new TaskRunnerError(`docker-compose file not found: ${config.dockerComposeFile}`);
-  }
 }
 
 function autoFlowParams(config: Config): Record<string, unknown> {
@@ -602,6 +591,8 @@ function autoFlowParams(config: Config): Record<string, unknown> {
     jiraApiUrl: config.jiraApiUrl,
     taskKey: config.taskKey,
     dockerComposeFile: config.dockerComposeFile,
+    runTestsScript: config.runTestsScript,
+    runLinterScript: config.runLinterScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
   };
@@ -624,13 +615,10 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
     "Запускает Claude-код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания через Codex.",
   "review-fix":
     "Исправляет замечания после review-reply, обновляет код и прогоняет обязательные проверки после правок.",
-  test: "Запускает verify/build-проверку в контейнере и показывает результат с краткой сводкой при падении.",
-  "test-fix": "Прогоняет тесты, исправляет найденные проблемы и готовит код к следующей успешной проверке.",
-  "test-linter-fix": "Прогоняет линтер и генерацию, затем исправляет замечания для чистого прогона.",
   "run-tests-loop":
-    "Циклически запускает `./run_tests.sh`, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
+    "Циклически запускает `./run_tests.sh` локально, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
   "run-linter-loop":
-    "Циклически запускает `./run_linter.sh`, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
+    "Циклически запускает `./run_linter.sh` локально, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
 };
 
 function flowDescription(id: string): string {
@@ -685,9 +673,6 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
     declarativeFlowDefinition("implement", "implement", "implement.json"),
     declarativeFlowDefinition("review", "review", "review.json"),
     declarativeFlowDefinition("review-fix", "review-fix", "review-fix.json"),
-    declarativeFlowDefinition("test", "test", "test.json"),
-    declarativeFlowDefinition("test-fix", "test-fix", "test-fix.json"),
-    declarativeFlowDefinition("test-linter-fix", "test-linter-fix", "test-linter-fix.json"),
     declarativeFlowDefinition("run-tests-loop", "run-tests-loop", "run-tests-loop.json"),
     declarativeFlowDefinition("run-linter-loop", "run-linter-loop", "run-linter-loop.json"),
   ];
@@ -955,23 +940,10 @@ async function executeCommand(
       ],
       "Implement mode requires valid structured plan artifacts from the planning phase.",
     );
-    try {
-      await runDeclarativeFlowBySpecFile("implement.json", config, {
-        taskKey: config.taskKey,
-        dockerComposeFile: config.dockerComposeFile,
-        extraPrompt: config.extraPrompt,
-        runFollowupVerify,
-      }, requestUserInput);
-    } catch (error) {
-      if (!config.dryRun) {
-        const output = String((error as { output?: string }).output ?? "");
-        if (output.trim()) {
-          printError("Build verification failed");
-          printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-        }
-      }
-      throw error;
-    }
+    await runDeclarativeFlowBySpecFile("implement.json", config, {
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+    }, requestUserInput);
     return false;
   }
 
@@ -1006,54 +978,12 @@ async function executeCommand(
       ],
       "Review-fix mode requires valid structured review artifacts.",
     );
-    try {
-      await runDeclarativeFlowBySpecFile("review-fix.json", config, {
-        taskKey: config.taskKey,
-        dockerComposeFile: config.dockerComposeFile,
-        latestIteration,
-        reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
-        runFollowupVerify,
-        extraPrompt: config.extraPrompt,
-        reviewFixPoints: config.reviewFixPoints,
-      }, requestUserInput);
-    } catch (error) {
-      if (!config.dryRun) {
-        const output = String((error as { output?: string }).output ?? "");
-        if (output.trim()) {
-          printError("Build verification failed");
-          printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-        }
-      }
-      throw error;
-    }
-    return false;
-  }
-
-  if (config.command === "test") {
-    requireJiraTaskFile(config.jiraTaskFile);
-    try {
-      await runDeclarativeFlowBySpecFile("test.json", config, {
-        taskKey: config.taskKey,
-        dockerComposeFile: config.dockerComposeFile,
-      }, requestUserInput);
-    } catch (error) {
-      if (!config.dryRun) {
-        const output = String((error as { output?: string }).output ?? "");
-        if (output.trim()) {
-          printError("Build verification failed");
-          printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-        }
-      }
-      throw error;
-    }
-    return false;
-  }
-
-  if (config.command === "test-fix" || config.command === "test-linter-fix") {
-    requireJiraTaskFile(config.jiraTaskFile);
-    await runDeclarativeFlowBySpecFile(config.command === "test-fix" ? "test-fix.json" : "test-linter-fix.json", config, {
+    await runDeclarativeFlowBySpecFile("review-fix.json", config, {
       taskKey: config.taskKey,
+      latestIteration,
+      reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
       extraPrompt: config.extraPrompt,
+      reviewFixPoints: config.reviewFixPoints,
     }, requestUserInput);
     return false;
   }
@@ -1064,7 +994,8 @@ async function executeCommand(
       config,
       {
         taskKey: config.taskKey,
-        dockerComposeFile: config.dockerComposeFile,
+        runTestsScript: config.runTestsScript,
+        runLinterScript: config.runLinterScript,
         extraPrompt: config.extraPrompt,
       },
       requestUserInput,

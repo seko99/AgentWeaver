@@ -193,7 +193,7 @@
             "fileName": { "const": "run-linter-loop.json" },
             "labelText": { "const": "Running run-linter-loop after implement" },
             "taskKey": { "ref": "params.taskKey" },
-            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "runLinterScript": { "ref": "params.runLinterScript" },
             "extraPrompt": { "ref": "params.extraPrompt" }
           }
         },
@@ -204,7 +204,7 @@
             "fileName": { "const": "run-tests-loop.json" },
             "labelText": { "const": "Running run-tests-loop after implement" },
             "taskKey": { "ref": "params.taskKey" },
-            "dockerComposeFile": { "ref": "params.dockerComposeFile" },
+            "runTestsScript": { "ref": "params.runTestsScript" },
             "extraPrompt": { "ref": "params.extraPrompt" }
           }
         }
