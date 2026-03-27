@@ -23,6 +23,8 @@ import {
   readyToMergeFile,
   requireArtifacts,
   reviewReplyJsonFile,
+  reviewFixSelectionJsonFile,
+  reviewJsonFile,
   taskWorkspaceDir,
   taskSummaryFile,
 } from "./artifacts.js";
@@ -51,6 +53,7 @@ import {
   setFlowExecutionState,
   stripAnsi,
 } from "./tui.js";
+import { requestUserInputInTerminal, type UserInputRequester } from "./user-input.js";
 
 const COMMANDS = [
   "bug-analyze",
@@ -690,6 +693,7 @@ async function runDeclarativeFlowBySpecFile(
   fileName: string,
   config: Config,
   flowParams: Record<string, unknown>,
+  requestUserInput: UserInputRequester = requestUserInputInTerminal,
 ): Promise<void> {
   const context = createPipelineContext({
     issueKey: config.taskKey,
@@ -697,6 +701,7 @@ async function runDeclarativeFlowBySpecFile(
     dryRun: config.dryRun,
     verbose: config.verbose,
     runtime: runtimeServices,
+    requestUserInput,
   });
   const flow = loadDeclarativeFlow(fileName);
   const executionState: FlowExecutionState = {
@@ -730,6 +735,7 @@ async function runAutoPhaseViaSpec(
     dryRun: config.dryRun,
     verbose: config.verbose,
     runtime: runtimeServices,
+    requestUserInput: requestUserInputInTerminal,
   });
   const autoFlow = loadAutoFlow();
   const phase = findPhaseById(autoFlow.phases, phaseId);
@@ -805,12 +811,17 @@ async function summarizeBuildFailure(output: string): Promise<string> {
       dryRun: false,
       verbose: false,
       runtime: runtimeServices,
+      requestUserInput: requestUserInputInTerminal,
     }),
     output,
   );
 }
 
-async function executeCommand(config: Config, runFollowupVerify = true): Promise<boolean> {
+async function executeCommand(
+  config: Config,
+  runFollowupVerify = true,
+  requestUserInput: UserInputRequester = requestUserInputInTerminal,
+): Promise<boolean> {
   if (config.command === "auto") {
     await runAutoPipeline(config);
     return false;
@@ -845,7 +856,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    });
+    }, requestUserInput);
     return false;
   }
 
@@ -859,7 +870,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    });
+    }, requestUserInput);
     return false;
   }
 
@@ -877,7 +888,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    });
+    }, requestUserInput);
     return false;
   }
 
@@ -886,7 +897,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     await runDeclarativeFlowBySpecFile("mr-description.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    });
+    }, requestUserInput);
     return false;
   }
 
@@ -895,7 +906,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     await runDeclarativeFlowBySpecFile("task-describe.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    });
+    }, requestUserInput);
     return false;
   }
 
@@ -916,7 +927,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
         dockerComposeFile: config.dockerComposeFile,
         extraPrompt: config.extraPrompt,
         runFollowupVerify,
-      });
+      }, requestUserInput);
     } catch (error) {
       if (!config.dryRun) {
         const output = String((error as { output?: string }).output ?? "");
@@ -944,7 +955,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       taskKey: config.taskKey,
       iteration,
       extraPrompt: config.extraPrompt,
-    });
+    }, requestUserInput);
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
 
@@ -956,19 +967,21 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     }
     validateStructuredArtifacts(
       [
+        { path: reviewJsonFile(config.taskKey, latestIteration), schemaId: "review-findings/v1" },
         { path: reviewReplyJsonFile(config.taskKey, latestIteration), schemaId: "review-reply/v1" },
       ],
-      "Review-fix mode requires valid structured review-reply artifacts.",
+      "Review-fix mode requires valid structured review artifacts.",
     );
     try {
       await runDeclarativeFlowBySpecFile("review-fix.json", config, {
         taskKey: config.taskKey,
         dockerComposeFile: config.dockerComposeFile,
         latestIteration,
+        reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
         runFollowupVerify,
         extraPrompt: config.extraPrompt,
         reviewFixPoints: config.reviewFixPoints,
-      });
+      }, requestUserInput);
     } catch (error) {
       if (!config.dryRun) {
         const output = String((error as { output?: string }).output ?? "");
@@ -988,7 +1001,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
       await runDeclarativeFlowBySpecFile("test.json", config, {
         taskKey: config.taskKey,
         dockerComposeFile: config.dockerComposeFile,
-      });
+      }, requestUserInput);
     } catch (error) {
       if (!config.dryRun) {
         const output = String((error as { output?: string }).output ?? "");
@@ -1007,7 +1020,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
     await runDeclarativeFlowBySpecFile(config.command === "test-fix" ? "test-fix.json" : "test-linter-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    });
+    }, requestUserInput);
     return false;
   }
 
@@ -1020,6 +1033,7 @@ async function executeCommand(config: Config, runFollowupVerify = true): Promise
         dockerComposeFile: config.dockerComposeFile,
         extraPrompt: config.extraPrompt,
       },
+      requestUserInput,
     );
     return false;
   }
@@ -1220,7 +1234,7 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
       onRun: async (flowId) => {
         try {
           const command = buildConfig(flowId as CommandName, jiraRef);
-          await executeCommand(command);
+          await executeCommand(command, true, (form) => ui.requestUserInput(form));
         } catch (error) {
           if (error instanceof TaskRunnerError) {
             ui.setFlowFailed(flowId);
@@ -1258,6 +1272,7 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
         setSummary: (markdown) => {
           ui.setSummary(markdown);
         },
+        requestUserInput: (form) => ui.requestUserInput(form),
       }),
       {
         jiraApiUrl: config.jiraApiUrl,

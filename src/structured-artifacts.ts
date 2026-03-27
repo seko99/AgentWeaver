@@ -14,7 +14,8 @@ export type StructuredArtifactSchemaId =
   | "review-findings/v1"
   | "review-fix-report/v1"
   | "review-reply/v1"
-  | "task-summary/v1";
+  | "task-summary/v1"
+  | "user-input/v1";
 
 type ValidationIssue = string;
 
@@ -259,6 +260,22 @@ function reviewFixReportSchema(): StructuredArtifactSchema {
   };
 }
 
+function userInputSchema(): StructuredArtifactSchema {
+  return {
+    id: "user-input/v1",
+    validate({ path, value }) {
+      const issues: ValidationIssue[] = [];
+      if (!expectObject(value, path, issues)) {
+        return issues;
+      }
+      expectNonEmptyString(value.form_id, `${path}.form_id`, issues);
+      expectNonEmptyString(value.submitted_at, `${path}.submitted_at`, issues);
+      expectObject(value.values, `${path}.values`, issues);
+      return issues;
+    },
+  };
+}
+
 const schemas: Record<StructuredArtifactSchemaId, StructuredArtifactSchema> = {
   "bug-analysis/v1": bugAnalysisSchema(),
   "bug-fix-design/v1": bugFixDesignSchema(),
@@ -284,6 +301,7 @@ const schemas: Record<StructuredArtifactSchemaId, StructuredArtifactSchema> = {
     validateBriefText(value, path, issues);
     return issues;
   } },
+  "user-input/v1": userInputSchema(),
 };
 
 export function validateStructuredArtifact(path: string, schemaId: StructuredArtifactSchemaId): void {

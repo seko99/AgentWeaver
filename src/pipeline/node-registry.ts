@@ -8,8 +8,10 @@ import { flowRunNode } from "./nodes/flow-run-node.js";
 import { jiraFetchNode } from "./nodes/jira-fetch-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { reviewClaudeNode } from "./nodes/review-claude-node.js";
+import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
 import { reviewReplyCodexNode } from "./nodes/review-reply-codex-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
+import { userInputNode } from "./nodes/user-input-node.js";
 import { verifyBuildNode } from "./nodes/verify-build-node.js";
 import type { PipelineNodeDefinition } from "./types.js";
 
@@ -24,8 +26,10 @@ export type NodeKind =
   | "jira-fetch"
   | "plan-codex"
   | "review-claude"
+  | "review-findings-form"
   | "review-reply-codex"
   | "summary-file-load"
+  | "user-input"
   | "verify-build";
 
 type AnyNodeDefinition = PipelineNodeDefinition<Record<string, unknown>, unknown>;
@@ -55,8 +59,10 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "jira-fetch": jiraFetchNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
   "review-claude": reviewClaudeNode as unknown as AnyNodeDefinition,
+  "review-findings-form": reviewFindingsFormNode as unknown as AnyNodeDefinition,
   "review-reply-codex": reviewReplyCodexNode as unknown as AnyNodeDefinition,
   "summary-file-load": summaryFileLoadNode as unknown as AnyNodeDefinition,
+  "user-input": userInputNode as unknown as AnyNodeDefinition,
   "verify-build": verifyBuildNode as unknown as AnyNodeDefinition,
 };
 
@@ -81,6 +87,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["jiraTaskFile", "taskKey", "iteration", "claudeCmd"],
   },
+  "review-findings-form": {
+    kind: "review-findings-form",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["reviewJsonFile", "formId", "title"],
+  },
   "review-reply-codex": {
     kind: "review-reply-codex",
     version: 1,
@@ -88,6 +100,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     requiredParams: ["jiraTaskFile", "taskKey", "iteration", "codexCmd"],
   },
   "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden", requiredParams: ["path"] },
+  "user-input": {
+    kind: "user-input",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["formId", "title", "fields", "outputFile"],
+  },
   "verify-build": { kind: "verify-build", version: 1, prompt: "forbidden", requiredParams: ["dockerComposeFile", "labelText"] },
 };
 

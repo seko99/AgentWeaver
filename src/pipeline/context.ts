@@ -2,6 +2,7 @@ import process from "node:process";
 
 import type { RuntimeServices } from "../executors/types.js";
 import { getOutputAdapter } from "../tui.js";
+import type { UserInputRequester } from "../user-input.js";
 import { createNodeRegistry } from "./node-registry.js";
 import { createExecutorRegistry } from "./registry.js";
 import type { PipelineContext } from "./types.js";
@@ -13,6 +14,7 @@ export type CreatePipelineContextInput = {
   verbose: boolean;
   runtime: RuntimeServices;
   setSummary?: (markdown: string) => void;
+  requestUserInput?: UserInputRequester;
 };
 
 export function createPipelineContext(input: CreatePipelineContextInput): PipelineContext {
@@ -28,5 +30,6 @@ export function createPipelineContext(input: CreatePipelineContextInput): Pipeli
     executors: createExecutorRegistry(),
     nodes: createNodeRegistry(),
     ...(input.setSummary ? { setSummary: input.setSummary } : {}),
+    ...(input.requestUserInput ? { requestUserInput: input.requestUserInput } : {}),
   };
 }

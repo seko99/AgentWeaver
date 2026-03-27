@@ -3,6 +3,15 @@ import blessed from "neo-blessed";
 import { renderMarkdownToTerminal } from "./markdown.js";
 import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { setOutputAdapter, stripAnsi, type OutputAdapter } from "./tui.js";
+import { TaskRunnerError } from "./errors.js";
+import {
+  buildInitialUserInputValues,
+  validateUserInputValues,
+  type UserInputFieldDefinition,
+  type UserInputFormDefinition,
+  type UserInputFormValues,
+  type UserInputResult,
+} from "./user-input.js";
 
 type InteractiveFlowDefinition = {
   id: string;
@@ -33,6 +42,15 @@ type FlowStatusState = {
   executionState: FlowExecutionState | null;
 };
 
+type ActiveFormSession = {
+  form: UserInputFormDefinition;
+  values: UserInputFormValues;
+  currentFieldIndex: number;
+  currentOptionIndex: number;
+  resolve: (result: UserInputResult) => void;
+  reject: (error: Error) => void;
+};
+
 export class InteractiveUi {
   private readonly screen: any;
   private readonly header: any;
@@ -45,6 +63,7 @@ export class InteractiveUi {
   private readonly footer: any;
   private readonly help: any;
   private readonly confirm: any;
+  private readonly formModal: any;
   private readonly flowMap: Map<string, InteractiveFlowDefinition>;
   private busy = false;
   private currentFlowId: string | null = null;
@@ -64,6 +83,7 @@ export class InteractiveUi {
     executionState: null,
   };
   private failedFlowId: string | null = null;
+  private activeFormSession: ActiveFormSession | null = null;
 
   constructor(private readonly options: InteractiveUiOptions) {
     if (options.flows.length === 0) {
@@ -175,6 +195,33 @@ export class InteractiveUi {
       },
       align: "center",
       valign: "middle",
+    });
+
+    this.formModal = blessed.box({
+      parent: this.screen,
+      top: "center",
+      left: "center",
+      width: "72%",
+      height: "68%",
+      hidden: true,
+      tags: true,
+      label: " User Input ",
+      padding: {
+        left: 1,
+        right: 1,
+        top: 1,
+        bottom: 1,
+      },
+      border: "line",
+      scrollable: true,
+      alwaysScroll: true,
+      keys: true,
+      vi: true,
+      style: {
+        border: { fg: "magenta" },
+        bg: "black",
+        fg: "white",
+      },
     });
 
     this.description = blessed.box({
@@ -309,11 +356,14 @@ export class InteractiveUi {
 
   private bindKeys(): void {
     this.screen.key(["C-c", "q"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.options.onExit();
     });
 
     this.screen.key(["f1", "h", "?"], () => {
-      if (this.confirm.visible) {
+      if (this.confirm.visible || this.hasActiveForm()) {
         return;
       }
       this.help.hidden = !this.help.hidden;
@@ -326,6 +376,10 @@ export class InteractiveUi {
     });
 
     this.screen.key(["escape"], () => {
+      if (this.hasActiveForm()) {
+        this.cancelActiveForm();
+        return;
+      }
       if (!this.help.hidden) {
         this.help.hide();
         this.focusPane("flows");
@@ -338,25 +392,31 @@ export class InteractiveUi {
     });
 
     this.screen.key(["C-l"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.log.setContent("");
       this.appendLog("Log cleared.");
     });
 
     this.screen.key(["tab"], () => {
-      if (this.confirm.visible || !this.help.hidden) {
+      if (this.confirm.visible || !this.help.hidden || this.hasActiveForm()) {
         return;
       }
       this.cycleFocus(1);
     });
 
     this.screen.key(["S-tab"], () => {
-      if (this.confirm.visible || !this.help.hidden) {
+      if (this.confirm.visible || !this.help.hidden || this.hasActiveForm()) {
         return;
       }
       this.cycleFocus(-1);
     });
 
     this.flowList.on("select item", (_item: unknown, index: number) => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       const flow = this.options.flows[index];
       if (!flow) {
         return;
@@ -368,74 +428,110 @@ export class InteractiveUi {
     });
 
     this.flowList.key(["enter"], () => {
-      if (this.busy || this.confirm.visible || !this.help.hidden) {
+      if (this.busy || this.confirm.visible || !this.help.hidden || this.hasActiveForm()) {
         return;
       }
       this.openConfirm();
     });
 
     this.flowList.key(["pageup"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.flowList.scroll(-(this.flowList.height - 2));
       this.requestRender();
     });
 
     this.flowList.key(["pagedown"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.flowList.scroll(this.flowList.height - 2);
       this.requestRender();
     });
 
     this.log.key(["up"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.log.scroll(-1);
       this.requestRender();
     });
 
     this.log.key(["down"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.log.scroll(1);
       this.requestRender();
     });
 
     this.log.key(["pageup"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.log.scroll(-(this.log.height - 2));
       this.requestRender();
     });
 
     this.log.key(["pagedown"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.log.scroll(this.log.height - 2);
       this.requestRender();
     });
 
     this.log.key(["home"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.log.setScroll(0);
       this.requestRender();
     });
 
     this.log.key(["end"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.log.setScrollPerc(100);
       this.requestRender();
     });
 
     this.summary.key(["pageup"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.summary.scroll(-(this.summary.height - 2));
       this.requestRender();
     });
 
     this.summary.key(["pagedown"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.summary.scroll(this.summary.height - 2);
       this.requestRender();
     });
 
     this.progress.key(["pageup"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.progress.scroll(-(this.progress.height - 2));
       this.requestRender();
     });
 
     this.progress.key(["pagedown"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.progress.scroll(this.progress.height - 2);
       this.requestRender();
     });
 
     this.confirm.key(["enter"], async () => {
-      if (this.busy || this.confirm.hidden) {
+      if (this.busy || this.confirm.hidden || this.hasActiveForm()) {
         return;
       }
       const flowId = this.selectedFlowId;
@@ -452,7 +548,17 @@ export class InteractiveUi {
     });
 
     this.confirm.key(["escape"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
       this.closeConfirm();
+    });
+
+    this.screen.on("keypress", (ch: string, key: { full?: string; name?: string; ctrl?: boolean; shift?: boolean }) => {
+      if (!this.activeFormSession) {
+        return;
+      }
+      this.handleActiveFormKey(ch, key);
     });
   }
 
@@ -538,6 +644,268 @@ export class InteractiveUi {
   private renderSummary(): void {
     const summaryBody = this.summaryText || "Task summary is not available yet.";
     this.summary.setContent(renderMarkdownToTerminal(stripAnsi(summaryBody)));
+  }
+
+  private hasActiveForm(): boolean {
+    return this.activeFormSession !== null;
+  }
+
+  private currentFormField(): UserInputFieldDefinition | null {
+    if (!this.activeFormSession) {
+      return null;
+    }
+    return this.activeFormSession.form.fields[this.activeFormSession.currentFieldIndex] ?? null;
+  }
+
+  private renderActiveForm(): void {
+    if (!this.activeFormSession) {
+      this.formModal.hide();
+      this.footer.setContent(" Up/Down: select flow | Enter: confirm run | h: help | Tab: switch pane | q: exit ");
+      this.requestRender();
+      return;
+    }
+
+    const session = this.activeFormSession;
+    const field = this.currentFormField();
+    if (!field) {
+      return;
+    }
+
+    const lines: string[] = [`{bold}${session.form.title}{/bold}`];
+    if (session.form.description?.trim()) {
+      lines.push("");
+      lines.push(session.form.description.trim());
+    }
+    lines.push("");
+    lines.push(`Field ${session.currentFieldIndex + 1}/${session.form.fields.length}`);
+    lines.push(`{yellow-fg}${field.label}{/yellow-fg}`);
+    if (field.help?.trim()) {
+      lines.push(field.help.trim());
+    }
+    lines.push("");
+
+    if (field.type === "boolean") {
+      const current = session.values[field.id] === true;
+      lines.push(`${current ? "[x]" : "[ ]"} ${field.label}`);
+      lines.push("");
+      lines.push("Space: toggle");
+      lines.push("Enter/Tab: next field");
+    } else if (field.type === "text") {
+      const current = String(session.values[field.id] ?? "");
+      lines.push(current || `{gray-fg}${field.placeholder ?? "Введите текст"}{/gray-fg}`);
+      lines.push("");
+      lines.push("Type text, Backspace: delete");
+      lines.push("Enter/Tab: next field");
+    } else {
+      const currentOptionIndex = Math.min(session.currentOptionIndex, Math.max(0, field.options.length - 1));
+      session.currentOptionIndex = currentOptionIndex;
+      field.options.forEach((option, index) => {
+        const isCursor = index === currentOptionIndex;
+        const value = session.values[field.id];
+        const isSelected =
+          field.type === "single-select"
+            ? value === option.value
+            : Array.isArray(value) && value.includes(option.value);
+        const cursor = isCursor ? "{cyan-fg}>{/cyan-fg}" : " ";
+        const marker = isSelected ? "[x]" : "[ ]";
+        lines.push(`${cursor} ${marker} ${option.label}`);
+        if (option.description?.trim()) {
+          lines.push(`    {gray-fg}${option.description.trim()}{/gray-fg}`);
+        }
+      });
+      lines.push("");
+      lines.push("Up/Down: move");
+      lines.push("Space: select/toggle");
+      lines.push("Enter/Tab: next field");
+    }
+
+    lines.push("");
+    lines.push("{green-fg}Ctrl+S{/green-fg}: submit");
+    lines.push("{magenta-fg}Shift+Tab{/magenta-fg}: previous field");
+    lines.push("{red-fg}Esc{/red-fg}: cancel");
+
+    this.formModal.setContent(lines.join("\n"));
+    this.formModal.show();
+    this.formModal.setFront();
+    this.formModal.focus();
+    this.footer.setContent(" Form: Space select | Tab next | Shift+Tab prev | Ctrl+S submit | Esc cancel ");
+    this.requestRender();
+  }
+
+  private moveActiveFormField(delta: 1 | -1): void {
+    if (!this.activeFormSession) {
+      return;
+    }
+    const nextIndex = Math.min(
+      this.activeFormSession.form.fields.length - 1,
+      Math.max(0, this.activeFormSession.currentFieldIndex + delta),
+    );
+    this.activeFormSession.currentFieldIndex = nextIndex;
+    this.activeFormSession.currentOptionIndex = 0;
+    this.renderActiveForm();
+  }
+
+  private moveActiveFormOption(delta: 1 | -1): void {
+    const field = this.currentFormField();
+    if (!this.activeFormSession || !field || (field.type !== "single-select" && field.type !== "multi-select")) {
+      return;
+    }
+    const nextIndex = Math.min(field.options.length - 1, Math.max(0, this.activeFormSession.currentOptionIndex + delta));
+    this.activeFormSession.currentOptionIndex = nextIndex;
+    this.renderActiveForm();
+  }
+
+  private toggleActiveFormValue(): void {
+    const session = this.activeFormSession;
+    const field = this.currentFormField();
+    if (!session || !field) {
+      return;
+    }
+
+    if (field.type === "boolean") {
+      session.values[field.id] = session.values[field.id] !== true;
+      this.renderActiveForm();
+      return;
+    }
+
+    if (field.type === "single-select") {
+      const option = field.options[session.currentOptionIndex];
+      if (!option) {
+        return;
+      }
+      session.values[field.id] = option.value;
+      this.renderActiveForm();
+      return;
+    }
+
+    if (field.type === "multi-select") {
+      const option = field.options[session.currentOptionIndex];
+      if (!option) {
+        return;
+      }
+      const current = Array.isArray(session.values[field.id]) ? [...(session.values[field.id] as string[])] : [];
+      const next = current.includes(option.value)
+        ? current.filter((item) => item !== option.value)
+        : [...current, option.value];
+      session.values[field.id] = next;
+      this.renderActiveForm();
+    }
+  }
+
+  private appendActiveFormText(ch: string, key: { name?: string; ctrl?: boolean; meta?: boolean }): void {
+    const session = this.activeFormSession;
+    const field = this.currentFormField();
+    if (!session || !field || field.type !== "text") {
+      return;
+    }
+    const current = String(session.values[field.id] ?? "");
+    if (key.name === "backspace") {
+      session.values[field.id] = current.slice(0, -1);
+      this.renderActiveForm();
+      return;
+    }
+    if (key.ctrl || key.meta || !ch || ch === "\r" || ch === "\n" || ch === "\t") {
+      return;
+    }
+    session.values[field.id] = `${current}${ch}`;
+    this.renderActiveForm();
+  }
+
+  private submitActiveForm(): void {
+    if (!this.activeFormSession) {
+      return;
+    }
+    const session = this.activeFormSession;
+    try {
+      validateUserInputValues(session.form, session.values);
+      const result: UserInputResult = {
+        formId: session.form.formId,
+        submittedAt: new Date().toISOString(),
+        values: session.values,
+      };
+      this.activeFormSession = null;
+      this.formModal.hide();
+      this.focusPane("flows");
+      session.resolve(result);
+      this.renderActiveForm();
+    } catch (error) {
+      this.appendLog((error as Error).message);
+      this.renderActiveForm();
+    }
+  }
+
+  private cancelActiveForm(): void {
+    if (!this.activeFormSession) {
+      return;
+    }
+    const session = this.activeFormSession;
+    this.activeFormSession = null;
+    this.formModal.hide();
+    this.focusPane("flows");
+    session.reject(new TaskRunnerError(`User cancelled form '${session.form.formId}'.`));
+    this.renderActiveForm();
+  }
+
+  private handleActiveFormKey(ch: string, key: { full?: string; name?: string; ctrl?: boolean; shift?: boolean; meta?: boolean }): void {
+    const field = this.currentFormField();
+    if (!field) {
+      return;
+    }
+    if (key.ctrl && key.name === "s") {
+      this.submitActiveForm();
+      return;
+    }
+    if (key.name === "escape") {
+      this.cancelActiveForm();
+      return;
+    }
+    if (key.name === "tab") {
+      this.moveActiveFormField(1);
+      return;
+    }
+    if (key.name === "backtab") {
+      this.moveActiveFormField(-1);
+      return;
+    }
+
+    if (field.type === "text") {
+      if (key.name === "enter") {
+        this.moveActiveFormField(1);
+        return;
+      }
+      this.appendActiveFormText(ch, key);
+      return;
+    }
+
+    if (field.type === "boolean") {
+      if (key.name === "space" || key.name === "left" || key.name === "right") {
+        this.toggleActiveFormValue();
+        return;
+      }
+      if (key.name === "enter") {
+        this.moveActiveFormField(1);
+      }
+      return;
+    }
+
+    if (key.name === "up") {
+      this.moveActiveFormOption(-1);
+      return;
+    }
+    if (key.name === "down") {
+      this.moveActiveFormOption(1);
+      return;
+    }
+    if (key.name === "space") {
+      this.toggleActiveFormValue();
+      return;
+    }
+    if (key.name === "enter") {
+      if (field.type === "single-select") {
+        this.toggleActiveFormValue();
+      }
+      this.moveActiveFormField(1);
+    }
   }
 
   private renderDescription(): void {
@@ -934,6 +1302,23 @@ export class InteractiveUi {
     this.requestRender();
   }
 
+  requestUserInput(form: UserInputFormDefinition): Promise<UserInputResult> {
+    if (this.activeFormSession) {
+      return Promise.reject(new TaskRunnerError("Another user input form is already active."));
+    }
+    return new Promise<UserInputResult>((resolve, reject) => {
+      this.activeFormSession = {
+        form,
+        values: buildInitialUserInputValues(form.fields),
+        currentFieldIndex: 0,
+        currentOptionIndex: 0,
+        resolve,
+        reject,
+      };
+      this.renderActiveForm();
+    });
+  }
+
   mount(): void {
     setOutputAdapter(this.createAdapter());
     this.focusPane("flows");
@@ -948,6 +1333,10 @@ export class InteractiveUi {
     if (this.logFlushTimer) {
       clearTimeout(this.logFlushTimer);
       this.logFlushTimer = null;
+    }
+    if (this.activeFormSession) {
+      this.activeFormSession.reject(new TaskRunnerError(`User cancelled form '${this.activeFormSession.form.formId}'.`));
+      this.activeFormSession = null;
     }
     setOutputAdapter(null);
     this.screen.destroy();
