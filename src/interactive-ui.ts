@@ -592,22 +592,23 @@ export class InteractiveUi {
           ? this.flowState.executionState
           : null;
 
-    const lines: string[] = [flow.label, ""];
+    const lines: string[] = [`{bold}${flow.label}{/bold}`, ""];
     for (const item of this.visiblePhaseItems(flow, flowState)) {
       if (item.kind === "group") {
         const visiblePhases = item.phases.filter((phase) => this.shouldDisplayPhase(flow, flowState, phase));
         if (visiblePhases.length === 0) {
           continue;
         }
-        lines.push(`${this.symbolForGroup(flow.id, flow, visiblePhases, flowState)} ${item.label}`);
+        const groupStatus = this.statusForGroup(flow, visiblePhases, flowState);
+        lines.push(`${this.symbolForGroup(flow.id, flow, visiblePhases, flowState)} ${this.colorizeProgressLabel(item.label, groupStatus)}`);
         for (const phase of visiblePhases) {
           const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
           const phaseStatus = this.displayStatusForPhase(flowState, flow, phase, phaseState?.status ?? null);
-          lines.push(`  ${this.symbolForStatus(flow.id, phaseStatus)} ${this.displayPhaseId(phase)}`);
+          lines.push(`  ${this.symbolForStatus(flow.id, phaseStatus)} ${this.colorizeProgressLabel(this.displayPhaseId(phase), phaseStatus)}`);
           for (const step of phase.steps) {
             const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
             const stepStatus = this.displayStatusForStep(flowState, flow, phase, stepState?.status ?? null);
-            lines.push(`    ${this.symbolForStatus(flow.id, stepStatus)} ${step.id}`);
+            lines.push(`    ${this.symbolForStatus(flow.id, stepStatus)} ${this.colorizeProgressLabel(step.id, stepStatus)}`);
           }
         }
         lines.push("");
@@ -619,17 +620,17 @@ export class InteractiveUi {
       }
       const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
       const phaseStatus = this.displayStatusForPhase(flowState, flow, phase, phaseState?.status ?? null);
-      lines.push(`${this.symbolForStatus(flow.id, phaseStatus)} ${this.displayPhaseId(phase)}`);
+      lines.push(`${this.symbolForStatus(flow.id, phaseStatus)} ${this.colorizeProgressLabel(this.displayPhaseId(phase), phaseStatus)}`);
       for (const step of phase.steps) {
         const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
         const stepStatus = this.displayStatusForStep(flowState, flow, phase, stepState?.status ?? null);
-        lines.push(`  ${this.symbolForStatus(flow.id, stepStatus)} ${step.id}`);
+        lines.push(`  ${this.symbolForStatus(flow.id, stepStatus)} ${this.colorizeProgressLabel(step.id, stepStatus)}`);
       }
       lines.push("");
     }
     if (flowState?.terminated) {
-      lines.push(`✓ Flow completed successfully`);
-      lines.push(`Reason: ${flowState.terminationReason ?? "flow terminated"}`);
+      lines.push(`{green-fg}✓{/green-fg} {green-fg}Flow completed successfully{/green-fg}`);
+      lines.push(`{gray-fg}Reason: ${flowState.terminationReason ?? "flow terminated"}{/gray-fg}`);
     }
     this.progress.setContent(lines.join("\n").trimEnd());
   }
@@ -669,24 +670,42 @@ export class InteractiveUi {
     status: "pending" | "running" | "done" | "skipped",
   ): string {
     if (status === "done") {
-      return "✓";
+      return "{green-fg}✓{/green-fg}";
     }
     if (status === "skipped") {
-      return "·";
+      return "{gray-fg}·{/gray-fg}";
     }
     if (status === "running") {
       const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-      return this.failedFlowId === flowId && !this.busy ? "×" : (frames[this.spinnerFrame] ?? "▶");
+      if (this.failedFlowId === flowId && !this.busy) {
+        return "{red-fg}×{/red-fg}";
+      }
+      return `{yellow-fg}${frames[this.spinnerFrame] ?? "▶"}{/yellow-fg}`;
     }
-    return "○";
+    return "{gray-fg}○{/gray-fg}";
   }
 
-  private symbolForGroup(
-    flowId: string,
+  private colorizeProgressLabel(
+    text: string,
+    status: "pending" | "running" | "done" | "skipped",
+  ): string {
+    if (status === "done") {
+      return `{green-fg}${text}{/green-fg}`;
+    }
+    if (status === "running") {
+      return `{yellow-fg}${text}{/yellow-fg}`;
+    }
+    if (status === "skipped") {
+      return `{gray-fg}${text}{/gray-fg}`;
+    }
+    return `{white-fg}${text}{/white-fg}`;
+  }
+
+  private statusForGroup(
     flow: InteractiveFlowDefinition,
     phases: InteractiveFlowDefinition["phases"],
     flowState: FlowExecutionState | null,
-  ): string {
+  ): "pending" | "running" | "done" | "skipped" {
     const statuses = phases.map((phase) =>
       this.displayStatusForPhase(
         flowState,
@@ -696,15 +715,34 @@ export class InteractiveUi {
       ),
     );
     if (statuses.some((status) => status === "running")) {
-      return this.symbolForStatus(flowId, "running");
+      return "running";
     }
     if (statuses.every((status) => status === "skipped")) {
-      return "·";
+      return "skipped";
     }
     if (statuses.every((status) => status === "done" || status === "skipped")) {
-      return "✓";
+      return "done";
     }
-    return "○";
+    return "pending";
+  }
+
+  private symbolForGroup(
+    flowId: string,
+    flow: InteractiveFlowDefinition,
+    phases: InteractiveFlowDefinition["phases"],
+    flowState: FlowExecutionState | null,
+  ): string {
+    const groupStatus = this.statusForGroup(flow, phases, flowState);
+    if (groupStatus === "running") {
+      return this.symbolForStatus(flowId, "running");
+    }
+    if (groupStatus === "skipped") {
+      return "{gray-fg}·{/gray-fg}";
+    }
+    if (groupStatus === "done") {
+      return "{green-fg}✓{/green-fg}";
+    }
+    return "{gray-fg}○{/gray-fg}";
   }
 
   private groupPhases(flow: InteractiveFlowDefinition): Array<
