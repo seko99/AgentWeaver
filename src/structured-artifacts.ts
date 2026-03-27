@@ -6,6 +6,7 @@ export type StructuredArtifactSchemaId =
   | "bug-analysis/v1"
   | "bug-fix-design/v1"
   | "bug-fix-plan/v1"
+  | "gitlab-review/v1"
   | "implementation-design/v1"
   | "implementation-plan/v1"
   | "jira-description/v1"
@@ -99,6 +100,12 @@ function validateBriefText(value: unknown, path: string, issues: ValidationIssue
     return;
   }
   expectNonEmptyString(value.summary, `${path}.summary`, issues);
+}
+
+function expectNumber(value: unknown, path: string, issues: ValidationIssue[]): void {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    issues.push(`${path} must be a number`);
+  }
 }
 
 function implementationDesignSchema(): StructuredArtifactSchema {
@@ -260,6 +267,40 @@ function reviewFixReportSchema(): StructuredArtifactSchema {
   };
 }
 
+function gitlabReviewSchema(): StructuredArtifactSchema {
+  return {
+    id: "gitlab-review/v1",
+    validate({ path, value }) {
+      const issues: ValidationIssue[] = [];
+      if (!expectObject(value, path, issues)) {
+        return issues;
+      }
+      expectNonEmptyString(value.summary, `${path}.summary`, issues);
+      expectNonEmptyString(value.merge_request_url, `${path}.merge_request_url`, issues);
+      expectNonEmptyString(value.project_path, `${path}.project_path`, issues);
+      expectNumber(value.merge_request_iid, `${path}.merge_request_iid`, issues);
+      expectNonEmptyString(value.fetched_at, `${path}.fetched_at`, issues);
+      expectObjectArray(
+        value.comments,
+        `${path}.comments`,
+        issues,
+        (item, itemPath, currentIssues) => {
+          expectNonEmptyString(item.id, `${itemPath}.id`, currentIssues);
+          expectNonEmptyString(item.discussion_id, `${itemPath}.discussion_id`, currentIssues);
+          expectNonEmptyString(item.body, `${itemPath}.body`, currentIssues);
+          expectNonEmptyString(item.author, `${itemPath}.author`, currentIssues);
+          expectNonEmptyString(item.created_at, `${itemPath}.created_at`, currentIssues);
+          if (item.file_path !== undefined && item.file_path !== null) {
+            expectNonEmptyString(item.file_path, `${itemPath}.file_path`, currentIssues);
+          }
+        },
+        true,
+      );
+      return issues;
+    },
+  };
+}
+
 function userInputSchema(): StructuredArtifactSchema {
   return {
     id: "user-input/v1",
@@ -280,6 +321,7 @@ const schemas: Record<StructuredArtifactSchemaId, StructuredArtifactSchema> = {
   "bug-analysis/v1": bugAnalysisSchema(),
   "bug-fix-design/v1": bugFixDesignSchema(),
   "bug-fix-plan/v1": bugFixPlanSchema(),
+  "gitlab-review/v1": gitlabReviewSchema(),
   "implementation-design/v1": implementationDesignSchema(),
   "implementation-plan/v1": implementationPlanSchema(),
   "jira-description/v1": { id: "jira-description/v1", validate: ({ path, value }) => {

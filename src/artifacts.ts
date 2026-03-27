@@ -119,6 +119,18 @@ export function mrDescriptionJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `mr-description-${taskKey}.json`);
 }
 
+export function gitlabReviewFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `gitlab-review-${taskKey}.md`);
+}
+
+export function gitlabReviewJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `gitlab-review-${taskKey}.json`);
+}
+
+export function gitlabReviewInputJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `gitlab-review-input-${taskKey}.json`);
+}
+
 export function autoStateFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `.agentweaver-state-${taskKey}.json`);
 }
