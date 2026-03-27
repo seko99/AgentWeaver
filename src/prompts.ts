@@ -79,8 +79,6 @@ export const TASK_SUMMARY_PROMPT_TEMPLATE =
   "Сделай краткое резюме задачи, на 1-2 абзаца. " +
   "Сначала запиши source-of-truth JSON в {task_summary_json_file} в виде объекта { summary: string }, затем markdown-версию в {task_summary_file}.";
 
-export const TEST_FIX_PROMPT_TEMPLATE = "Прогони тесты, исправь ошибки.";
-export const TEST_LINTER_FIX_PROMPT_TEMPLATE = "Прогони линтер, исправь замечания.";
 export const RUN_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
   "Запусти ./run_tests.sh, проанализируй последнюю ошибку проверки, исправь код и подготовь изменения так, чтобы следующий прогон run_tests.sh прошёл успешно.";
 export const RUN_LINTER_LOOP_FIX_PROMPT_TEMPLATE =

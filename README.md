@@ -4,7 +4,7 @@
 
 It orchestrates a flow like:
 
-`plan -> implement -> test -> review -> review-fix -> test`
+`plan -> implement -> run-linter-loop -> run-tests-loop -> review -> review-fix`
 
 The package is designed to run as an npm CLI and includes an interactive terminal UI built on `neo-blessed`.
 
@@ -14,7 +14,7 @@ The package is designed to run as an npm CLI and includes an interactive termina
 - Fetches GitLab merge request review comments into reusable markdown and JSON artifacts
 - Generates workflow artifacts such as design, implementation plan, QA plan, bug analysis, reviews, and summaries
 - Machine-readable JSON artifacts are stored under `.agentweaver-<TASK>/.artifacts/` and act as the source of truth between workflow steps; Markdown artifacts remain for human inspection
-- Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, and `auto`
+- Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
 - Persists compact `auto` pipeline state on disk so runs can resume without storing large agent outputs
 - Uses Docker runtime services for isolated Codex execution and build verification
 
@@ -25,7 +25,7 @@ The CLI now uses an executor + node + declarative flow architecture.
 - `src/index.ts` remains the CLI entrypoint and high-level orchestration layer
 - `src/executors/` contains first-class executors for external actions such as Jira fetch, GitLab review fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
-- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `test`, `test-fix`, `test-linter-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
+- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
 - `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
 
 This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
@@ -193,7 +193,7 @@ Activity pane behavior:
 
 ## Docker Runtime
 
-Docker is used as an isolated execution environment for Codex and build/test verification.
+Docker is used as an isolated execution environment for Codex-related runtime scenarios that still require container orchestration.
 
 Main services:
 
