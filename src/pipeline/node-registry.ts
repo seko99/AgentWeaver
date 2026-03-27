@@ -6,6 +6,7 @@ import { commandCheckNode } from "./nodes/command-check-node.js";
 import { fetchGitLabReviewNode } from "./nodes/fetch-gitlab-review-node.js";
 import { fileCheckNode } from "./nodes/file-check-node.js";
 import { flowRunNode } from "./nodes/flow-run-node.js";
+import { gitlabReviewArtifactsNode } from "./nodes/gitlab-review-artifacts-node.js";
 import { jiraFetchNode } from "./nodes/jira-fetch-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { reviewClaudeNode } from "./nodes/review-claude-node.js";
@@ -25,6 +26,7 @@ export type NodeKind =
   | "fetch-gitlab-review"
   | "file-check"
   | "flow-run"
+  | "gitlab-review-artifacts"
   | "jira-fetch"
   | "plan-codex"
   | "review-claude"
@@ -59,6 +61,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "fetch-gitlab-review": fetchGitLabReviewNode as unknown as AnyNodeDefinition,
   "file-check": fileCheckNode as unknown as AnyNodeDefinition,
   "flow-run": flowRunNode as unknown as AnyNodeDefinition,
+  "gitlab-review-artifacts": gitlabReviewArtifactsNode as unknown as AnyNodeDefinition,
   "jira-fetch": jiraFetchNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
   "review-claude": reviewClaudeNode as unknown as AnyNodeDefinition,
@@ -88,6 +91,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
   },
   "file-check": { kind: "file-check", version: 1, prompt: "forbidden", requiredParams: ["path"] },
   "flow-run": { kind: "flow-run", version: 1, prompt: "forbidden", requiredParams: ["fileName"] },
+  "gitlab-review-artifacts": {
+    kind: "gitlab-review-artifacts",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["gitlabReviewJsonFile", "reviewFile", "reviewJsonFile"],
+  },
   "jira-fetch": { kind: "jira-fetch", version: 1, prompt: "forbidden", requiredParams: ["jiraApiUrl", "outputFile"] },
   "plan-codex": { kind: "plan-codex", version: 1, prompt: "forbidden", requiredParams: ["prompt", "requiredArtifacts"] },
   "review-claude": {
@@ -100,7 +109,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     kind: "review-findings-form",
     version: 1,
     prompt: "forbidden",
-    requiredParams: ["reviewJsonFile", "formId", "title"],
+    requiredParams: ["reviewReplyJsonFile", "formId", "title"],
   },
   "review-reply-codex": {
     kind: "review-reply-codex",

@@ -883,11 +883,22 @@ async function executeCommand(
   }
 
   if (config.command === "gitlab-review") {
+    requireJiraTaskFile(config.jiraTaskFile);
+    validateStructuredArtifacts(
+      [
+        { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
+        { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
+      ],
+      "GitLab-review mode requires valid structured plan artifacts from the planning phase.",
+    );
+    const iteration = nextReviewIterationForTask(config.taskKey);
     await runDeclarativeFlowBySpecFile(
       "gitlab-review.json",
       config,
       {
         taskKey: config.taskKey,
+        iteration,
+        extraPrompt: config.extraPrompt,
       },
       requestUserInput,
     );

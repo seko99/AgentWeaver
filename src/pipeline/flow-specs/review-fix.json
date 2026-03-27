@@ -12,9 +12,9 @@
           "id": "build_review_fix_selection_form",
           "node": "review-findings-form",
           "params": {
-            "reviewJsonFile": {
+            "reviewReplyJsonFile": {
               "artifact": {
-                "kind": "review-json-file",
+                "kind": "review-reply-json-file",
                 "taskKey": { "ref": "params.taskKey" },
                 "iteration": { "ref": "params.latestIteration" }
               }

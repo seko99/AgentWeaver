@@ -94,6 +94,252 @@
               "message": "Fetch GitLab review node produced invalid structured artifacts."
             }
           ]
+        },
+        {
+          "id": "materialize_review_artifacts",
+          "node": "gitlab-review-artifacts",
+          "params": {
+            "gitlabReviewJsonFile": {
+              "artifact": {
+                "kind": "gitlab-review-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "reviewFile": {
+              "artifact": {
+                "kind": "review-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            },
+            "reviewJsonFile": {
+              "artifact": {
+                "kind": "review-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "review-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  }
+                ]
+              },
+              "message": "GitLab review materialization did not produce the required review artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  },
+                  "schemaId": "review-findings/v1"
+                }
+              ],
+              "message": "GitLab review materialization produced invalid structured review artifacts."
+            }
+          ]
+        },
+        {
+          "id": "summarize_review",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "node": "claude-prompt",
+          "prompt": {
+            "templateRef": "review-summary",
+            "vars": {
+              "review_file": {
+                "artifact": {
+                  "kind": "review-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_summary_file": {
+                "artifact": {
+                  "kind": "review-summary-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            },
+            "format": "plain"
+          },
+          "params": {
+            "labelText": { "const": "Preparing imported review summary" },
+            "summaryTitle": { "const": "Imported GitLab Comments" },
+            "model": { "const": "haiku" },
+            "outputFile": {
+              "artifact": {
+                "kind": "review-summary-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            }
+          }
+        },
+        {
+          "id": "run_codex_review_reply",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "review-reply",
+            "vars": {
+              "review_file": {
+                "artifact": {
+                  "kind": "review-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_json_file": {
+                "artifact": {
+                  "kind": "review-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "review_reply_file": {
+                "artifact": {
+                  "kind": "review-reply-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_reply_json_file": {
+                "artifact": {
+                  "kind": "review-reply-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "template": "Running Codex review reply mode for imported GitLab review (iteration {iteration})",
+              "vars": {
+                "iteration": { "ref": "params.iteration" }
+              }
+            },
+            "model": { "const": "gpt-5.4" }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "review-reply-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  }
+                ]
+              },
+              "message": "Codex review reply did not produce the required review-reply artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-reply-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  },
+                  "schemaId": "review-reply/v1"
+                }
+              ],
+              "message": "Codex review reply produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "summarize_review_reply",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "node": "claude-prompt",
+          "prompt": {
+            "templateRef": "review-reply-summary",
+            "vars": {
+              "review_reply_file": {
+                "artifact": {
+                  "kind": "review-reply-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_reply_summary_file": {
+                "artifact": {
+                  "kind": "review-reply-summary-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            },
+            "format": "plain"
+          },
+          "params": {
+            "labelText": { "const": "Preparing Codex reply summary" },
+            "summaryTitle": { "const": "Codex Reply Summary" },
+            "model": { "const": "haiku" },
+            "outputFile": {
+              "artifact": {
+                "kind": "review-reply-summary-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            }
+          }
         }
       ]
     }

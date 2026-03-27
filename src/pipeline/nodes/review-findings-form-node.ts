@@ -4,18 +4,18 @@ import { TaskRunnerError } from "../../errors.js";
 import type { PipelineNodeDefinition } from "../types.js";
 import type { UserInputFieldDefinition, UserInputFormDefinition } from "../../user-input.js";
 
-type ReviewFindingRecord = {
-  severity?: unknown;
-  title?: unknown;
-  description?: unknown;
+type ReviewReplyRecord = {
+  finding_title?: unknown;
+  disposition?: unknown;
+  action?: unknown;
 };
 
-type ReviewFindingsArtifact = {
-  findings?: ReviewFindingRecord[];
+type ReviewReplyArtifact = {
+  responses?: ReviewReplyRecord[];
 };
 
 export type ReviewFindingsFormNodeParams = {
-  reviewJsonFile: string;
+  reviewReplyJsonFile: string;
   formId: string;
   title: string;
   description?: string;
@@ -31,22 +31,22 @@ export const reviewFindingsFormNode: PipelineNodeDefinition<ReviewFindingsFormNo
   async run(_context, params) {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(readFileSync(params.reviewJsonFile, "utf8"));
+      parsed = JSON.parse(readFileSync(params.reviewReplyJsonFile, "utf8"));
     } catch (error) {
       throw new TaskRunnerError(
-        `Failed to read review findings from ${params.reviewJsonFile}: ${(error as Error).message}`,
+        `Failed to read review reply from ${params.reviewReplyJsonFile}: ${(error as Error).message}`,
       );
     }
 
-    const review = parsed as ReviewFindingsArtifact;
-    const findings = Array.isArray(review.findings) ? review.findings : [];
-    const selectableFindings = findings
-      .map((finding) => ({
-        severity: typeof finding.severity === "string" ? finding.severity.trim() : "",
-        title: typeof finding.title === "string" ? finding.title.trim() : "",
-        description: typeof finding.description === "string" ? finding.description.trim() : "",
+    const reviewReply = parsed as ReviewReplyArtifact;
+    const responses = Array.isArray(reviewReply.responses) ? reviewReply.responses : [];
+    const selectableFindings = responses
+      .map((response) => ({
+        findingTitle: typeof response.finding_title === "string" ? response.finding_title.trim() : "",
+        disposition: typeof response.disposition === "string" ? response.disposition.trim() : "",
+        action: typeof response.action === "string" ? response.action.trim() : "",
       }))
-      .filter((finding) => finding.title.length > 0);
+      .filter((response) => response.findingTitle.length > 0);
 
     const fields: UserInputFieldDefinition[] = [
       {
@@ -64,10 +64,10 @@ export const reviewFindingsFormNode: PipelineNodeDefinition<ReviewFindingsFormNo
         type: "multi-select",
         label: "Какие findings исправить сейчас",
         help: "Space переключает пункт. Если apply_all=false, выберите хотя бы один finding.",
-        options: selectableFindings.map((finding) => ({
-          value: finding.title,
-          label: `[${finding.severity || "info"}] ${finding.title}`,
-          ...(finding.description ? { description: finding.description } : {}),
+        options: selectableFindings.map((response) => ({
+          value: response.findingTitle,
+          label: `${response.findingTitle} | ${response.disposition || "-"}`,
+          ...(response.action ? { description: response.action } : {}),
         })),
         default: [],
       });
