@@ -8,6 +8,7 @@ import { fileCheckNode } from "./nodes/file-check-node.js";
 import { flowRunNode } from "./nodes/flow-run-node.js";
 import { gitlabReviewArtifactsNode } from "./nodes/gitlab-review-artifacts-node.js";
 import { jiraFetchNode } from "./nodes/jira-fetch-node.js";
+import { jiraIssueCheckNode } from "./nodes/jira-issue-check-node.js";
 import { localScriptCheckNode } from "./nodes/local-script-check-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { reviewClaudeNode } from "./nodes/review-claude-node.js";
@@ -29,6 +30,7 @@ export type NodeKind =
   | "flow-run"
   | "gitlab-review-artifacts"
   | "jira-fetch"
+  | "jira-issue-check"
   | "local-script-check"
   | "plan-codex"
   | "review-claude"
@@ -65,6 +67,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "flow-run": flowRunNode as unknown as AnyNodeDefinition,
   "gitlab-review-artifacts": gitlabReviewArtifactsNode as unknown as AnyNodeDefinition,
   "jira-fetch": jiraFetchNode as unknown as AnyNodeDefinition,
+  "jira-issue-check": jiraIssueCheckNode as unknown as AnyNodeDefinition,
   "local-script-check": localScriptCheckNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
   "review-claude": reviewClaudeNode as unknown as AnyNodeDefinition,
@@ -101,6 +104,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     requiredParams: ["gitlabReviewJsonFile", "reviewFile", "reviewJsonFile"],
   },
   "jira-fetch": { kind: "jira-fetch", version: 1, prompt: "forbidden", requiredParams: ["jiraApiUrl", "outputFile"] },
+  "jira-issue-check": {
+    kind: "jira-issue-check",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["jiraTaskFile", "allowedIssueTypes"],
+  },
   "local-script-check": { kind: "local-script-check", version: 1, prompt: "forbidden", requiredParams: ["argv", "labelText"] },
   "plan-codex": { kind: "plan-codex", version: 1, prompt: "forbidden", requiredParams: ["prompt", "requiredArtifacts"] },
   "review-claude": {

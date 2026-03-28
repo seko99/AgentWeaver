@@ -1,3 +1,4 @@
+import path from "node:path";
 import blessed from "neo-blessed";
 
 import { renderMarkdownToTerminal } from "./markdown.js";
@@ -30,6 +31,7 @@ type InteractiveUiOptions = {
   issueKey: string;
   summaryText: string;
   cwd: string;
+  gitBranchName: string | null;
   flows: InteractiveFlowDefinition[];
   onRun: (flowId: string) => Promise<void>;
   onExit: () => void;
@@ -655,9 +657,21 @@ export class InteractiveUi {
 
   private updateHeader(): void {
     const current = this.currentFlowId ?? this.selectedFlowId;
+    const pathParts = this.options.cwd.split(path.sep).filter(Boolean);
+    const folderName = pathParts.slice(-3).join("/") || this.options.cwd;
+    const branchLabel = this.options.gitBranchName ? this.options.gitBranchName : "detached-head";
+    const flowLabel = `${current}${this.busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`;
+    const divider = " {gray-fg}│{/gray-fg} ";
     this.header.setContent(
-      `{bold}AgentWeaver{/bold}  {green-fg}${this.issueKey}{/green-fg}\n` +
-        `cwd: ${this.options.cwd}   current: ${current}${this.busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`,
+      [
+        "{bold}AgentWeaver{/bold}",
+        divider,
+        `{bold}Issue{/bold} {green-fg}${this.issueKey}{/green-fg}`,
+        divider,
+        `{bold}Flow{/bold} ${flowLabel}`,
+        divider,
+        `{bold}Location{/bold} {cyan-fg}${folderName}{/cyan-fg} {gray-fg}•{/gray-fg} {magenta-fg}${branchLabel}{/magenta-fg}`,
+      ].join(""),
     );
   }
 
@@ -1228,10 +1242,7 @@ export class InteractiveUi {
   ): boolean {
     const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id) ?? null;
     if (!flowState) {
-      if (Object.keys(phase.repeatVars).length > 0) {
-        return false;
-      }
-      return !this.hasPreviousRepeatPhase(flow, phase);
+      return true;
     }
     if (Object.keys(phase.repeatVars).length === 0) {
       if (!phaseState) {
@@ -1249,21 +1260,6 @@ export class InteractiveUi {
       return false;
     }
     return true;
-  }
-
-  private hasPreviousRepeatPhase(
-    flow: InteractiveFlowDefinition,
-    phase: InteractiveFlowDefinition["phases"][number],
-  ): boolean {
-    for (const candidate of flow.phases) {
-      if (candidate.id === phase.id) {
-        return false;
-      }
-      if (Object.keys(candidate.repeatVars).length > 0) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private repeatSeriesKey(phases: InteractiveFlowDefinition["phases"]): string {
