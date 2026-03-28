@@ -1,49 +1,49 @@
 {
-  "kind": "run-tests-loop-flow",
+  "kind": "run-go-linter-loop-flow",
   "version": 1,
   "phases": [
     {
-      "id": "run_tests_try_1",
+      "id": "run_go_linter_try_1",
       "steps": [
         {
-          "id": "run_tests",
+          "id": "run_go_linter",
           "node": "local-script-check",
           "params": {
             "argv": {
               "list": [
-                { "ref": "params.runTestsScript" }
+                { "ref": "params.runGoLinterScript" }
               ]
             },
             "labelText": {
-              "const": "Running run_tests.sh locally (attempt 1)"
+              "const": "Running run_go_linter.sh locally (attempt 1)"
             }
           },
           "stopFlowIf": {
             "equals": [
-              { "ref": "steps.run_tests_try_1.run_tests.outputs.parsed.ok" },
+              { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.ok" },
               { "const": true }
             ]
           }
         },
         {
-          "id": "fix_tests",
+          "id": "fix_go_linter",
           "when": {
             "equals": [
-              { "ref": "steps.run_tests_try_1.run_tests.outputs.parsed.ok" },
+              { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.ok" },
               { "const": false }
             ]
           },
           "node": "codex-local-prompt",
           "prompt": {
-            "templateRef": "run-tests-loop-fix",
+            "templateRef": "run-go-linter-loop-fix",
             "extraPrompt": {
               "appendPrompt": {
                 "base": { "ref": "params.extraPrompt" },
                 "suffix": {
-                  "template": "Последний результат run_tests.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
+                  "template": "Последний результат run_go_linter.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
                   "vars": {
-                    "exit_code": { "ref": "steps.run_tests_try_1.run_tests.outputs.parsed.exitCode" },
-                    "summary": { "ref": "steps.run_tests_try_1.run_tests.outputs.parsed.summary" }
+                    "exit_code": { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.exitCode" },
+                    "summary": { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.summary" }
                   }
                 }
               }
@@ -52,7 +52,7 @@
           },
           "params": {
             "labelText": {
-              "const": "Running Codex tests loop fix (attempt 1)"
+              "const": "Running Codex Go linter loop fix (attempt 1)"
             },
             "model": { "const": "gpt-5.4" }
           }
@@ -67,53 +67,53 @@
       },
       "phases": [
         {
-          "id": "run_tests_try_${attempt}",
+          "id": "run_go_linter_try_${attempt}",
           "when": {
             "equals": [
-              { "ref": "steps.run_tests_try_${attempt_minus_one}.run_tests.outputs.parsed.ok" },
+              { "ref": "steps.run_go_linter_try_${attempt_minus_one}.run_go_linter.outputs.parsed.ok" },
               { "const": false }
             ]
           },
           "steps": [
             {
-              "id": "run_tests",
+              "id": "run_go_linter",
               "node": "local-script-check",
               "params": {
                 "argv": {
                   "list": [
-                    { "ref": "params.runTestsScript" }
+                    { "ref": "params.runGoLinterScript" }
                   ]
                 },
                 "labelText": {
-                  "template": "Running run_tests.sh locally (attempt ${attempt})"
+                  "template": "Running run_go_linter.sh locally (attempt ${attempt})"
                 }
               },
               "stopFlowIf": {
                 "equals": [
-                  { "ref": "steps.run_tests_try_${attempt}.run_tests.outputs.parsed.ok" },
+                  { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.ok" },
                   { "const": true }
                 ]
               }
             },
             {
-              "id": "fix_tests",
+              "id": "fix_go_linter",
               "when": {
                 "equals": [
-                  { "ref": "steps.run_tests_try_${attempt}.run_tests.outputs.parsed.ok" },
+                  { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.ok" },
                   { "const": false }
                 ]
               },
               "node": "codex-local-prompt",
               "prompt": {
-                "templateRef": "run-tests-loop-fix",
+                "templateRef": "run-go-linter-loop-fix",
                 "extraPrompt": {
                   "appendPrompt": {
                     "base": { "ref": "params.extraPrompt" },
                     "suffix": {
-                      "template": "Последний результат run_tests.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
+                      "template": "Последний результат run_go_linter.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
                       "vars": {
-                        "exit_code": { "ref": "steps.run_tests_try_${attempt}.run_tests.outputs.parsed.exitCode" },
-                        "summary": { "ref": "steps.run_tests_try_${attempt}.run_tests.outputs.parsed.summary" }
+                        "exit_code": { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.exitCode" },
+                        "summary": { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.summary" }
                       }
                     }
                   }
@@ -122,7 +122,7 @@
               },
               "params": {
                 "labelText": {
-                  "template": "Running Codex tests loop fix (attempt ${attempt})"
+                  "template": "Running Codex Go linter loop fix (attempt ${attempt})"
                 },
                 "model": { "const": "gpt-5.4" }
               }
@@ -132,20 +132,20 @@
       ]
     },
     {
-      "id": "run_tests_failed",
+      "id": "run_go_linter_failed",
       "steps": [
         {
-          "id": "assert_run_tests_success",
+          "id": "assert_run_go_linter_success",
           "node": "file-check",
           "params": {
-            "path": { "ref": "params.runTestsScript" }
+            "path": { "ref": "params.runGoLinterScript" }
           },
           "expect": [
             {
               "kind": "step-output",
-              "value": { "ref": "steps.run_tests_try_5.run_tests.outputs.parsed.ok" },
+              "value": { "ref": "steps.run_go_linter_try_5.run_go_linter.outputs.parsed.ok" },
               "equals": { "const": true },
-              "message": "run-tests-loop exhausted all attempts without a successful run_tests.sh execution."
+              "message": "run-go-linter-loop exhausted all attempts without a successful run_go_linter.sh execution."
             }
           ]
         }

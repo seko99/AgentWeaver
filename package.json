@@ -32,8 +32,9 @@
     "docker-compose.yml",
     "Dockerfile.codex",
     "verify_build.sh",
-    "run_tests.sh",
-    "run_linter.sh"
+    "run_go_tests.sh",
+    "run_go_linter.sh",
+    "run_go_coverage.sh"
   ],
   "publishConfig": {
     "access": "public"
