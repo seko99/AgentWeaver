@@ -92,10 +92,10 @@ export const TASK_SUMMARY_PROMPT_TEMPLATE =
   "Сделай краткое резюме задачи, на 1-2 абзаца. " +
   "Сначала запиши source-of-truth JSON в {task_summary_json_file} в виде объекта { summary: string }, затем markdown-версию в {task_summary_file}.";
 
-export const RUN_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
-  "Запусти ./run_tests.sh, проанализируй последнюю ошибку проверки, исправь код и подготовь изменения так, чтобы следующий прогон run_tests.sh прошёл успешно.";
-export const RUN_LINTER_LOOP_FIX_PROMPT_TEMPLATE =
-  "Запусти ./run_linter.sh, проанализируй последнюю ошибку линтера или генерации, исправь код и подготовь изменения так, чтобы следующий прогон run_linter.sh прошёл успешно.";
+export const RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
+  "Запусти ./run_go_tests.sh, проанализируй последнюю ошибку проверки, исправь код и подготовь изменения так, чтобы следующий прогон run_go_tests.sh прошёл успешно.";
+export const RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE =
+  "Запусти ./run_go_linter.sh, проанализируй последнюю ошибку линтера или генерации, исправь код и подготовь изменения так, чтобы следующий прогон run_go_linter.sh прошёл успешно.";
 export const AUTO_REVIEW_FIX_EXTRA_PROMPT = "Исправлять только блокеры, критикалы и важные";
 
 export function formatTemplate(template: string, values: Record<string, string>): string {

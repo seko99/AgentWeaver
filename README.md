@@ -4,7 +4,7 @@
 
 It orchestrates a flow like:
 
-`plan -> implement -> run-linter-loop -> run-tests-loop -> review -> review-fix`
+`plan -> implement -> run-go-linter-loop -> run-go-tests-loop -> review -> review-fix`
 
 The package is designed to run as an npm CLI and includes an interactive terminal UI built on `neo-blessed`.
 
@@ -15,7 +15,7 @@ The package is designed to run as an npm CLI and includes an interactive termina
 - Generates workflow artifacts such as design, implementation plan, QA plan, bug analysis, reviews, and summaries
 - Machine-readable JSON artifacts are stored under `.agentweaver/scopes/<scope-key>/.artifacts/` and act as the source of truth between workflow steps; Markdown artifacts remain for human inspection
 - Workflow artifacts are isolated by scope; for Jira-driven flows the scope key defaults to the Jira task key, otherwise it defaults to `<git-branch>--<worktree-hash>`
-- Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
+- Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
 - Persists compact `auto` pipeline state on disk so runs can resume without storing large agent outputs
 - Uses Docker runtime services for isolated Codex execution and build verification
 
@@ -26,7 +26,7 @@ The CLI now uses an executor + node + declarative flow architecture.
 - `src/index.ts` remains the CLI entrypoint and high-level orchestration layer
 - `src/executors/` contains first-class executors for external actions such as Jira fetch, GitLab review fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
-- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
+- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
 - `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
 
 This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
@@ -45,8 +45,9 @@ This keeps command handlers focused on choosing a flow and providing parameters 
 - `docker-compose.yml` — runtime services for Codex and build verification
 - `Dockerfile.codex` — container image for Codex runtime
 - `verify_build.sh` — aggregated verification entrypoint used by `verify-build`
-- `run_tests.sh` — isolated test and coverage verification entrypoint
-- `run_linter.sh` — isolated generate + lint verification entrypoint
+- `run_go_tests.sh` — isolated Go test verification entrypoint
+- `run_go_linter.sh` — isolated Go generate + lint verification entrypoint
+- `run_go_coverage.sh` — isolated Go coverage verification entrypoint
 - `package.json` — npm package metadata and scripts
 - `tsconfig.json` — TypeScript configuration
 
@@ -128,9 +129,9 @@ agentweaver implement DEMO-3288
 agentweaver review
 agentweaver review DEMO-3288
 agentweaver review --scope release-prep
-agentweaver run-tests-loop DEMO-3288
-agentweaver run-tests-loop
-agentweaver run-linter-loop DEMO-3288
+agentweaver run-go-tests-loop DEMO-3288
+agentweaver run-go-tests-loop
+agentweaver run-go-linter-loop DEMO-3288
 agentweaver auto DEMO-3288
 ```
 
@@ -174,7 +175,7 @@ Notes:
 
 - `--verbose` streams child process `stdout/stderr` in direct CLI mode
 - task-only commands such as `plan` and `auto` ask for Jira task via interactive `user-input` when it is omitted
-- scope-flexible commands such as `review`, `review-fix`, `run-tests-loop`, and `run-linter-loop` use the current git branch by default when Jira task is omitted
+- scope-flexible commands such as `review`, `review-fix`, `run-go-tests-loop`, and `run-go-linter-loop` use the current git branch by default when Jira task is omitted
 - `--scope <name>` lets you override the default project scope name
 - the interactive `Activity` pane is intentionally structured: it shows launch separators, prompts, summaries, and short status messages instead of raw Codex/Claude logs by default
 
@@ -211,8 +212,9 @@ Main services:
 - `codex` — interactive Codex container
 - `codex-exec` — non-interactive `codex exec`
 - `verify-build` — project verification script inside container
-- `run-tests` — isolated `run_tests.sh` execution inside container
-- `run-linter` — isolated `run_linter.sh` execution inside container
+- `run-go-tests` — isolated `run_go_tests.sh` execution inside container
+- `run-go-linter` — isolated `run_go_linter.sh` execution inside container
+- `run-go-coverage` — isolated `run_go_coverage.sh` execution inside container
 - `codex-login` — interactive login container
 - `dockerd` — internal Docker daemon for testcontainers/build flows
 
@@ -245,13 +247,19 @@ PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run 
 Tests only:
 
 ```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-tests
+PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-go-tests
 ```
 
 Linter only:
 
 ```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-linter
+PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-go-linter
+```
+
+Coverage only:
+
+```bash
+PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-go-coverage
 ```
 
 ## Development

@@ -73,8 +73,8 @@ const COMMANDS = [
   "implement",
   "review",
   "review-fix",
-  "run-tests-loop",
-  "run-linter-loop",
+  "run-go-tests-loop",
+  "run-go-linter-loop",
   "auto",
   "auto-status",
   "auto-reset",
@@ -102,8 +102,9 @@ type BaseConfig = {
   dryRun: boolean;
   verbose: boolean;
   dockerComposeFile: string;
-  runTestsScript: string;
-  runLinterScript: string;
+  runGoTestsScript: string;
+  runGoLinterScript: string;
+  runGoCoverageScript: string;
 };
 
 type Config = BaseConfig & {
@@ -203,8 +204,8 @@ function usage(): string {
   agentweaver implement [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review-fix [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
-  agentweaver run-tests-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
-  agentweaver run-linter-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver run-go-tests-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver run-go-linter-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver auto [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver auto [--dry] [--verbose] [--prompt <text>] --from <phase> [<jira-browse-url|jira-issue-key>]
   agentweaver auto --help-phases
@@ -572,8 +573,9 @@ function buildBaseConfig(
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
     dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
-    runTestsScript: path.join(homeDir, "run_tests.sh"),
-    runLinterScript: path.join(homeDir, "run_linter.sh"),
+    runGoTestsScript: path.join(homeDir, "run_go_tests.sh"),
+    runGoLinterScript: path.join(homeDir, "run_go_linter.sh"),
+    runGoCoverageScript: path.join(homeDir, "run_go_coverage.sh"),
   };
 }
 
@@ -596,8 +598,8 @@ function commandSupportsProjectScope(command: CommandName): boolean {
     command === "implement" ||
     command === "review" ||
     command === "review-fix" ||
-    command === "run-tests-loop" ||
-    command === "run-linter-loop"
+    command === "run-go-tests-loop" ||
+    command === "run-go-linter-loop"
   );
 }
 
@@ -657,8 +659,8 @@ function checkPrerequisites(config: Config): void {
     config.command === "plan" ||
     config.command === "task-describe" ||
     config.command === "review" ||
-    config.command === "run-tests-loop" ||
-    config.command === "run-linter-loop"
+    config.command === "run-go-tests-loop" ||
+    config.command === "run-go-linter-loop"
   ) {
     resolveCmd("codex", "CODEX_BIN");
   }
@@ -677,8 +679,9 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
     jiraApiUrl: config.jiraApiUrl,
     taskKey: config.taskKey,
     dockerComposeFile: config.dockerComposeFile,
-    runTestsScript: config.runTestsScript,
-    runLinterScript: config.runLinterScript,
+    runGoTestsScript: config.runGoTestsScript,
+    runGoLinterScript: config.runGoLinterScript,
+    runGoCoverageScript: config.runGoCoverageScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
     forceRefresh: forceRefreshSummary,
@@ -702,10 +705,10 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
     "Запускает Claude-код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания через Codex.",
   "review-fix":
     "Исправляет замечания после review-reply, обновляет код и прогоняет обязательные проверки после правок.",
-  "run-tests-loop":
-    "Циклически запускает `./run_tests.sh` локально, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
-  "run-linter-loop":
-    "Циклически запускает `./run_linter.sh` локально, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
+  "run-go-tests-loop":
+    "Циклически запускает `./run_go_tests.sh` локально, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
+  "run-go-linter-loop":
+    "Циклически запускает `./run_go_linter.sh` локально, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
 };
 
 function flowDescription(id: string): string {
@@ -760,8 +763,8 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
     declarativeFlowDefinition("implement", "implement", "implement.json"),
     declarativeFlowDefinition("review", "review", "review.json"),
     declarativeFlowDefinition("review-fix", "review-fix", "review-fix.json"),
-    declarativeFlowDefinition("run-tests-loop", "run-tests-loop", "run-tests-loop.json"),
-    declarativeFlowDefinition("run-linter-loop", "run-linter-loop", "run-linter-loop.json"),
+    declarativeFlowDefinition("run-go-tests-loop", "run-go-tests-loop", "run-go-tests-loop.json"),
+    declarativeFlowDefinition("run-go-linter-loop", "run-go-linter-loop", "run-go-linter-loop.json"),
   ];
 }
 
@@ -1136,14 +1139,14 @@ async function executeCommand(
     return false;
   }
 
-  if (config.command === "run-tests-loop" || config.command === "run-linter-loop") {
+  if (config.command === "run-go-tests-loop" || config.command === "run-go-linter-loop") {
     await runDeclarativeFlowBySpecFile(
-      config.command === "run-tests-loop" ? "run-tests-loop.json" : "run-linter-loop.json",
+      config.command === "run-go-tests-loop" ? "run-go-tests-loop.json" : "run-go-linter-loop.json",
       config,
       {
         taskKey: config.taskKey,
-        runTestsScript: config.runTestsScript,
-        runLinterScript: config.runLinterScript,
+        runGoTestsScript: config.runGoTestsScript,
+        runGoLinterScript: config.runGoLinterScript,
         extraPrompt: config.extraPrompt,
       },
       requestUserInput,

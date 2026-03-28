@@ -317,32 +317,32 @@
       ]
     },
     {
-      "id": "run_linter_loop_after_implement",
+      "id": "run_go_linter_loop_after_implement",
       "steps": [
         {
-          "id": "run_linter_loop",
+          "id": "run_go_linter_loop",
           "node": "flow-run",
           "params": {
-            "fileName": { "const": "run-linter-loop.json" },
-            "labelText": { "const": "Running run-linter-loop after implement" },
+            "fileName": { "const": "run-go-linter-loop.json" },
+            "labelText": { "const": "Running run-go-linter-loop after implement" },
             "taskKey": { "ref": "params.taskKey" },
-            "runLinterScript": { "ref": "params.runLinterScript" },
+            "runGoLinterScript": { "ref": "params.runGoLinterScript" },
             "extraPrompt": { "ref": "params.extraPrompt" }
           }
         }
       ]
     },
     {
-      "id": "run_tests_loop_after_implement",
+      "id": "run_go_tests_loop_after_implement",
       "steps": [
         {
-          "id": "run_tests_loop",
+          "id": "run_go_tests_loop",
           "node": "flow-run",
           "params": {
-            "fileName": { "const": "run-tests-loop.json" },
-            "labelText": { "const": "Running run-tests-loop after implement" },
+            "fileName": { "const": "run-go-tests-loop.json" },
+            "labelText": { "const": "Running run-go-tests-loop after implement" },
             "taskKey": { "ref": "params.taskKey" },
-            "runTestsScript": { "ref": "params.runTestsScript" },
+            "runGoTestsScript": { "ref": "params.runGoTestsScript" },
             "extraPrompt": { "ref": "params.extraPrompt" }
           }
         }
@@ -752,7 +752,7 @@
       ]
     },
     {
-      "id": "run_linter_loop_after_review_fix",
+      "id": "run_go_linter_loop_after_review_fix",
       "when": {
         "not": {
           "ref": "steps.review.check_ready_to_merge.outputs.exists"
@@ -760,20 +760,20 @@
       },
       "steps": [
         {
-          "id": "run_linter_loop",
+          "id": "run_go_linter_loop",
           "node": "flow-run",
           "params": {
-            "fileName": { "const": "run-linter-loop.json" },
-            "labelText": { "const": "Running run-linter-loop after review-fix" },
+            "fileName": { "const": "run-go-linter-loop.json" },
+            "labelText": { "const": "Running run-go-linter-loop after review-fix" },
             "taskKey": { "ref": "params.taskKey" },
-            "runLinterScript": { "ref": "params.runLinterScript" },
+            "runGoLinterScript": { "ref": "params.runGoLinterScript" },
             "extraPrompt": { "ref": "params.extraPrompt" }
           }
         }
       ]
     },
     {
-      "id": "run_tests_loop_after_review_fix",
+      "id": "run_go_tests_loop_after_review_fix",
       "when": {
         "not": {
           "ref": "steps.review.check_ready_to_merge.outputs.exists"
@@ -781,13 +781,13 @@
       },
       "steps": [
         {
-          "id": "run_tests_loop",
+          "id": "run_go_tests_loop",
           "node": "flow-run",
           "params": {
-            "fileName": { "const": "run-tests-loop.json" },
-            "labelText": { "const": "Running run-tests-loop after review-fix" },
+            "fileName": { "const": "run-go-tests-loop.json" },
+            "labelText": { "const": "Running run-go-tests-loop after review-fix" },
             "taskKey": { "ref": "params.taskKey" },
-            "runTestsScript": { "ref": "params.runTestsScript" },
+            "runGoTestsScript": { "ref": "params.runGoTestsScript" },
             "extraPrompt": { "ref": "params.extraPrompt" }
           }
         }
