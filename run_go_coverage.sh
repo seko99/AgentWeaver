@@ -69,7 +69,7 @@ fail() {
   local command="$3"
   local details_json="${4:-{}}"
 
-  emit_result false "tests" "run_tests" "$exit_code" "$summary" "$command" "$details_json"
+  emit_result false "coverage" "run_go_coverage" "$exit_code" "$summary" "$command" "$details_json"
   exit "$exit_code"
 }
 
@@ -92,9 +92,9 @@ if [[ -z "$PKGS" ]]; then
   fail 2 "Coverage package list is empty" "go list ./..." '{"failedStep":"go-list","reason":"no-test-packages"}'
 fi
 
-log "==> Running unit tests with coverage (go test -coverprofile)"
+log "==> Running coverage check (go test -coverprofile)"
 if ! go test -coverpkg="$PKGS" -coverprofile="$COVER_FILE" -count=1 ./... >&2; then
-  fail 1 "go test failed" "go test -coverpkg=<pkgs> -coverprofile=<file> -count=1 ./..." "$(details_json --arg failedStep "go-test" --arg coverFile "$COVER_FILE" '{failedStep: $failedStep, coverFile: $coverFile}')"
+  fail 1 "go test for coverage failed" "go test -coverpkg=<pkgs> -coverprofile=<file> -count=1 ./..." "$(details_json --arg failedStep "go-test" --arg coverFile "$COVER_FILE" '{failedStep: $failedStep, coverFile: $coverFile}')"
 fi
 
 log "==> Calculating coverage summary"
@@ -110,4 +110,4 @@ if ! awk -v c="$coverage" -v min="$MIN_COVERAGE" 'BEGIN {exit (c >= min ? 0 : 1)
   fail 3 "Coverage ${coverage}% is below required ${MIN_COVERAGE}%" "go test -coverprofile && go tool cover -func" "$(details_json --argjson coverage "$coverage" --argjson minCoverage "$MIN_COVERAGE" --arg failedStep "coverage-threshold" --arg coverFile "$COVER_FILE" '{coverage: $coverage, minCoverage: $minCoverage, failedStep: $failedStep, coverFile: $coverFile}')"
 fi
 
-emit_result true "tests" "run_tests" 0 "Tests passed with sufficient coverage" "go test -coverpkg=<pkgs> -coverprofile=<file> -count=1 ./..." "$(details_json --argjson coverage "$coverage" --argjson minCoverage "$MIN_COVERAGE" --arg coverFile "$COVER_FILE" '{coverage: $coverage, minCoverage: $minCoverage, coverFile: $coverFile}')"
+emit_result true "coverage" "run_go_coverage" 0 "Coverage passed" "go test -coverpkg=<pkgs> -coverprofile=<file> -count=1 ./..." "$(details_json --argjson coverage "$coverage" --argjson minCoverage "$MIN_COVERAGE" --arg coverFile "$COVER_FILE" '{coverage: $coverage, minCoverage: $minCoverage, coverFile: $coverFile}')"

@@ -62,7 +62,7 @@ fail() {
   local command="$3"
   local details_json="${4:-{}}"
 
-  emit_result false "linter" "run_linter" "$exit_code" "$summary" "$command" "$details_json"
+  emit_result false "linter" "run_go_linter" "$exit_code" "$summary" "$command" "$details_json"
   exit "$exit_code"
 }
 
@@ -86,4 +86,4 @@ if ! golangci-lint run >&2; then
   fail 1 "golangci-lint failed" "golangci-lint run" '{"failedStep":"golangci-lint"}'
 fi
 
-emit_result true "linter" "run_linter" 0 "Linter checks passed" "go generate ./... && golangci-lint run" "$(details_json '{steps:["go-generate","golangci-lint"]}')"
+emit_result true "linter" "run_go_linter" 0 "Linter checks passed" "go generate ./... && golangci-lint run" "$(details_json '{steps:["go-generate","golangci-lint"]}')"
