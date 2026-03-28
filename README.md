@@ -13,7 +13,8 @@ The package is designed to run as an npm CLI and includes an interactive termina
 - Fetches a Jira issue by key or browse URL
 - Fetches GitLab merge request review comments into reusable markdown and JSON artifacts
 - Generates workflow artifacts such as design, implementation plan, QA plan, bug analysis, reviews, and summaries
-- Machine-readable JSON artifacts are stored under `.agentweaver-<TASK>/.artifacts/` and act as the source of truth between workflow steps; Markdown artifacts remain for human inspection
+- Machine-readable JSON artifacts are stored under `.agentweaver/scopes/<scope-key>/.artifacts/` and act as the source of truth between workflow steps; Markdown artifacts remain for human inspection
+- Workflow artifacts are isolated by scope; for Jira-driven flows the scope key defaults to the Jira task key, otherwise it defaults to `<git-branch>--<worktree-hash>`
 - Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-tests-loop`, `run-linter-loop`, and `auto`
 - Persists compact `auto` pipeline state on disk so runs can resume without storing large agent outputs
 - Uses Docker runtime services for isolated Codex execution and build verification
@@ -117,14 +118,18 @@ Direct CLI usage:
 
 ```bash
 agentweaver plan DEMO-3288
+agentweaver plan
 agentweaver bug-analyze DEMO-3288
 agentweaver bug-fix DEMO-3288
 agentweaver gitlab-review DEMO-3288
 agentweaver mr-description DEMO-3288
 agentweaver task-describe DEMO-3288
 agentweaver implement DEMO-3288
+agentweaver review
 agentweaver review DEMO-3288
+agentweaver review --scope release-prep
 agentweaver run-tests-loop DEMO-3288
+agentweaver run-tests-loop
 agentweaver run-linter-loop DEMO-3288
 agentweaver auto DEMO-3288
 ```
@@ -133,11 +138,13 @@ From source checkout:
 
 ```bash
 node dist/index.js plan DEMO-3288
+node dist/index.js plan
 node dist/index.js bug-analyze DEMO-3288
 node dist/index.js bug-fix DEMO-3288
 node dist/index.js gitlab-review DEMO-3288
 node dist/index.js mr-description DEMO-3288
 node dist/index.js task-describe DEMO-3288
+node dist/index.js review
 node dist/index.js auto DEMO-3288
 ```
 
@@ -145,6 +152,7 @@ Interactive mode:
 
 ```bash
 agentweaver DEMO-3288
+agentweaver
 ```
 
 When you run from a working project directory, set `AGENTWEAVER_HOME` to the AgentWeaver installation:
@@ -165,6 +173,9 @@ agentweaver auto-reset DEMO-3288
 Notes:
 
 - `--verbose` streams child process `stdout/stderr` in direct CLI mode
+- task-only commands such as `plan` and `auto` ask for Jira task via interactive `user-input` when it is omitted
+- scope-flexible commands such as `review`, `review-fix`, `run-tests-loop`, and `run-linter-loop` use the current git branch by default when Jira task is omitted
+- `--scope <name>` lets you override the default project scope name
 - the interactive `Activity` pane is intentionally structured: it shows launch separators, prompts, summaries, and short status messages instead of raw Codex/Claude logs by default
 
 ## Interactive TUI

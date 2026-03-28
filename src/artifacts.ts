@@ -8,27 +8,51 @@ export const REVIEW_FILE_RE = /^review-(.+)-(\d+)\.md$/;
 export const REVIEW_REPLY_FILE_RE = /^review-reply-(.+)-(\d+)\.md$/;
 export const READY_TO_MERGE_FILE = "ready-to-merge.md";
 
-export function taskWorkspaceDir(taskKey: string): string {
-  return path.join(process.cwd(), `.agentweaver-${taskKey}`);
+export function scopesRootDir(): string {
+  return path.join(process.cwd(), ".agentweaver", "scopes");
 }
 
-export function ensureTaskWorkspaceDir(taskKey: string): string {
-  const workspaceDir = taskWorkspaceDir(taskKey);
+export function scopeWorkspaceDir(scopeKey: string): string {
+  return path.join(scopesRootDir(), scopeKey);
+}
+
+export function ensureScopeWorkspaceDir(scopeKey: string): string {
+  const workspaceDir = scopeWorkspaceDir(scopeKey);
   mkdirSync(workspaceDir, { recursive: true });
-  mkdirSync(taskArtifactsDir(taskKey), { recursive: true });
+  mkdirSync(scopeArtifactsDir(scopeKey), { recursive: true });
   return workspaceDir;
 }
 
+export function scopeWorkspaceFile(scopeKey: string, fileName: string): string {
+  return path.join(scopeWorkspaceDir(scopeKey), fileName);
+}
+
+export function scopeArtifactsDir(scopeKey: string): string {
+  return path.join(scopeWorkspaceDir(scopeKey), ".artifacts");
+}
+
+export function scopeArtifactsFile(scopeKey: string, fileName: string): string {
+  return path.join(scopeArtifactsDir(scopeKey), fileName);
+}
+
+export function taskWorkspaceDir(taskKey: string): string {
+  return scopeWorkspaceDir(taskKey);
+}
+
+export function ensureTaskWorkspaceDir(taskKey: string): string {
+  return ensureScopeWorkspaceDir(taskKey);
+}
+
 export function taskWorkspaceFile(taskKey: string, fileName: string): string {
-  return path.join(taskWorkspaceDir(taskKey), fileName);
+  return scopeWorkspaceFile(taskKey, fileName);
 }
 
 export function taskArtifactsDir(taskKey: string): string {
-  return path.join(taskWorkspaceDir(taskKey), ".artifacts");
+  return scopeArtifactsDir(taskKey);
 }
 
 export function taskArtifactsFile(taskKey: string, fileName: string): string {
-  return path.join(taskArtifactsDir(taskKey), fileName);
+  return scopeArtifactsFile(taskKey, fileName);
 }
 
 export function artifactFile(prefix: string, taskKey: string, iteration: number): string {

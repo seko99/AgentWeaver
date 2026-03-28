@@ -84,6 +84,8 @@ export class InteractiveUi {
   };
   private failedFlowId: string | null = null;
   private activeFormSession: ActiveFormSession | null = null;
+  private issueKey: string;
+  private summaryVisible: boolean;
 
   constructor(private readonly options: InteractiveUiOptions) {
     if (options.flows.length === 0) {
@@ -91,11 +93,13 @@ export class InteractiveUi {
     }
     this.flowMap = new Map(options.flows.map((flow) => [flow.id, flow]));
     this.selectedFlowId = options.flows[0]?.id ?? "auto";
+    this.issueKey = options.issueKey;
+    this.summaryVisible = options.summaryText.trim().length > 0;
 
     this.screen = blessed.screen({
       smartCSR: true,
       fullUnicode: true,
-      title: `AgentWeaver ${options.issueKey}`,
+      title: `AgentWeaver ${this.issueKey}`,
       dockBorders: true,
       autoPadding: false,
     });
@@ -354,6 +358,20 @@ export class InteractiveUi {
     this.renderStaticContent();
   }
 
+  private applyRightPaneLayout(): void {
+    if (this.summaryVisible) {
+      this.summary.show();
+      this.summary.top = 3;
+      this.summary.height = 16;
+      this.log.top = 19;
+      this.log.bottom = 1;
+    } else {
+      this.summary.hide();
+      this.log.top = 3;
+      this.log.bottom = 1;
+    }
+  }
+
   private bindKeys(): void {
     this.screen.key(["C-c", "q"], () => {
       if (this.hasActiveForm()) {
@@ -563,7 +581,7 @@ export class InteractiveUi {
   }
 
   private cycleFocus(direction: 1 | -1): void {
-    const panes: FocusPane[] = ["flows", "progress", "summary", "log"];
+    const panes: FocusPane[] = this.summaryVisible ? ["flows", "progress", "summary", "log"] : ["flows", "progress", "log"];
     const currentIndex = panes.indexOf(this.focusedPane);
     const nextIndex = (currentIndex + direction + panes.length) % panes.length;
     this.focusPane(panes[nextIndex] ?? "flows");
@@ -588,7 +606,7 @@ export class InteractiveUi {
       }
     } else if (pane === "progress") {
       this.progress.focus();
-    } else if (pane === "summary") {
+    } else if (pane === "summary" && this.summaryVisible) {
       this.summary.focus();
     } else {
       this.log.focus();
@@ -602,6 +620,8 @@ export class InteractiveUi {
 
   private renderStaticContent(): void {
     this.summaryText = this.options.summaryText.trim();
+    this.summaryVisible = this.summaryText.length > 0;
+    this.applyRightPaneLayout();
     this.updateHeader();
     this.flowList.setItems(this.options.flows.map((flow) => flow.label));
     this.flowList.select(this.options.flows.findIndex((flow) => flow.id === this.selectedFlowId));
@@ -636,7 +656,7 @@ export class InteractiveUi {
   private updateHeader(): void {
     const current = this.currentFlowId ?? this.selectedFlowId;
     this.header.setContent(
-      `{bold}AgentWeaver{/bold}  {green-fg}${this.options.issueKey}{/green-fg}\n` +
+      `{bold}AgentWeaver{/bold}  {green-fg}${this.issueKey}{/green-fg}\n` +
         `cwd: ${this.options.cwd}   current: ${current}${this.busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`,
     );
   }
@@ -655,6 +675,22 @@ export class InteractiveUi {
       return null;
     }
     return this.activeFormSession.form.fields[this.activeFormSession.currentFieldIndex] ?? null;
+  }
+
+  private renderTextInputValue(value: string, placeholder?: string): string[] {
+    const rawText = value || placeholder || "Введите текст";
+    const frameWidth = Math.max(36, rawText.length + 6);
+    const innerWidth = Math.max(32, frameWidth - 4);
+    const visibleText = rawText.length > innerWidth - 2 ? `${rawText.slice(0, innerWidth - 5)}...` : rawText;
+    const padded = value
+      ? `{white-fg}${visibleText.padEnd(innerWidth - 2, " ")}{/white-fg}`
+      : `{gray-fg}${visibleText.padEnd(innerWidth - 2, " ")}{/gray-fg}`;
+
+    return [
+      `{cyan-fg}┌${"─".repeat(frameWidth - 2)}┐{/cyan-fg}`,
+      `{cyan-fg}│{/cyan-fg}{black-bg} {green-fg}>{/green-fg} ${padded} {/black-bg}{cyan-fg}│{/cyan-fg}`,
+      `{cyan-fg}└${"─".repeat(frameWidth - 2)}┘{/cyan-fg}`,
+    ];
   }
 
   private renderActiveForm(): void {
@@ -692,7 +728,7 @@ export class InteractiveUi {
       lines.push("Enter/Tab: next field");
     } else if (field.type === "text") {
       const current = String(session.values[field.id] ?? "");
-      lines.push(current || `{gray-fg}${field.placeholder ?? "Введите текст"}{/gray-fg}`);
+      lines.push(...this.renderTextInputValue(current, field.placeholder));
       lines.push("");
       lines.push("Type text, Backspace: delete");
       lines.push("Enter/Tab: next field");
@@ -1321,6 +1357,7 @@ export class InteractiveUi {
 
   mount(): void {
     setOutputAdapter(this.createAdapter());
+    this.applyRightPaneLayout();
     this.focusPane("flows");
   }
 
@@ -1379,7 +1416,31 @@ export class InteractiveUi {
 
   setSummary(markdown: string): void {
     this.summaryText = markdown.trim();
+    this.summaryVisible = this.summaryText.length > 0;
+    this.applyRightPaneLayout();
+    if (!this.summaryVisible && this.focusedPane === "summary") {
+      this.focusPane("log");
+      return;
+    }
     this.renderSummary();
+    this.requestRender();
+  }
+
+  clearSummary(): void {
+    this.summaryText = "";
+    this.summaryVisible = false;
+    this.applyRightPaneLayout();
+    if (this.focusedPane === "summary") {
+      this.focusPane("log");
+      return;
+    }
+    this.requestRender();
+  }
+
+  setIssueKey(issueKey: string): void {
+    this.issueKey = issueKey;
+    this.screen.title = `AgentWeaver ${issueKey}`;
+    this.updateHeader();
     this.requestRender();
   }
 

@@ -5,7 +5,9 @@ import {
   MR_DESCRIPTION_PROMPT_TEMPLATE,
   PLAN_PROMPT_TEMPLATE,
   REVIEW_FIX_PROMPT_TEMPLATE,
+  REVIEW_PROJECT_PROMPT_TEMPLATE,
   REVIEW_PROMPT_TEMPLATE,
+  REVIEW_REPLY_PROJECT_PROMPT_TEMPLATE,
   REVIEW_REPLY_PROMPT_TEMPLATE,
   REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   REVIEW_SUMMARY_PROMPT_TEMPLATE,
@@ -22,7 +24,9 @@ export type PromptTemplateRef =
   | "plan"
   | "review"
   | "review-fix"
+  | "review-project"
   | "review-reply"
+  | "review-reply-project"
   | "review-reply-summary"
   | "review-summary"
   | "run-linter-loop-fix"
@@ -36,8 +40,10 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "mr-description": MR_DESCRIPTION_PROMPT_TEMPLATE,
   plan: PLAN_PROMPT_TEMPLATE,
   review: REVIEW_PROMPT_TEMPLATE,
+  "review-project": REVIEW_PROJECT_PROMPT_TEMPLATE,
   "review-fix": REVIEW_FIX_PROMPT_TEMPLATE,
   "review-reply": REVIEW_REPLY_PROMPT_TEMPLATE,
+  "review-reply-project": REVIEW_REPLY_PROJECT_PROMPT_TEMPLATE,
   "review-reply-summary": REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   "review-summary": REVIEW_SUMMARY_PROMPT_TEMPLATE,
   "run-linter-loop-fix": RUN_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
