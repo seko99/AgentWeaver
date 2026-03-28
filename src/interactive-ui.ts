@@ -33,7 +33,12 @@ type InteractiveUiOptions = {
   cwd: string;
   gitBranchName: string | null;
   flows: InteractiveFlowDefinition[];
-  onRun: (flowId: string) => Promise<void>;
+  getRunConfirmation: (flowId: string) => Promise<{
+    resumeAvailable: boolean;
+    hasExistingState: boolean;
+    details?: string | null;
+  }>;
+  onRun: (flowId: string, mode: "resume" | "restart") => Promise<void>;
   onExit: () => void;
 };
 
@@ -51,6 +56,14 @@ type ActiveFormSession = {
   currentOptionIndex: number;
   resolve: (result: UserInputResult) => void;
   reject: (error: Error) => void;
+};
+
+type ConfirmSession = {
+  flowId: string;
+  resumeAvailable: boolean;
+  hasExistingState: boolean;
+  details?: string | null;
+  selectedAction: "resume" | "restart" | "cancel" | "ok";
 };
 
 export class InteractiveUi {
@@ -86,6 +99,7 @@ export class InteractiveUi {
   };
   private failedFlowId: string | null = null;
   private activeFormSession: ActiveFormSession | null = null;
+  private confirmSession: ConfirmSession | null = null;
   private issueKey: string;
   private summaryVisible: boolean;
 
@@ -447,11 +461,11 @@ export class InteractiveUi {
       this.requestRender();
     });
 
-    this.flowList.key(["enter"], () => {
+    this.flowList.key(["enter"], async () => {
       if (this.busy || this.confirm.visible || !this.help.hidden || this.hasActiveForm()) {
         return;
       }
-      this.openConfirm();
+      await this.openConfirm();
     });
 
     this.flowList.key(["pageup"], () => {
@@ -551,16 +565,20 @@ export class InteractiveUi {
     });
 
     this.confirm.key(["enter"], async () => {
-      if (this.busy || this.confirm.hidden || this.hasActiveForm()) {
+      if (this.busy || this.confirm.hidden || this.hasActiveForm() || !this.confirmSession) {
         return;
       }
-      const flowId = this.selectedFlowId;
+      const { flowId, selectedAction } = this.confirmSession;
+      if (selectedAction === "cancel") {
+        this.closeConfirm();
+        return;
+      }
       this.closeConfirm();
       this.setBusy(true, flowId);
       this.clearFlowFailure(flowId);
       this.setFlowDisplayState(flowId, null);
       try {
-        await this.options.onRun(flowId);
+        await this.options.onRun(flowId, selectedAction === "ok" ? "restart" : selectedAction);
       } finally {
         this.setBusy(false);
         this.focusPane("flows");
@@ -572,6 +590,14 @@ export class InteractiveUi {
         return;
       }
       this.closeConfirm();
+    });
+
+    this.confirm.key(["left", "S-tab"], () => {
+      this.moveConfirmSelection(-1);
+    });
+
+    this.confirm.key(["right", "tab"], () => {
+      this.moveConfirmSelection(1);
     });
 
     this.screen.on("keypress", (ch: string, key: { full?: string; name?: string; ctrl?: boolean; shift?: boolean }) => {
@@ -1011,6 +1037,22 @@ export class InteractiveUi {
           : null;
 
     const lines: string[] = [`{bold}${flow.label}{/bold}`, ""];
+    let anchorLine: number | null = null;
+    let sawExecutedItem = false;
+    const rememberAnchor = (status: "pending" | "running" | "done" | "skipped"): void => {
+      if (status === "running") {
+        anchorLine = lines.length;
+        sawExecutedItem = true;
+        return;
+      }
+      if (status === "done" || status === "skipped") {
+        sawExecutedItem = true;
+        return;
+      }
+      if (status === "pending" && sawExecutedItem && anchorLine === null) {
+        anchorLine = lines.length;
+      }
+    };
     for (const item of this.visiblePhaseItems(flow, flowState)) {
       if (item.kind === "group") {
         const visiblePhases = item.phases.filter((phase) => this.shouldDisplayPhase(flow, flowState, phase));
@@ -1018,14 +1060,17 @@ export class InteractiveUi {
           continue;
         }
         const groupStatus = this.statusForGroup(flow, visiblePhases, flowState);
+        rememberAnchor(groupStatus);
         lines.push(`${this.symbolForGroup(flow.id, flow, visiblePhases, flowState)} ${this.colorizeProgressLabel(item.label, groupStatus)}`);
         for (const phase of visiblePhases) {
           const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
           const phaseStatus = this.displayStatusForPhase(flowState, flow, phase, phaseState?.status ?? null);
+          rememberAnchor(phaseStatus);
           lines.push(`  ${this.symbolForStatus(flow.id, phaseStatus)} ${this.colorizeProgressLabel(this.displayPhaseId(phase), phaseStatus)}`);
           for (const step of phase.steps) {
             const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
             const stepStatus = this.displayStatusForStep(flowState, flow, phase, stepState?.status ?? null);
+            rememberAnchor(stepStatus);
             lines.push(`    ${this.symbolForStatus(flow.id, stepStatus)} ${this.colorizeProgressLabel(step.id, stepStatus)}`);
           }
         }
@@ -1038,10 +1083,12 @@ export class InteractiveUi {
       }
       const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
       const phaseStatus = this.displayStatusForPhase(flowState, flow, phase, phaseState?.status ?? null);
+      rememberAnchor(phaseStatus);
       lines.push(`${this.symbolForStatus(flow.id, phaseStatus)} ${this.colorizeProgressLabel(this.displayPhaseId(phase), phaseStatus)}`);
       for (const step of phase.steps) {
         const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
         const stepStatus = this.displayStatusForStep(flowState, flow, phase, stepState?.status ?? null);
+        rememberAnchor(stepStatus);
         lines.push(`  ${this.symbolForStatus(flow.id, stepStatus)} ${this.colorizeProgressLabel(step.id, stepStatus)}`);
       }
       lines.push("");
@@ -1051,6 +1098,11 @@ export class InteractiveUi {
       lines.push(`{gray-fg}Reason: ${flowState.terminationReason ?? "flow terminated"}{/gray-fg}`);
     }
     this.progress.setContent(lines.join("\n").trimEnd());
+    if (this.busy && this.activeFlowId() === flow.id && anchorLine !== null) {
+      const viewportHeight = Math.max(1, Number(this.progress.height) - 2);
+      const targetScroll = Math.max(0, anchorLine - Math.floor(viewportHeight / 2));
+      this.progress.setScroll(targetScroll);
+    }
   }
 
   private displayStatusForPhase(
@@ -1244,19 +1296,7 @@ export class InteractiveUi {
     if (!flowState) {
       return true;
     }
-    if (Object.keys(phase.repeatVars).length === 0) {
-      if (!phaseState) {
-        return false;
-      }
-      if (phaseState?.status === "skipped" && flowState.terminated && this.isAfterTermination(flowState, flow, phase)) {
-        return false;
-      }
-      return true;
-    }
-    if (!phaseState) {
-      return false;
-    }
-    if (phaseState.status === "skipped" && flowState.terminated && this.isAfterTermination(flowState, flow, phase)) {
+    if (phaseState?.status === "skipped" && flowState.terminated && this.isAfterTermination(flowState, flow, phase)) {
       return false;
     }
     return true;
@@ -1316,19 +1356,69 @@ export class InteractiveUi {
     return currentIndex > stoppedIndex;
   }
 
-  private openConfirm(): void {
-    const flow = this.flowMap.get(this.selectedFlowId);
-    if (!flow) {
+  private moveConfirmSelection(delta: 1 | -1): void {
+    if (!this.confirmSession) {
       return;
     }
-    this.confirm.setContent(`Run flow "${flow.label}"?\n\nEnter: yes    Esc: no`);
+    const actions = this.confirmSession.resumeAvailable
+      ? ["resume", "restart", "cancel"]
+      : this.confirmSession.hasExistingState
+        ? ["restart", "cancel"]
+        : ["ok", "cancel"];
+    const currentIndex = actions.indexOf(this.confirmSession.selectedAction);
+    const nextIndex = (currentIndex + delta + actions.length) % actions.length;
+    this.confirmSession.selectedAction = (actions[nextIndex] ?? "cancel") as ConfirmSession["selectedAction"];
+    this.renderConfirm();
+  }
+
+  private renderConfirm(): void {
+    const session = this.confirmSession;
+    if (!session) {
+      return;
+    }
+    const flow = this.flowMap.get(session.flowId);
+    const actions = session.resumeAvailable
+      ? ["resume", "restart", "cancel"]
+      : session.hasExistingState
+        ? ["restart", "cancel"]
+        : ["ok", "cancel"];
+    const actionLabels = actions
+      .map((action) => {
+        const label =
+          action === "resume" ? "Resume" : action === "restart" ? "Restart" : action === "ok" ? "OK" : "Cancel";
+        return session.selectedAction === action ? `[ ${label} ]` : `  ${label}  `;
+      })
+      .join("   ");
+    const lines = [`Run flow "${flow?.label ?? session.flowId}"?`];
+    if (session.details?.trim()) {
+      lines.push("", session.details.trim());
+    }
+    lines.push("", actionLabels, "", "Left/Right or Tab: choose    Enter: confirm    Esc: cancel");
+    this.confirm.setContent(lines.join("\n"));
     this.confirm.show();
     this.confirm.setFront();
     this.confirm.focus();
     this.requestRender();
   }
 
+  private async openConfirm(): Promise<void> {
+    const flow = this.flowMap.get(this.selectedFlowId);
+    if (!flow) {
+      return;
+    }
+    const confirmation = await this.options.getRunConfirmation(flow.id);
+    this.confirmSession = {
+      flowId: flow.id,
+      resumeAvailable: confirmation.resumeAvailable,
+      hasExistingState: confirmation.hasExistingState,
+      details: confirmation.details ?? null,
+      selectedAction: confirmation.resumeAvailable ? "resume" : confirmation.hasExistingState ? "restart" : "ok",
+    };
+    this.renderConfirm();
+  }
+
   private closeConfirm(): void {
+    this.confirmSession = null;
     this.confirm.hide();
     this.focusPane("flows");
     this.requestRender();
