@@ -30,6 +30,16 @@ import {
   taskSummaryFile,
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
+import {
+  createFlowRunState,
+  hasResumableFlowState,
+  loadFlowRunState,
+  prepareFlowStateForResume,
+  resetFlowRunState,
+  saveFlowRunState,
+  stripExecutionStatePayload,
+  type FlowRunState,
+} from "./flow-state.js";
 import { requireJiraTaskFile } from "./jira.js";
 import { validateStructuredArtifacts } from "./structured-artifacts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
@@ -148,6 +158,8 @@ type ParsedArgs = {
   autoFromPhase?: string;
   helpPhases: boolean;
 };
+
+type FlowLaunchMode = "resume" | "restart";
 
 type ProcessFailureLike = {
   returnCode?: number;
@@ -302,29 +314,6 @@ function createAutoPipelineState(config: Config): AutoPipelineState {
   };
 }
 
-function stripExecutionStatePayload(executionState: FlowExecutionState): FlowExecutionState {
-  return {
-    flowKind: executionState.flowKind,
-    flowVersion: executionState.flowVersion,
-    terminated: executionState.terminated,
-    ...(executionState.terminationReason ? { terminationReason: executionState.terminationReason } : {}),
-    phases: executionState.phases.map((phase) => ({
-      id: phase.id,
-      status: phase.status,
-      repeatVars: { ...phase.repeatVars },
-      ...(phase.startedAt ? { startedAt: phase.startedAt } : {}),
-      ...(phase.finishedAt ? { finishedAt: phase.finishedAt } : {}),
-      steps: phase.steps.map((step) => ({
-        id: step.id,
-        status: step.status,
-        ...(step.startedAt ? { startedAt: step.startedAt } : {}),
-        ...(step.finishedAt ? { finishedAt: step.finishedAt } : {}),
-        ...(step.stopFlow !== undefined ? { stopFlow: step.stopFlow } : {}),
-      })),
-    })),
-  };
-}
-
 function loadAutoPipelineState(config: Config): AutoPipelineState | null {
   const filePath = autoStateFile(config.taskKey);
   if (!existsSync(filePath)) {
@@ -475,6 +464,32 @@ function syncAutoStepsFromExecutionState(state: AutoPipelineState): void {
   }
   state.currentStep = findCurrentExecutionStep(state);
   state.status = deriveAutoPipelineStatus(state);
+}
+
+function buildAutoResumeDetails(state: AutoPipelineState): string {
+  const currentStep = findCurrentExecutionStep(state) ?? state.currentStep ?? "-";
+  const lines = [
+    "Interrupted auto run found.",
+    `Current step: ${currentStep}`,
+    `Updated: ${state.updatedAt}`,
+  ];
+  if (state.lastError) {
+    lines.push(`Last error: ${state.lastError.message ?? "-"} (exit ${state.lastError.returnCode ?? "-"})`);
+  }
+  return lines.join("\n");
+}
+
+function buildFlowResumeDetails(state: FlowRunState): string {
+  const currentStep = findCurrentFlowExecutionStep(state) ?? state.currentStep ?? "-";
+  const lines = [
+    "Interrupted run found.",
+    `Current step: ${currentStep}`,
+    `Updated: ${state.updatedAt}`,
+  ];
+  if (state.lastError) {
+    lines.push(`Last error: ${state.lastError.message ?? "-"} (exit ${state.lastError.returnCode ?? "-"})`);
+  }
+  return lines.join("\n");
 }
 
 function printAutoPhasesHelp(): void {
@@ -798,12 +813,27 @@ function syncInteractiveTaskSummary(
   ui.clearSummary();
 }
 
+function findCurrentFlowExecutionStep(state: FlowRunState): string | null {
+  for (const phase of state.executionState.phases) {
+    const runningStep = phase.steps.find((step) => step.status === "running");
+    if (runningStep) {
+      return `${phase.id}:${runningStep.id}`;
+    }
+    const pendingStep = phase.steps.find((step) => step.status === "pending");
+    if (pendingStep && phase.steps.some((step) => step.status === "done" || step.status === "skipped")) {
+      return `${phase.id}:${pendingStep.id}`;
+    }
+  }
+  return null;
+}
+
 async function runDeclarativeFlowBySpecFile(
   fileName: string,
   config: Config,
   flowParams: Record<string, unknown>,
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
   setSummary?: (markdown: string) => void,
+  launchMode: FlowLaunchMode = "restart",
 ): Promise<void> {
   const context = createPipelineContext({
     issueKey: config.taskKey,
@@ -815,22 +845,64 @@ async function runDeclarativeFlowBySpecFile(
     requestUserInput,
   });
   const flow = loadDeclarativeFlow(fileName);
-  const executionState: FlowExecutionState = {
+  const initialExecutionState: FlowExecutionState = {
     flowKind: flow.kind,
     flowVersion: flow.version,
     terminated: false,
     phases: [],
   };
+  let persistedState =
+    launchMode === "resume" ? loadFlowRunState(config.scope.scopeKey, config.command) : null;
+  if (persistedState && launchMode === "resume") {
+    persistedState = prepareFlowStateForResume(persistedState);
+  } else if (launchMode === "restart") {
+    resetFlowRunState(config.scope.scopeKey, config.command);
+  }
+  const executionState = persistedState?.executionState ?? initialExecutionState;
+  const state = persistedState ?? createFlowRunState(config.scope.scopeKey, config.command, executionState);
+  state.status = "running";
+  state.lastError = null;
+  state.currentStep = findCurrentFlowExecutionStep(state);
+  state.executionState = executionState;
+  saveFlowRunState(state);
   publishFlowState(config.command, executionState);
-  for (const phase of flow.phases) {
-    await runExpandedPhase(phase, context, flowParams, flow.constants, {
-      executionState,
-      flowKind: flow.kind,
-      flowVersion: flow.version,
-      onStateChange: async (state) => {
-        publishFlowState(config.command, state);
+  try {
+    for (const phase of flow.phases) {
+      await runExpandedPhase(phase, context, flowParams, flow.constants, {
+        executionState,
+        flowKind: flow.kind,
+        flowVersion: flow.version,
+        onStateChange: async (nextExecutionState) => {
+          state.executionState = nextExecutionState;
+          state.currentStep = findCurrentFlowExecutionStep(state);
+          saveFlowRunState(state);
+          publishFlowState(config.command, nextExecutionState);
+        },
+        onStepStart: async (currentPhase, step) => {
+          state.currentStep = `${currentPhase.id}:${step.id}`;
+          saveFlowRunState(state);
+        },
       },
-    });
+      );
+    }
+    state.status = "completed";
+    state.currentStep = null;
+    state.lastError = null;
+    state.executionState = executionState;
+    saveFlowRunState(state);
+  } catch (error) {
+    state.status = "blocked";
+    state.currentStep = findCurrentFlowExecutionStep(state);
+    state.lastError = {
+      returnCode: Number((error as { returnCode?: number }).returnCode ?? 1),
+      message: (error as Error).message || "command failed",
+    };
+    if (state.currentStep) {
+      state.lastError.step = state.currentStep;
+    }
+    state.executionState = executionState;
+    saveFlowRunState(state);
+    throw error;
   }
 }
 
@@ -944,9 +1016,13 @@ async function executeCommand(
   resolvedScope?: ResolvedScope,
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
+  launchMode: FlowLaunchMode = "restart",
 ): Promise<boolean> {
   const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
   if (config.command === "auto") {
+    if (launchMode === "restart") {
+      resetAutoPipelineState(config);
+    }
     await runAutoPipeline(config, setSummary, forceRefreshSummary);
     return false;
   }
@@ -988,7 +1064,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, requestUserInput, setSummary);
+    }, requestUserInput, setSummary, launchMode);
     return false;
   }
 
@@ -1004,7 +1080,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, requestUserInput, setSummary);
+    }, requestUserInput, setSummary, launchMode);
     return false;
   }
 
@@ -1028,6 +1104,8 @@ async function executeCommand(
         extraPrompt: config.extraPrompt,
       },
       requestUserInput,
+      undefined,
+      launchMode,
     );
     if (!config.dryRun) {
       printSummary("GitLab Review", `Artifacts:\n${gitlabReviewFile(config.taskKey)}\n${gitlabReviewJsonFile(config.taskKey)}`);
@@ -1050,7 +1128,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput);
+    }, requestUserInput, undefined, launchMode);
     return false;
   }
 
@@ -1060,17 +1138,17 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("mr-description.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput);
+    }, requestUserInput, undefined, launchMode);
     return false;
   }
 
   if (config.command === "task-describe") {
     requireTaskScopeConfig(config);
-    requireJiraTaskFile(config.jiraTaskFile);
     await runDeclarativeFlowBySpecFile("task-describe.json", config, {
+      jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput);
+    }, requestUserInput, undefined, launchMode);
     return false;
   }
 
@@ -1087,7 +1165,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("implement.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput);
+    }, requestUserInput, undefined, launchMode);
     return false;
   }
 
@@ -1106,13 +1184,13 @@ async function executeCommand(
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, requestUserInput);
+      }, requestUserInput, undefined, launchMode);
     } else {
       await runDeclarativeFlowBySpecFile("review-project.json", config, {
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, requestUserInput);
+      }, requestUserInput, undefined, launchMode);
     }
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
@@ -1135,7 +1213,7 @@ async function executeCommand(
       reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
       extraPrompt: config.extraPrompt,
       reviewFixPoints: config.reviewFixPoints,
-    }, requestUserInput);
+    }, requestUserInput, undefined, launchMode);
     return false;
   }
 
@@ -1150,6 +1228,8 @@ async function executeCommand(
         extraPrompt: config.extraPrompt,
       },
       requestUserInput,
+      undefined,
+      launchMode,
     );
     return false;
   }
@@ -1370,7 +1450,43 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
       cwd: process.cwd(),
       gitBranchName,
       flows: interactiveFlowDefinitions(),
-      onRun: async (flowId) => {
+      getRunConfirmation: async (flowId) => {
+        if (flowId === "auto") {
+          if (currentScope.scopeType !== "task") {
+            return { resumeAvailable: false, hasExistingState: false };
+          }
+          const baseConfig = buildBaseConfig("auto", {
+            jiraRef: currentScope.jiraRef,
+            scopeName: currentScope.scopeKey !== currentScope.jiraIssueKey ? currentScope.scopeKey : null,
+          });
+          const state = loadAutoPipelineState(buildRuntimeConfig(baseConfig, currentScope));
+          if (!state) {
+            return { resumeAvailable: false, hasExistingState: false };
+          }
+          const status = deriveAutoPipelineStatus(state);
+          if (status === "completed") {
+            return { resumeAvailable: false, hasExistingState: true };
+          }
+          return {
+            resumeAvailable: true,
+            hasExistingState: true,
+            details: buildAutoResumeDetails(state),
+          };
+        }
+        if (commandRequiresTask(flowId as CommandName) && currentScope.scopeType !== "task") {
+          return { resumeAvailable: false, hasExistingState: false };
+        }
+        const state = loadFlowRunState(currentScope.scopeKey, flowId);
+        if (!state || !hasResumableFlowState(state)) {
+          return { resumeAvailable: false, hasExistingState: Boolean(state) };
+        }
+        return {
+          resumeAvailable: true,
+          hasExistingState: true,
+          details: buildFlowResumeDetails(state),
+        };
+      },
+      onRun: async (flowId, launchMode) => {
         try {
           const previousScopeType = currentScope.scopeType;
           const previousScopeKey = currentScope.scopeKey;
@@ -1394,6 +1510,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             currentScope,
             (markdown) => ui.setSummary(markdown),
             forceRefresh,
+            launchMode,
           );
         } catch (error) {
           if (error instanceof TaskRunnerError) {
