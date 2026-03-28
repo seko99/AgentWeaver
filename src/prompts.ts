@@ -50,9 +50,22 @@ export const REVIEW_PROMPT_TEMPLATE =
   "Затем запиши производную markdown-версию в {review_file}. " +
   "Если ready_to_merge=true и нет блокеров, препятствующих merge - создай файл ready-to-merge.md.";
 
+export const REVIEW_PROJECT_PROMPT_TEMPLATE =
+  "Проведи код-ревью текущих изменений в проекте без Jira-контекста. " +
+  "Оцени качество изменений по текущему коду, тестам, рискам регрессий и общему инженерному качеству. " +
+  "Сначала запиши структурированный результат в {review_json_file} в виде объекта { summary: string, ready_to_merge: boolean, findings: [{ severity: string, title: string, description: string }] }. " +
+  "Затем запиши производную markdown-версию в {review_file}. " +
+  "Если ready_to_merge=true и нет блокеров, создай файл {ready_to_merge_file}.";
+
 export const REVIEW_REPLY_PROMPT_TEMPLATE =
   "Твой коллега провёл код-ревью и записал структурированный результат в {review_json_file}. " +
   "Используй только структурированные артефакты как source of truth: задачу в {jira_task_file}, дизайн в {design_json_file}, план в {plan_json_file} и review в {review_json_file}. " +
+  "Сначала запиши структурированный ответ в {review_reply_json_file} в виде объекта { summary: string, ready_to_merge: boolean, responses: [{ finding_title: string, disposition: string, action: string }] }. " +
+  "Затем запиши производную markdown-версию в {review_reply_file}.";
+
+export const REVIEW_REPLY_PROJECT_PROMPT_TEMPLATE =
+  "Твой коллега провёл код-ревью и записал структурированный результат в {review_json_file}. " +
+  "Используй review в {review_json_file} как source of truth, разберись в замечаниях и подготовь структурированный ответ. " +
   "Сначала запиши структурированный ответ в {review_reply_json_file} в виде объекта { summary: string, ready_to_merge: boolean, responses: [{ finding_title: string, disposition: string, action: string }] }. " +
   "Затем запиши производную markdown-версию в {review_reply_file}.";
 
