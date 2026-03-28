@@ -159,6 +159,10 @@ export function autoStateFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `.agentweaver-state-${taskKey}.json`);
 }
 
+export function flowStateFile(scopeKey: string, flowId: string): string {
+  return scopeArtifactsFile(scopeKey, `.agentweaver-flow-state-${flowId}.json`);
+}
+
 export function planArtifacts(taskKey: string): string[] {
   return [designFile(taskKey), designJsonFile(taskKey), planFile(taskKey), planJsonFile(taskKey), qaFile(taskKey), qaJsonFile(taskKey)];
 }

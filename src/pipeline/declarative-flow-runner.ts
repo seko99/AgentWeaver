@@ -199,6 +199,30 @@ export async function runExpandedPhase(
   const executionState = ensureExecutionState(options);
   const phaseState = ensurePhaseState(executionState, phase);
   const phaseContext = createResolverContext(pipelineContext, flowParams, flowConstants, phase.repeatVars, executionState);
+  if (phaseState.status === "done") {
+    await options.onStateChange?.(executionState);
+    return {
+      id: phase.id,
+      status: "done",
+      stopped: false,
+      executionState,
+      steps: phase.steps.map((step, stepIndex) => ({
+        id: step.id,
+        status: phaseState.steps[stepIndex]?.status === "skipped" ? "skipped" : "done",
+        ...(phaseState.steps[stepIndex]?.outputs ? { outputs: phaseState.steps[stepIndex]?.outputs } : {}),
+      })),
+    };
+  }
+  if (phaseState.status === "skipped") {
+    await options.onStateChange?.(executionState);
+    return {
+      id: phase.id,
+      status: "skipped",
+      stopped: false,
+      executionState,
+      steps: phase.steps.map((step) => ({ id: step.id, status: "skipped" as const })),
+    };
+  }
   if (executionState.terminated) {
     phaseState.status = "skipped";
     await options.onStateChange?.(executionState);
@@ -238,6 +262,10 @@ export async function runExpandedPhase(
     const stepState = phaseState.steps[stepIndex];
     if (!stepState) {
       throw new TaskRunnerError(`Missing execution state for step '${step.id}' in phase '${phase.id}'`);
+    }
+    if (stepState.status === "done" || stepState.status === "skipped") {
+      steps.push({ id: step.id, status: stepState.status, ...(stepState.outputs ? { outputs: stepState.outputs } : {}) });
+      continue;
     }
     stepState.status = "running";
     stepState.startedAt ??= nowIso8601();
