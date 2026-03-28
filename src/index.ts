@@ -37,7 +37,6 @@ import { createPipelineContext } from "./pipeline/context.js";
 import { loadAutoFlow } from "./pipeline/auto-flow.js";
 import { loadDeclarativeFlow } from "./pipeline/declarative-flows.js";
 import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
-import { runPreflightFlow } from "./pipeline/flows/preflight-flow.js";
 import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { agentweaverHome, defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
@@ -56,6 +55,7 @@ import {
 } from "./tui.js";
 import { requestUserInputInTerminal, type UserInputRequester } from "./user-input.js";
 import {
+  detectGitBranchName,
   requestTaskScope,
   resolveProjectScope,
   resolveTaskScope,
@@ -218,7 +218,7 @@ Interactive Mode:
 
 Flags:
   --version       Show package version
-  --force         In interactive mode, force refresh Jira task and task summary
+  --force         In interactive mode, regenerate task summary in Jira-backed flows
   --dry           Fetch Jira task, but print docker/codex/claude commands instead of executing them
   --verbose       Show live stdout/stderr of launched commands
   --scope         Explicit workflow scope name for non-Jira runs
@@ -672,7 +672,7 @@ function checkAutoPrerequisites(config: Config): void {
   resolveCmd("claude", "CLAUDE_BIN");
 }
 
-function autoFlowParams(config: Config): Record<string, unknown> {
+function autoFlowParams(config: Config, forceRefreshSummary = false): Record<string, unknown> {
   return {
     jiraApiUrl: config.jiraApiUrl,
     taskKey: config.taskKey,
@@ -681,6 +681,7 @@ function autoFlowParams(config: Config): Record<string, unknown> {
     runLinterScript: config.runLinterScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
+    forceRefresh: forceRefreshSummary,
   };
 }
 
@@ -768,11 +769,38 @@ function publishFlowState(flowId: string, executionState: FlowExecutionState): v
   setFlowExecutionState(flowId, stripExecutionStatePayload(executionState));
 }
 
+function loadTaskSummaryMarkdown(taskKey: string): string | null {
+  const summaryPath = taskSummaryFile(taskKey);
+  if (!existsSync(summaryPath)) {
+    return null;
+  }
+  const markdown = readFileSync(summaryPath, "utf8").trim();
+  return markdown.length > 0 ? markdown : null;
+}
+
+function syncInteractiveTaskSummary(
+  ui: InteractiveUi,
+  scope: ResolvedScope,
+  forceRefresh = false,
+): void {
+  if (scope.scopeType !== "task" || forceRefresh) {
+    ui.clearSummary();
+    return;
+  }
+  const summaryMarkdown = loadTaskSummaryMarkdown(scope.scopeKey);
+  if (summaryMarkdown) {
+    ui.setSummary(summaryMarkdown);
+    return;
+  }
+  ui.clearSummary();
+}
+
 async function runDeclarativeFlowBySpecFile(
   fileName: string,
   config: Config,
   flowParams: Record<string, unknown>,
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
+  setSummary?: (markdown: string) => void,
 ): Promise<void> {
   const context = createPipelineContext({
     issueKey: config.taskKey,
@@ -780,6 +808,7 @@ async function runDeclarativeFlowBySpecFile(
     dryRun: config.dryRun,
     verbose: config.verbose,
     runtime: runtimeServices,
+    ...(setSummary ? { setSummary } : {}),
     requestUserInput,
   });
   const flow = loadDeclarativeFlow(fileName);
@@ -807,6 +836,8 @@ async function runAutoPhaseViaSpec(
   phaseId: string,
   executionState: FlowExecutionState,
   state?: AutoPipelineState,
+  setSummary?: (markdown: string) => void,
+  forceRefreshSummary = false,
 ): Promise<"done" | "skipped"> {
   const context = createPipelineContext({
     issueKey: config.taskKey,
@@ -814,13 +845,14 @@ async function runAutoPhaseViaSpec(
     dryRun: config.dryRun,
     verbose: config.verbose,
     runtime: runtimeServices,
+    ...(setSummary ? { setSummary } : {}),
     requestUserInput: requestUserInputInTerminal,
   });
   const autoFlow = loadAutoFlow();
   const phase = findPhaseById(autoFlow.phases, phaseId);
   publishFlowState("auto", executionState);
   try {
-    const result = await runExpandedPhase(phase, context, autoFlowParams(config), autoFlow.constants, {
+    const result = await runExpandedPhase(phase, context, autoFlowParams(config, forceRefreshSummary), autoFlow.constants, {
       executionState,
       flowKind: autoFlow.kind,
       flowVersion: autoFlow.version,
@@ -907,10 +939,12 @@ async function executeCommand(
   runFollowupVerify = true,
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
   resolvedScope?: ResolvedScope,
+  setSummary?: (markdown: string) => void,
+  forceRefreshSummary = false,
 ): Promise<boolean> {
   const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
   if (config.command === "auto") {
-    await runAutoPipeline(config);
+    await runAutoPipeline(config, setSummary, forceRefreshSummary);
     return false;
   }
   if (config.command === "auto-status") {
@@ -950,7 +984,8 @@ async function executeCommand(
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput);
+      forceRefresh: forceRefreshSummary,
+    }, requestUserInput, setSummary);
     return false;
   }
 
@@ -965,7 +1000,8 @@ async function executeCommand(
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput);
+      forceRefresh: forceRefreshSummary,
+    }, requestUserInput, setSummary);
     return false;
   }
 
@@ -1118,7 +1154,11 @@ async function executeCommand(
   throw new TaskRunnerError(`Unsupported command: ${config.command}`);
 }
 
-async function runAutoPipelineDryRun(config: Config): Promise<void> {
+async function runAutoPipelineDryRun(
+  config: Config,
+  setSummary?: (markdown: string) => void,
+  forceRefreshSummary = false,
+): Promise<void> {
   checkAutoPrerequisites(config);
   printInfo("Dry-run auto pipeline from declarative spec");
   const autoFlow = loadAutoFlow();
@@ -1131,17 +1171,21 @@ async function runAutoPipelineDryRun(config: Config): Promise<void> {
   publishFlowState("auto", executionState);
   for (const phase of autoFlow.phases) {
     printInfo(`Dry-run auto phase: ${phase.id}`);
-    await runAutoPhaseViaSpec(config, phase.id, executionState);
+    await runAutoPhaseViaSpec(config, phase.id, executionState, undefined, setSummary, forceRefreshSummary);
     if (executionState.terminated) {
       break;
     }
   }
 }
 
-async function runAutoPipeline(config: Config): Promise<void> {
+async function runAutoPipeline(
+  config: Config,
+  setSummary?: (markdown: string) => void,
+  forceRefreshSummary = false,
+): Promise<void> {
   requireTaskScopeConfig(config);
   if (config.dryRun) {
-    await runAutoPipelineDryRun(config);
+    await runAutoPipelineDryRun(config, setSummary, forceRefreshSummary);
     return;
   }
 
@@ -1183,7 +1227,14 @@ async function runAutoPipeline(config: Config): Promise<void> {
 
     try {
       printInfo(`Running auto step: ${step.id}`);
-      const status = await runAutoPhaseViaSpec(config, step.id, state.executionState, state);
+      const status = await runAutoPhaseViaSpec(
+        config,
+        step.id,
+        state.executionState,
+        state,
+        setSummary,
+        forceRefreshSummary,
+      );
       step.status = status;
       step.finishedAt = nowIso8601();
       step.returnCode = 0;
@@ -1303,66 +1354,10 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
   });
 }
 
-async function runInteractivePreflight(
-  ui: InteractiveUi,
-  scope: ResolvedTaskScope,
-  forceRefresh = false,
-): Promise<void> {
-  const config = buildRuntimeConfig(
-    buildBaseConfig("plan", {
-      jiraRef: scope.jiraRef,
-      ...(scope.scopeKey !== scope.jiraIssueKey ? { scopeName: scope.scopeKey } : {}),
-    }),
-    scope,
-  );
-  const jiraTaskPath = config.jiraTaskFile ?? "";
-
-  try {
-    ui.setBusy(true, "preflight");
-    const preflightState = await runPreflightFlow(
-      createPipelineContext({
-        issueKey: config.taskKey,
-        jiraRef: config.jiraRef,
-        dryRun: false,
-        verbose: config.verbose,
-        runtime: runtimeServices,
-        setSummary: (markdown) => {
-          ui.setSummary(markdown);
-        },
-        requestUserInput: (form) => ui.requestUserInput(form),
-      }),
-      {
-        jiraApiUrl: config.jiraApiUrl ?? "",
-        jiraTaskFile: config.jiraTaskFile ?? "",
-        taskKey: config.taskKey,
-        forceRefresh,
-      },
-    );
-    const preflightPhase = preflightState.phases.find((phase) => phase.id === "preflight");
-    if (preflightPhase) {
-      ui.appendLog("[preflight] completed");
-      for (const step of preflightPhase.steps) {
-        ui.appendLog(`[preflight] ${step.id}: ${step.status}`);
-      }
-    }
-    if (!jiraTaskPath || !existsSync(jiraTaskPath)) {
-      throw new TaskRunnerError(
-        `Preflight finished without Jira task file: ${jiraTaskPath}\n` +
-          "Jira fetch did not complete successfully. Check JIRA_API_KEY and Jira connectivity.",
-      );
-    }
-    if (!existsSync(taskSummaryFile(config.taskKey))) {
-      ui.appendLog("[preflight] task summary file was not created");
-      ui.setSummary("Task summary is not available yet. Select and run `plan` or refresh Jira data.");
-    }
-  } finally {
-    ui.setBusy(false);
-  }
-}
-
 async function runInteractive(jiraRef?: string | null, forceRefresh = false, scopeName?: string | null): Promise<number> {
   let currentScope = jiraRef?.trim() ? resolveTaskScope(jiraRef, scopeName) : resolveProjectScope(scopeName);
   const currentIssueKey = currentScope.scopeKey;
+  const gitBranchName = detectGitBranchName();
 
   let exiting = false;
   const ui = new InteractiveUi(
@@ -1370,6 +1365,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
       issueKey: currentIssueKey,
       summaryText: "",
       cwd: process.cwd(),
+      gitBranchName,
       flows: interactiveFlowDefinitions(),
       onRun: async (flowId) => {
         try {
@@ -1386,9 +1382,16 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           currentScope = nextScope;
           ui.setIssueKey(currentScope.scopeKey);
           if (currentScope.scopeType === "task" && (previousScopeType !== "task" || previousScopeKey !== currentScope.scopeKey)) {
-            await runInteractivePreflight(ui, currentScope, forceRefresh);
+            syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
           }
-          await executeCommand(baseConfig, true, (form) => ui.requestUserInput(form), currentScope);
+          await executeCommand(
+            baseConfig,
+            true,
+            (form) => ui.requestUserInput(form),
+            currentScope,
+            (markdown) => ui.setSummary(markdown),
+            forceRefresh,
+          );
         } catch (error) {
           if (error instanceof TaskRunnerError) {
             ui.setFlowFailed(flowId);
@@ -1414,21 +1417,11 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
   printInfo(`Interactive mode for ${currentScope.scopeKey}`);
   printInfo("Use h to see help.");
   if (currentScope.scopeType !== "task") {
-    ui.appendLog("[scope] project scope active; task summary will appear after Jira task is loaded");
+    ui.appendLog("[scope] project scope active; task summary will appear after a Jira-backed flow runs");
   }
 
   if (currentScope.scopeType === "task") {
-    try {
-      await runInteractivePreflight(ui, currentScope, forceRefresh);
-    } catch (error) {
-      if (error instanceof TaskRunnerError) {
-        printError(error.message);
-      } else {
-        throw error;
-      }
-    } finally {
-      ui.setBusy(false);
-    }
+    syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
   }
 
   return await new Promise<number>((resolve, reject) => {

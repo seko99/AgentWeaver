@@ -31,6 +31,155 @@
           ]
         },
         {
+          "id": "check_bug_issue_type",
+          "node": "jira-issue-check",
+          "params": {
+            "labelText": { "const": "Checking Jira issue type for bug analysis" },
+            "jiraTaskFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "allowedIssueTypes": {
+              "const": ["Bug"]
+            }
+          }
+        },
+        {
+          "id": "load_existing_task_summary",
+          "when": {
+            "all": [
+              { "not": { "ref": "params.forceRefresh" } },
+              {
+                "exists": {
+                  "artifact": {
+                    "kind": "task-summary-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "summary-file-load",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "task-summary-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          }
+        },
+        {
+          "id": "generate_task_summary",
+          "when": {
+            "any": [
+              { "ref": "params.forceRefresh" },
+              {
+                "not": {
+                  "exists": {
+                    "artifact": {
+                      "kind": "task-summary-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "claude-prompt",
+          "prompt": {
+            "templateRef": "task-summary",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "task_summary_file": {
+                "artifact": {
+                  "kind": "task-summary-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "task_summary_json_file": {
+                "artifact": {
+                  "kind": "task-summary-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "format": "plain"
+          },
+          "params": {
+            "labelText": { "const": "Preparing task summary" },
+            "outputFile": {
+              "artifact": {
+                "kind": "task-summary-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "task-summary-json-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              ]
+            },
+            "model": { "const": "haiku" }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "task-summary-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  }
+                ]
+              },
+              "message": "Claude summary did not produce the task summary artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "task-summary-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "task-summary/v1"
+                }
+              ],
+              "message": "Claude summary produced invalid structured artifacts."
+            }
+          ],
+          "after": [
+            {
+              "kind": "set-summary-from-file",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "path": {
+                "artifact": {
+                  "kind": "task-summary-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            }
+          ]
+        },
+        {
           "id": "run_codex_bug_analyze",
           "node": "codex-local-prompt",
           "prompt": {
