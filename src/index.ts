@@ -15,10 +15,9 @@ import {
   bugFixDesignJsonFile,
   bugFixPlanJsonFile,
   designJsonFile,
-  ensureTaskWorkspaceDir,
+  ensureScopeWorkspaceDir,
   gitlabReviewFile,
   gitlabReviewJsonFile,
-  jiraTaskFile,
   planJsonFile,
   planArtifacts,
   qaJsonFile,
@@ -27,11 +26,11 @@ import {
   reviewReplyJsonFile,
   reviewFixSelectionJsonFile,
   reviewJsonFile,
-  taskWorkspaceDir,
+  scopeWorkspaceDir,
   taskSummaryFile,
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
-import { buildJiraApiUrl, buildJiraBrowseUrl, extractIssueKey, requireJiraTaskFile } from "./jira.js";
+import { requireJiraTaskFile } from "./jira.js";
 import { validateStructuredArtifacts } from "./structured-artifacts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { createPipelineContext } from "./pipeline/context.js";
@@ -56,6 +55,13 @@ import {
   stripAnsi,
 } from "./tui.js";
 import { requestUserInputInTerminal, type UserInputRequester } from "./user-input.js";
+import {
+  requestTaskScope,
+  resolveProjectScope,
+  resolveTaskScope,
+  type ResolvedScope,
+  type ResolvedTaskScope,
+} from "./scope.js";
 
 const COMMANDS = [
   "bug-analyze",
@@ -86,22 +92,27 @@ const runtimeServices: RuntimeServices = {
   runCommand,
 };
 
-type Config = {
+type BaseConfig = {
   command: CommandName;
-  jiraRef: string;
+  jiraRef?: string | null;
+  scopeName?: string | null;
   reviewFixPoints?: string | null;
   extraPrompt?: string | null;
   autoFromPhase?: string | null;
   dryRun: boolean;
   verbose: boolean;
   dockerComposeFile: string;
-  jiraIssueKey: string;
-  taskKey: string;
-  jiraBrowseUrl: string;
-  jiraApiUrl: string;
-  jiraTaskFile: string;
   runTestsScript: string;
   runLinterScript: string;
+};
+
+type Config = BaseConfig & {
+  scope: ResolvedScope;
+  taskKey: string;
+  jiraRef: string;
+  jiraBrowseUrl?: string;
+  jiraApiUrl?: string;
+  jiraTaskFile?: string;
 };
 
 type AutoStepState = {
@@ -128,7 +139,8 @@ type AutoPipelineState = {
 
 type ParsedArgs = {
   command: CommandName;
-  jiraRef: string;
+  jiraRef?: string;
+  scopeName?: string;
   dry: boolean;
   verbose: boolean;
   prompt?: string;
@@ -179,27 +191,29 @@ function formatProcessFailure(error: ProcessFailureLike): string {
 
 function usage(): string {
   return `Usage:
+  agentweaver
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
-  agentweaver gitlab-review <jira-browse-url|jira-issue-key>
+  agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>] <jira-browse-url|jira-issue-key>
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver plan [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver plan [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver implement [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver review [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver review-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver run-tests-loop [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver run-linter-loop [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver auto [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver auto [--dry] [--verbose] [--prompt <text>] --from <phase> <jira-browse-url|jira-issue-key>
+  agentweaver implement [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver review-fix [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver run-tests-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver run-linter-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver auto [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
+  agentweaver auto [--dry] [--verbose] [--prompt <text>] --from <phase> [<jira-browse-url|jira-issue-key>]
   agentweaver auto --help-phases
-  agentweaver auto-status <jira-browse-url|jira-issue-key>
-  agentweaver auto-reset <jira-browse-url|jira-issue-key>
+  agentweaver auto-status [<jira-browse-url|jira-issue-key>]
+  agentweaver auto-reset [<jira-browse-url|jira-issue-key>]
 
 Interactive Mode:
-  When started with only a Jira task, the script opens an interactive UI.
+  When started without a command, the script opens an interactive UI.
+  If a Jira task is provided, interactive mode starts in task scope; otherwise it starts in project scope.
   Use Up/Down to select a flow, Enter to confirm launch, h for help, q to exit.
 
 Flags:
@@ -207,6 +221,7 @@ Flags:
   --force         In interactive mode, force refresh Jira task and task summary
   --dry           Fetch Jira task, but print docker/codex/claude commands instead of executing them
   --verbose       Show live stdout/stderr of launched commands
+  --scope         Explicit workflow scope name for non-Jira runs
   --prompt        Extra prompt text appended to the base prompt
 
 Required environment variables:
@@ -220,7 +235,11 @@ Optional environment variables:
   CODEX_BIN
   CODEX_MODEL
   CLAUDE_BIN
-  CLAUDE_MODEL`;
+  CLAUDE_MODEL
+
+Notes:
+  - Task-only flows will ask for Jira task via user-input when it is not passed as an argument.
+  - Scope-flexible flows use the current git branch by default when Jira task is not provided.`;
 }
 
 function packageVersion(): string {
@@ -341,7 +360,7 @@ function loadAutoPipelineState(config: Config): AutoPipelineState | null {
 
 function saveAutoPipelineState(state: AutoPipelineState): void {
   state.updatedAt = nowIso8601();
-  ensureTaskWorkspaceDir(state.issueKey);
+  ensureScopeWorkspaceDir(state.issueKey);
   writeFileSync(
     autoStateFile(state.issueKey),
     `${JSON.stringify(
@@ -495,7 +514,7 @@ function loadEnvFile(envFilePath: string): void {
 
 function nextReviewIterationForTask(taskKey: string): number {
   let maxIndex = 0;
-  const workspaceDir = taskWorkspaceDir(taskKey);
+  const workspaceDir = scopeWorkspaceDir(taskKey);
   if (!existsSync(workspaceDir)) {
     return 1;
   }
@@ -513,7 +532,7 @@ function nextReviewIterationForTask(taskKey: string): number {
 
 function latestReviewReplyIteration(taskKey: string): number | null {
   let maxIndex: number | null = null;
-  const workspaceDir = taskWorkspaceDir(taskKey);
+  const workspaceDir = scopeWorkspaceDir(taskKey);
   if (!existsSync(workspaceDir)) {
     return null;
   }
@@ -530,36 +549,103 @@ function latestReviewReplyIteration(taskKey: string): number | null {
   return maxIndex;
 }
 
-function buildConfig(
+function buildBaseConfig(
   command: CommandName,
-  jiraRef: string,
   options: {
+    jiraRef?: string | null;
+    scopeName?: string | null;
     reviewFixPoints?: string | null;
     extraPrompt?: string | null;
     autoFromPhase?: string | null;
     dryRun?: boolean;
     verbose?: boolean;
   } = {},
-): Config {
-  const jiraIssueKey = extractIssueKey(jiraRef);
-  ensureTaskWorkspaceDir(jiraIssueKey);
+): BaseConfig {
   const homeDir = agentweaverHome(PACKAGE_ROOT);
   return {
     command,
-    jiraRef,
+    jiraRef: options.jiraRef ?? null,
+    scopeName: options.scopeName ?? null,
     reviewFixPoints: options.reviewFixPoints ?? null,
     extraPrompt: options.extraPrompt ?? null,
     autoFromPhase: options.autoFromPhase ? validateAutoPhaseId(options.autoFromPhase) : null,
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
     dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
-    jiraIssueKey,
-    taskKey: jiraIssueKey,
-    jiraBrowseUrl: buildJiraBrowseUrl(jiraRef),
-    jiraApiUrl: buildJiraApiUrl(jiraRef),
-    jiraTaskFile: jiraTaskFile(jiraIssueKey),
     runTestsScript: path.join(homeDir, "run_tests.sh"),
     runLinterScript: path.join(homeDir, "run_linter.sh"),
+  };
+}
+
+function commandRequiresTask(command: CommandName): boolean {
+  return (
+    command === "plan" ||
+    command === "bug-analyze" ||
+    command === "bug-fix" ||
+    command === "gitlab-review" ||
+    command === "mr-description" ||
+    command === "task-describe" ||
+    command === "auto" ||
+    command === "auto-status" ||
+    command === "auto-reset"
+  );
+}
+
+function commandSupportsProjectScope(command: CommandName): boolean {
+  return (
+    command === "implement" ||
+    command === "review" ||
+    command === "review-fix" ||
+    command === "run-tests-loop" ||
+    command === "run-linter-loop"
+  );
+}
+
+async function resolveScopeForCommand(
+  config: BaseConfig,
+  requestUserInput: UserInputRequester,
+): Promise<ResolvedScope> {
+  if (config.jiraRef?.trim()) {
+    return resolveTaskScope(config.jiraRef, config.scopeName);
+  }
+  if (commandRequiresTask(config.command)) {
+    try {
+      const taskScope = await requestTaskScope(requestUserInput);
+      return config.scopeName ? resolveTaskScope(taskScope.jiraRef, config.scopeName) : taskScope;
+    } catch (error) {
+      if (error instanceof TaskRunnerError && error.message.includes("no TTY is available")) {
+        throw new TaskRunnerError(
+          `Command '${config.command}' requires a Jira task.\n` +
+            "Pass Jira issue key / browse URL as an argument, or run the command in an interactive terminal.",
+        );
+      }
+      throw error;
+    }
+  }
+  if (commandSupportsProjectScope(config.command)) {
+    return resolveProjectScope(config.scopeName);
+  }
+  throw new TaskRunnerError(`Unsupported scope policy for command: ${config.command}`);
+}
+
+function buildRuntimeConfig(baseConfig: BaseConfig, scope: ResolvedScope): Config {
+  ensureScopeWorkspaceDir(scope.scopeKey);
+  if (scope.scopeType === "task") {
+    return {
+      ...baseConfig,
+      scope,
+      taskKey: scope.scopeKey,
+      jiraRef: scope.jiraRef,
+      jiraBrowseUrl: scope.jiraBrowseUrl,
+      jiraApiUrl: scope.jiraApiUrl,
+      jiraTaskFile: scope.jiraTaskFile,
+    };
+  }
+  return {
+    ...baseConfig,
+    scope,
+    taskKey: scope.scopeKey,
+    jiraRef: scope.scopeKey,
   };
 }
 
@@ -810,11 +896,19 @@ async function summarizeBuildFailure(output: string): Promise<string> {
   );
 }
 
+function requireTaskScopeConfig(config: Config): asserts config is Config & { scope: ResolvedTaskScope; jiraBrowseUrl: string; jiraApiUrl: string; jiraTaskFile: string } {
+  if (config.scope.scopeType !== "task" || !config.jiraBrowseUrl || !config.jiraApiUrl || !config.jiraTaskFile) {
+    throw new TaskRunnerError(`Command '${config.command}' requires Jira task scope.`);
+  }
+}
+
 async function executeCommand(
-  config: Config,
+  baseConfig: BaseConfig,
   runFollowupVerify = true,
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
+  resolvedScope?: ResolvedScope,
 ): Promise<boolean> {
+  const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
   if (config.command === "auto") {
     await runAutoPipeline(config);
     return false;
@@ -835,11 +929,18 @@ async function executeCommand(
   }
 
   checkPrerequisites(config);
-  process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
-  process.env.JIRA_API_URL = config.jiraApiUrl;
-  process.env.JIRA_TASK_FILE = config.jiraTaskFile;
+  if (config.scope.scopeType === "task") {
+    process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl ?? "";
+    process.env.JIRA_API_URL = config.jiraApiUrl ?? "";
+    process.env.JIRA_TASK_FILE = config.jiraTaskFile ?? "";
+  } else {
+    delete process.env.JIRA_BROWSE_URL;
+    delete process.env.JIRA_API_URL;
+    delete process.env.JIRA_TASK_FILE;
+  }
 
   if (config.command === "plan") {
+    requireTaskScopeConfig(config);
     if (config.verbose) {
       process.stdout.write(`Fetching Jira issue from browse URL: ${config.jiraBrowseUrl}\n`);
       process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
@@ -854,6 +955,7 @@ async function executeCommand(
   }
 
   if (config.command === "bug-analyze") {
+    requireTaskScopeConfig(config);
     if (config.verbose) {
       process.stdout.write(`Fetching Jira issue from browse URL: ${config.jiraBrowseUrl}\n`);
       process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
@@ -868,6 +970,7 @@ async function executeCommand(
   }
 
   if (config.command === "gitlab-review") {
+    requireTaskScopeConfig(config);
     requireJiraTaskFile(config.jiraTaskFile);
     validateStructuredArtifacts(
       [
@@ -894,6 +997,7 @@ async function executeCommand(
   }
 
   if (config.command === "bug-fix") {
+    requireTaskScopeConfig(config);
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(bugAnalyzeArtifacts(config.taskKey), "Bug-fix mode requires bug-analyze artifacts from the bug analysis phase.");
     validateStructuredArtifacts(
@@ -912,6 +1016,7 @@ async function executeCommand(
   }
 
   if (config.command === "mr-description") {
+    requireTaskScopeConfig(config);
     requireJiraTaskFile(config.jiraTaskFile);
     await runDeclarativeFlowBySpecFile("mr-description.json", config, {
       taskKey: config.taskKey,
@@ -921,6 +1026,7 @@ async function executeCommand(
   }
 
   if (config.command === "task-describe") {
+    requireTaskScopeConfig(config);
     requireJiraTaskFile(config.jiraTaskFile);
     await runDeclarativeFlowBySpecFile("task-describe.json", config, {
       taskKey: config.taskKey,
@@ -930,7 +1036,6 @@ async function executeCommand(
   }
 
   if (config.command === "implement") {
-    requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(planArtifacts(config.taskKey), "Implement mode requires plan artifacts from the planning phase.");
     validateStructuredArtifacts(
       [
@@ -948,25 +1053,32 @@ async function executeCommand(
   }
 
   if (config.command === "review") {
-    requireJiraTaskFile(config.jiraTaskFile);
-    validateStructuredArtifacts(
-      [
-        { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
-        { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
-      ],
-      "Review mode requires valid structured plan artifacts from the planning phase.",
-    );
     const iteration = nextReviewIterationForTask(config.taskKey);
-    await runDeclarativeFlowBySpecFile("review.json", config, {
-      taskKey: config.taskKey,
-      iteration,
-      extraPrompt: config.extraPrompt,
-    }, requestUserInput);
+    if (config.scope.scopeType === "task") {
+      requireTaskScopeConfig(config);
+      validateStructuredArtifacts(
+        [
+          { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
+          { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
+        ],
+        "Review mode requires valid structured plan artifacts from the planning phase.",
+      );
+      await runDeclarativeFlowBySpecFile("review.json", config, {
+        taskKey: config.taskKey,
+        iteration,
+        extraPrompt: config.extraPrompt,
+      }, requestUserInput);
+    } else {
+      await runDeclarativeFlowBySpecFile("review-project.json", config, {
+        taskKey: config.taskKey,
+        iteration,
+        extraPrompt: config.extraPrompt,
+      }, requestUserInput);
+    }
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
 
   if (config.command === "review-fix") {
-    requireJiraTaskFile(config.jiraTaskFile);
     const latestIteration = latestReviewReplyIteration(config.taskKey);
     if (latestIteration === null) {
       throw new TaskRunnerError("Review-fix mode requires at least one review-reply artifact.");
@@ -1027,6 +1139,7 @@ async function runAutoPipelineDryRun(config: Config): Promise<void> {
 }
 
 async function runAutoPipeline(config: Config): Promise<void> {
+  requireTaskScopeConfig(config);
   if (config.dryRun) {
     await runAutoPipelineDryRun(config);
     return;
@@ -1126,6 +1239,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   let verbose = false;
   let prompt: string | undefined;
   let autoFromPhase: string | undefined;
+  let scopeName: string | undefined;
   let helpPhases = false;
   let jiraRef: string | undefined;
 
@@ -1148,6 +1262,11 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       index += 1;
       continue;
     }
+    if (token === "--scope") {
+      scopeName = argv[index + 1];
+      index += 1;
+      continue;
+    }
     if (token === "--from") {
       autoFromPhase = argv[index + 1];
       index += 1;
@@ -1160,24 +1279,23 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     printAutoPhasesHelp();
     process.exit(0);
   }
-  if (!jiraRef) {
-    process.stderr.write(`${usage()}\n`);
-    process.exit(1);
-  }
 
   return {
     command: command as CommandName,
-    jiraRef,
     dry,
     verbose,
     helpPhases,
+    ...(jiraRef !== undefined ? { jiraRef } : {}),
+    ...(scopeName !== undefined ? { scopeName } : {}),
     ...(prompt !== undefined ? { prompt } : {}),
     ...(autoFromPhase !== undefined ? { autoFromPhase } : {}),
   };
 }
 
-function buildConfigFromArgs(args: ParsedArgs): Config {
-  return buildConfig(args.command, args.jiraRef, {
+function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
+  return buildBaseConfig(args.command, {
+    ...(args.jiraRef !== undefined ? { jiraRef: args.jiraRef } : {}),
+    ...(args.scopeName !== undefined ? { scopeName: args.scopeName } : {}),
     ...(args.prompt !== undefined ? { extraPrompt: args.prompt } : {}),
     ...(args.autoFromPhase !== undefined ? { autoFromPhase: args.autoFromPhase } : {}),
     dryRun: args.dry,
@@ -1185,21 +1303,92 @@ function buildConfigFromArgs(args: ParsedArgs): Config {
   });
 }
 
-async function runInteractive(jiraRef: string, forceRefresh = false): Promise<number> {
-  const config = buildConfig("plan", jiraRef);
-  const jiraTaskPath = config.jiraTaskFile;
+async function runInteractivePreflight(
+  ui: InteractiveUi,
+  scope: ResolvedTaskScope,
+  forceRefresh = false,
+): Promise<void> {
+  const config = buildRuntimeConfig(
+    buildBaseConfig("plan", {
+      jiraRef: scope.jiraRef,
+      ...(scope.scopeKey !== scope.jiraIssueKey ? { scopeName: scope.scopeKey } : {}),
+    }),
+    scope,
+  );
+  const jiraTaskPath = config.jiraTaskFile ?? "";
+
+  try {
+    ui.setBusy(true, "preflight");
+    const preflightState = await runPreflightFlow(
+      createPipelineContext({
+        issueKey: config.taskKey,
+        jiraRef: config.jiraRef,
+        dryRun: false,
+        verbose: config.verbose,
+        runtime: runtimeServices,
+        setSummary: (markdown) => {
+          ui.setSummary(markdown);
+        },
+        requestUserInput: (form) => ui.requestUserInput(form),
+      }),
+      {
+        jiraApiUrl: config.jiraApiUrl ?? "",
+        jiraTaskFile: config.jiraTaskFile ?? "",
+        taskKey: config.taskKey,
+        forceRefresh,
+      },
+    );
+    const preflightPhase = preflightState.phases.find((phase) => phase.id === "preflight");
+    if (preflightPhase) {
+      ui.appendLog("[preflight] completed");
+      for (const step of preflightPhase.steps) {
+        ui.appendLog(`[preflight] ${step.id}: ${step.status}`);
+      }
+    }
+    if (!jiraTaskPath || !existsSync(jiraTaskPath)) {
+      throw new TaskRunnerError(
+        `Preflight finished without Jira task file: ${jiraTaskPath}\n` +
+          "Jira fetch did not complete successfully. Check JIRA_API_KEY and Jira connectivity.",
+      );
+    }
+    if (!existsSync(taskSummaryFile(config.taskKey))) {
+      ui.appendLog("[preflight] task summary file was not created");
+      ui.setSummary("Task summary is not available yet. Select and run `plan` or refresh Jira data.");
+    }
+  } finally {
+    ui.setBusy(false);
+  }
+}
+
+async function runInteractive(jiraRef?: string | null, forceRefresh = false, scopeName?: string | null): Promise<number> {
+  let currentScope = jiraRef?.trim() ? resolveTaskScope(jiraRef, scopeName) : resolveProjectScope(scopeName);
+  const currentIssueKey = currentScope.scopeKey;
 
   let exiting = false;
   const ui = new InteractiveUi(
     {
-      issueKey: config.jiraIssueKey,
-      summaryText: "Starting interactive session...",
+      issueKey: currentIssueKey,
+      summaryText: "",
       cwd: process.cwd(),
       flows: interactiveFlowDefinitions(),
       onRun: async (flowId) => {
         try {
-          const command = buildConfig(flowId as CommandName, jiraRef);
-          await executeCommand(command, true, (form) => ui.requestUserInput(form));
+          const previousScopeType = currentScope.scopeType;
+          const previousScopeKey = currentScope.scopeKey;
+          const baseConfig = buildBaseConfig(flowId as CommandName, {
+            ...(currentScope.scopeType === "task" ? { jiraRef: currentScope.jiraRef } : {}),
+            ...(currentScope.scopeType === "task" && currentScope.scopeKey !== currentScope.jiraIssueKey
+              ? { scopeName: currentScope.scopeKey }
+              : {}),
+            ...(currentScope.scopeType === "project" ? { scopeName: currentScope.scopeKey } : {}),
+          });
+          const nextScope = await resolveScopeForCommand(baseConfig, (form) => ui.requestUserInput(form));
+          currentScope = nextScope;
+          ui.setIssueKey(currentScope.scopeKey);
+          if (currentScope.scopeType === "task" && (previousScopeType !== "task" || previousScopeKey !== currentScope.scopeKey)) {
+            await runInteractivePreflight(ui, currentScope, forceRefresh);
+          }
+          await executeCommand(baseConfig, true, (form) => ui.requestUserInput(form), currentScope);
         } catch (error) {
           if (error instanceof TaskRunnerError) {
             ui.setFlowFailed(flowId);
@@ -1222,55 +1411,24 @@ async function runInteractive(jiraRef: string, forceRefresh = false): Promise<nu
   );
 
   ui.mount();
-  printInfo(`Interactive mode for ${config.jiraIssueKey}`);
+  printInfo(`Interactive mode for ${currentScope.scopeKey}`);
   printInfo("Use h to see help.");
+  if (currentScope.scopeType !== "task") {
+    ui.appendLog("[scope] project scope active; task summary will appear after Jira task is loaded");
+  }
 
-  try {
-    ui.setBusy(true, "preflight");
-    const preflightState = await runPreflightFlow(
-      createPipelineContext({
-        issueKey: config.taskKey,
-        jiraRef: config.jiraRef,
-        dryRun: false,
-        verbose: config.verbose,
-        runtime: runtimeServices,
-        setSummary: (markdown) => {
-          ui.setSummary(markdown);
-        },
-        requestUserInput: (form) => ui.requestUserInput(form),
-      }),
-      {
-        jiraApiUrl: config.jiraApiUrl,
-        jiraTaskFile: config.jiraTaskFile,
-        taskKey: config.taskKey,
-        forceRefresh,
-      },
-    );
-    const preflightPhase = preflightState.phases.find((phase) => phase.id === "preflight");
-    if (preflightPhase) {
-      ui.appendLog("[preflight] completed");
-      for (const step of preflightPhase.steps) {
-        ui.appendLog(`[preflight] ${step.id}: ${step.status}`);
+  if (currentScope.scopeType === "task") {
+    try {
+      await runInteractivePreflight(ui, currentScope, forceRefresh);
+    } catch (error) {
+      if (error instanceof TaskRunnerError) {
+        printError(error.message);
+      } else {
+        throw error;
       }
+    } finally {
+      ui.setBusy(false);
     }
-    if (!existsSync(jiraTaskPath)) {
-      throw new TaskRunnerError(
-        `Preflight finished without Jira task file: ${jiraTaskPath}\n` +
-          "Jira fetch did not complete successfully. Check JIRA_API_KEY and Jira connectivity.",
-      );
-    }
-    if (!existsSync(taskSummaryFile(config.taskKey))) {
-      ui.appendLog("[preflight] task summary file was not created");
-      ui.setSummary("Task summary is not available yet. Select and run `plan` or refresh Jira data.");
-    }
-  } catch (error) {
-    if (error instanceof TaskRunnerError) {
-      printError(error.message);
-    } else {
-      throw error;
-    }
-  } finally {
-    ui.setBusy(false);
   }
 
   return await new Promise<number>((resolve, reject) => {
@@ -1301,6 +1459,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
 
   try {
+    if (args.length === 0) {
+      return await runInteractive(undefined, forceRefresh);
+    }
     if (args.length === 1 && !args[0]?.startsWith("-") && !COMMANDS.includes(args[0] as CommandName)) {
       return await runInteractive(args[0] ?? "", forceRefresh);
     }
