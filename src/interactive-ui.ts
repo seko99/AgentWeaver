@@ -28,7 +28,8 @@ type InteractiveFlowDefinition = {
 };
 
 type InteractiveUiOptions = {
-  issueKey: string;
+  scopeKey: string;
+  jiraIssueKey?: string | null;
   summaryText: string;
   cwd: string;
   gitBranchName: string | null;
@@ -100,7 +101,8 @@ export class InteractiveUi {
   private failedFlowId: string | null = null;
   private activeFormSession: ActiveFormSession | null = null;
   private confirmSession: ConfirmSession | null = null;
-  private issueKey: string;
+  private scopeKey: string;
+  private jiraIssueKey: string | null;
   private summaryVisible: boolean;
 
   constructor(private readonly options: InteractiveUiOptions) {
@@ -109,13 +111,14 @@ export class InteractiveUi {
     }
     this.flowMap = new Map(options.flows.map((flow) => [flow.id, flow]));
     this.selectedFlowId = options.flows[0]?.id ?? "auto";
-    this.issueKey = options.issueKey;
+    this.scopeKey = options.scopeKey;
+    this.jiraIssueKey = options.jiraIssueKey ?? null;
     this.summaryVisible = options.summaryText.trim().length > 0;
 
     this.screen = blessed.screen({
       smartCSR: true,
       fullUnicode: true,
-      title: `AgentWeaver ${this.issueKey}`,
+      title: `AgentWeaver ${this.scopeKey}`,
       dockBorders: true,
       autoPadding: false,
     });
@@ -692,7 +695,8 @@ export class InteractiveUi {
       [
         "{bold}AgentWeaver{/bold}",
         divider,
-        `{bold}Issue{/bold} {green-fg}${this.issueKey}{/green-fg}`,
+        `{bold}Scope{/bold} {green-fg}${this.scopeKey}{/green-fg}`,
+        this.jiraIssueKey ? `${divider}{bold}Jira{/bold} {yellow-fg}${this.jiraIssueKey}{/yellow-fg}` : "",
         divider,
         `{bold}Flow{/bold} ${flowLabel}`,
         divider,
@@ -1523,9 +1527,10 @@ export class InteractiveUi {
     this.requestRender();
   }
 
-  setIssueKey(issueKey: string): void {
-    this.issueKey = issueKey;
-    this.screen.title = `AgentWeaver ${issueKey}`;
+  setScope(scopeKey: string, jiraIssueKey?: string | null): void {
+    this.scopeKey = scopeKey;
+    this.jiraIssueKey = jiraIssueKey ?? null;
+    this.screen.title = `AgentWeaver ${scopeKey}`;
     this.updateHeader();
     this.requestRender();
   }
