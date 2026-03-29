@@ -34,7 +34,7 @@
           "id": "run_codex_task_describe",
           "node": "codex-local-prompt",
           "prompt": {
-            "inlineTemplate": "Посмотри задачу в {jira_task_file}. Проанализируй код и оформи краткое описание для Jira, без лишних подробностей. Сначала запиши source-of-truth JSON в {jira_description_json_file} в виде объекта { summary: string }, затем markdown-версию в {jira_description_file}.",
+            "inlineTemplate": "Посмотри задачу в {jira_task_file}. Проанализируй код и оформи краткое описание для Jira, упомяни ключевые точки, модели данных, сервисы, REST-методы. Сначала запиши source-of-truth JSON в {jira_description_json_file} в виде объекта { summary: string }, затем markdown-версию в {jira_description_file}.",
             "vars": {
               "jira_task_file": {
                 "artifact": {
