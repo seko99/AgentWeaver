@@ -1439,13 +1439,13 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
 
 async function runInteractive(jiraRef?: string | null, forceRefresh = false, scopeName?: string | null): Promise<number> {
   let currentScope = jiraRef?.trim() ? resolveTaskScope(jiraRef, scopeName) : resolveProjectScope(scopeName);
-  const currentIssueKey = currentScope.scopeKey;
   const gitBranchName = detectGitBranchName();
 
   let exiting = false;
   const ui = new InteractiveUi(
     {
-      issueKey: currentIssueKey,
+      scopeKey: currentScope.scopeKey,
+      jiraIssueKey: currentScope.scopeType === "task" ? currentScope.jiraIssueKey : null,
       summaryText: "",
       cwd: process.cwd(),
       gitBranchName,
@@ -1499,7 +1499,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           });
           const nextScope = await resolveScopeForCommand(baseConfig, (form) => ui.requestUserInput(form));
           currentScope = nextScope;
-          ui.setIssueKey(currentScope.scopeKey);
+          ui.setScope(currentScope.scopeKey, currentScope.scopeType === "task" ? currentScope.jiraIssueKey : null);
           if (currentScope.scopeType === "task" && (previousScopeType !== "task" || previousScopeKey !== currentScope.scopeKey)) {
             syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
           }
