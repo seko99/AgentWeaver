@@ -30,6 +30,13 @@ export type ResolvedProjectScope = {
 
 export type ResolvedScope = ResolvedTaskScope | ResolvedProjectScope;
 
+type ParsedTaskScope = {
+  jiraRef: string;
+  jiraIssueKey: string;
+  jiraBrowseUrl: string;
+  jiraApiUrl: string;
+};
+
 function gitOutput(args: string[]): string | null {
   try {
     const output = execFileSync("git", args, {
@@ -103,17 +110,26 @@ export function buildProjectScopeKey(explicitScope?: string | null): {
   };
 }
 
+function parseTaskScope(jiraRef: string): ParsedTaskScope {
+  return {
+    jiraRef,
+    jiraIssueKey: extractIssueKey(jiraRef),
+    jiraBrowseUrl: buildJiraBrowseUrl(jiraRef),
+    jiraApiUrl: buildJiraApiUrl(jiraRef),
+  };
+}
+
 export function resolveTaskScope(jiraRef: string, explicitScope?: string | null): ResolvedTaskScope {
-  const jiraIssueKey = extractIssueKey(jiraRef);
-  const scopeKey = explicitScope?.trim() ? sanitizeScopeName(explicitScope) : jiraIssueKey;
+  const parsedTaskScope = parseTaskScope(jiraRef);
+  const scopeKey = explicitScope?.trim() ? sanitizeScopeName(explicitScope) : parsedTaskScope.jiraIssueKey;
   ensureScopeWorkspaceDir(scopeKey);
   return {
     scopeType: "task",
     scopeKey,
-    jiraRef,
-    jiraIssueKey,
-    jiraBrowseUrl: buildJiraBrowseUrl(jiraRef),
-    jiraApiUrl: buildJiraApiUrl(jiraRef),
+    jiraRef: parsedTaskScope.jiraRef,
+    jiraIssueKey: parsedTaskScope.jiraIssueKey,
+    jiraBrowseUrl: parsedTaskScope.jiraBrowseUrl,
+    jiraApiUrl: parsedTaskScope.jiraApiUrl,
     jiraTaskFile: jiraTaskFile(scopeKey),
   };
 }
@@ -154,5 +170,14 @@ export async function requestTaskScope(requestUserInput: UserInputRequester): Pr
   if (!jiraRef) {
     throw new TaskRunnerError("Jira issue key or browse URL is required.");
   }
-  return resolveTaskScope(jiraRef);
+  const parsedTaskScope = parseTaskScope(jiraRef);
+  return {
+    scopeType: "task",
+    scopeKey: parsedTaskScope.jiraIssueKey,
+    jiraRef: parsedTaskScope.jiraRef,
+    jiraIssueKey: parsedTaskScope.jiraIssueKey,
+    jiraBrowseUrl: parsedTaskScope.jiraBrowseUrl,
+    jiraApiUrl: parsedTaskScope.jiraApiUrl,
+    jiraTaskFile: jiraTaskFile(parsedTaskScope.jiraIssueKey),
+  };
 }
