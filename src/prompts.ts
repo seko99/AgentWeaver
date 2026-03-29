@@ -92,6 +92,11 @@ export const TASK_SUMMARY_PROMPT_TEMPLATE =
   "Сделай краткое резюме задачи, на 1-2 абзаца. " +
   "Сначала запиши source-of-truth JSON в {task_summary_json_file} в виде объекта { summary: string }, затем markdown-версию в {task_summary_file}.";
 
+export const JIRA_DESCRIPTION_PROMPT_TEMPLATE =
+  "Посмотри задачу в {jira_task_file}. " +
+  "Проанализируй код и оформи краткое описание для Jira, упомяни ключевые точки, модели данных, сервисы, REST-методы. " +
+  "Сначала запиши source-of-truth JSON в {jira_description_json_file} в виде объекта { summary: string }, затем markdown-версию в {jira_description_file}.";
+
 export const RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
   "Запусти ./run_go_tests.sh, проанализируй последнюю ошибку проверки, исправь код и подготовь изменения так, чтобы следующий прогон run_go_tests.sh прошёл успешно.";
 export const RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE =
