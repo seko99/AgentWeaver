@@ -22,7 +22,7 @@
               }
             },
             "labelText": {
-              "const": "Running run_go_linter.sh locally (attempt 1)"
+              "const": "Running run_go_linter.py locally (attempt 1)"
             }
           },
           "expect": [
@@ -70,7 +70,7 @@
               "appendPrompt": {
                 "base": { "ref": "params.extraPrompt" },
                 "suffix": {
-                  "template": "Последний результат run_go_linter.sh сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
+                  "template": "Последний результат run_go_linter.py сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
                   "vars": {
                     "result_file": {
                       "artifact": {
@@ -130,7 +130,7 @@
                   }
                 },
                 "labelText": {
-                  "template": "Running run_go_linter.sh locally (attempt ${attempt})"
+                  "template": "Running run_go_linter.py locally (attempt ${attempt})"
                 }
               },
               "expect": [
@@ -178,7 +178,7 @@
                   "appendPrompt": {
                     "base": { "ref": "params.extraPrompt" },
                     "suffix": {
-                      "template": "Последний результат run_go_linter.sh сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
+                      "template": "Последний результат run_go_linter.py сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
                       "vars": {
                         "result_file": {
                           "artifact": {
@@ -221,7 +221,7 @@
               "kind": "step-output",
               "value": { "ref": "steps.run_go_linter_try_5.run_go_linter.outputs.parsed.ok" },
               "equals": { "const": true },
-              "message": "run-go-linter-loop exhausted all attempts without a successful run_go_linter.sh execution."
+              "message": "run-go-linter-loop exhausted all attempts without a successful run_go_linter.py execution."
             }
           ]
         }
