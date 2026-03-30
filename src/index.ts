@@ -589,7 +589,7 @@ function buildBaseConfig(
     verbose: options.verbose ?? false,
     dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
     runGoTestsScript: path.join(homeDir, "run_go_tests.sh"),
-    runGoLinterScript: path.join(homeDir, "run_go_linter.sh"),
+    runGoLinterScript: path.join(homeDir, "run_go_linter.py"),
     runGoCoverageScript: path.join(homeDir, "run_go_coverage.sh"),
   };
 }
@@ -723,7 +723,7 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   "run-go-tests-loop":
     "Циклически запускает `./run_go_tests.sh` локально, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
   "run-go-linter-loop":
-    "Циклически запускает `./run_go_linter.sh` локально, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
+    "Циклически запускает `./run_go_linter.py` локально, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
 };
 
 function flowDescription(id: string): string {

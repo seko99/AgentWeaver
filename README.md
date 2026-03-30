@@ -46,7 +46,7 @@ This keeps command handlers focused on choosing a flow and providing parameters 
 - `Dockerfile.codex` — container image for Codex runtime
 - `verify_build.sh` — aggregated verification entrypoint used by `verify-build`
 - `run_go_tests.sh` — isolated Go test verification entrypoint
-- `run_go_linter.sh` — isolated Go generate + lint verification entrypoint
+- `run_go_linter.py` — isolated Go generate + lint verification entrypoint
 - `run_go_coverage.sh` — isolated Go coverage verification entrypoint
 - `package.json` — npm package metadata and scripts
 - `tsconfig.json` — TypeScript configuration
@@ -213,7 +213,7 @@ Main services:
 - `codex-exec` — non-interactive `codex exec`
 - `verify-build` — project verification script inside container
 - `run-go-tests` — isolated `run_go_tests.sh` execution inside container
-- `run-go-linter` — isolated `run_go_linter.sh` execution inside container
+- `run-go-linter` — isolated `run_go_linter.py` execution inside container
 - `run-go-coverage` — isolated `run_go_coverage.sh` execution inside container
 - `codex-login` — interactive login container
 - `dockerd` — internal Docker daemon for testcontainers/build flows

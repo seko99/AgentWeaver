@@ -136,6 +136,13 @@ export const localScriptCheckNode: PipelineNodeDefinition<LocalScriptCheckNodePa
       }
     }
 
+    if (typeof parsed.details.raw !== "string") {
+      parsed.details = {
+        ...parsed.details,
+        raw: output,
+      };
+    }
+
     if (params.outputFile) {
       persistStructuredResult(params.outputFile, parsed);
     }

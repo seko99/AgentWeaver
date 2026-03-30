@@ -100,8 +100,8 @@ export const JIRA_DESCRIPTION_PROMPT_TEMPLATE =
 export const RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
   "Запусти ./run_go_tests.sh, проанализируй последнюю ошибку проверки, исправь код и подготовь изменения так, чтобы следующий прогон run_go_tests.sh прошёл успешно.";
 export const RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE =
-  "Используй структурированный результат последнего запуска run_go_linter.sh из {linter_result_json_file} как source of truth. " +
-  "Проанализируй последнюю ошибку линтера или генерации, исправь код и подготовь изменения так, чтобы следующий прогон run_go_linter.sh прошёл успешно.";
+  "Используй структурированный результат последнего запуска run_go_linter.py из {linter_result_json_file} как source of truth. " +
+  "Проанализируй последнюю ошибку линтера или генерации, исправь код и подготовь изменения так, чтобы следующий прогон run_go_linter.py прошёл успешно.";
 export const AUTO_REVIEW_FIX_EXTRA_PROMPT = "Исправлять только блокеры, критикалы и важные";
 
 export function formatTemplate(template: string, values: Record<string, string>): string {
