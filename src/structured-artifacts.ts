@@ -1,362 +1,191 @@
 import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { TaskRunnerError } from "./errors.js";
 
-export type StructuredArtifactSchemaId =
-  | "bug-analysis/v1"
-  | "bug-fix-design/v1"
-  | "bug-fix-plan/v1"
-  | "gitlab-review/v1"
-  | "implementation-design/v1"
-  | "implementation-plan/v1"
-  | "jira-description/v1"
-  | "mr-description/v1"
-  | "qa-plan/v1"
-  | "review-findings/v1"
-  | "review-fix-report/v1"
-  | "review-reply/v1"
-  | "task-summary/v1"
-  | "user-input/v1";
+export const STRUCTURED_ARTIFACT_SCHEMA_IDS = [
+  "bug-analysis/v1",
+  "bug-fix-design/v1",
+  "bug-fix-plan/v1",
+  "gitlab-review/v1",
+  "implementation-design/v1",
+  "implementation-plan/v1",
+  "jira-description/v1",
+  "mr-description/v1",
+  "qa-plan/v1",
+  "review-findings/v1",
+  "review-fix-report/v1",
+  "review-reply/v1",
+  "task-summary/v1",
+  "user-input/v1",
+] as const;
+
+export type StructuredArtifactSchemaId = (typeof STRUCTURED_ARTIFACT_SCHEMA_IDS)[number];
 
 type ValidationIssue = string;
 
-type ValidationContext = {
-  path: string;
-  value: unknown;
-};
+type StructuredArtifactSchemaNode =
+  | {
+      anyOf: StructuredArtifactSchemaNode[];
+      type?: never;
+    }
+  | {
+      type: "string";
+      nonEmpty?: boolean;
+      anyOf?: never;
+    }
+  | {
+      type: "boolean" | "number" | "null";
+      anyOf?: never;
+    }
+  | {
+      type: "array";
+      items: StructuredArtifactSchemaNode;
+      minItems?: number;
+      anyOf?: never;
+    }
+  | {
+      type: "object";
+      properties?: Record<string, StructuredArtifactSchemaNode>;
+      required?: string[];
+      anyOf?: never;
+    };
 
-type StructuredArtifactSchema = {
-  id: StructuredArtifactSchemaId;
-  validate: (context: ValidationContext) => ValidationIssue[];
-};
+type StructuredArtifactSchemaRegistry = Record<StructuredArtifactSchemaId, StructuredArtifactSchemaNode>;
 
 export type StructuredArtifactCheck = {
   path: string;
   schemaId: StructuredArtifactSchemaId;
 };
 
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const SCHEMA_REGISTRY_PATH = path.join(MODULE_DIR, "structured-artifact-schemas.json");
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function expectNonEmptyString(value: unknown, path: string, issues: ValidationIssue[]): void {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    issues.push(`${path} must be a non-empty string`);
+function schemaLabel(node: StructuredArtifactSchemaNode): string {
+  if ("anyOf" in node) {
+    return "a valid value";
+  }
+  switch (node.type) {
+    case "string":
+      return node.nonEmpty ? "a non-empty string" : "a string";
+    case "boolean":
+      return "a boolean";
+    case "number":
+      return "a number";
+    case "null":
+      return "null";
+    case "array":
+      return "an array";
+    case "object":
+      return "an object";
   }
 }
 
-function expectBoolean(value: unknown, path: string, issues: ValidationIssue[]): void {
-  if (typeof value !== "boolean") {
-    issues.push(`${path} must be a boolean`);
-  }
-}
-
-function expectObject(value: unknown, path: string, issues: ValidationIssue[]): value is Record<string, unknown> {
-  if (!isRecord(value)) {
-    issues.push(`${path} must be an object`);
-    return false;
-  }
-  return true;
-}
-
-function expectStringArray(value: unknown, path: string, issues: ValidationIssue[], allowEmpty = false): void {
-  if (!Array.isArray(value)) {
-    issues.push(`${path} must be an array`);
-    return;
-  }
-  if (!allowEmpty && value.length === 0) {
-    issues.push(`${path} must not be empty`);
-    return;
-  }
-  value.forEach((item, index) => expectNonEmptyString(item, `${path}[${index}]`, issues));
-}
-
-function expectObjectArray(
-  value: unknown,
-  path: string,
-  issues: ValidationIssue[],
-  validateItem: (item: Record<string, unknown>, itemPath: string, issues: ValidationIssue[]) => void,
-  allowEmpty = false,
-): void {
-  if (!Array.isArray(value)) {
-    issues.push(`${path} must be an array`);
-    return;
-  }
-  if (!allowEmpty && value.length === 0) {
-    issues.push(`${path} must not be empty`);
-    return;
-  }
-  value.forEach((item, index) => {
-    const itemPath = `${path}[${index}]`;
-    if (!expectObject(item, itemPath, issues)) {
-      return;
+function validateNode(value: unknown, schema: StructuredArtifactSchemaNode, currentPath: string): ValidationIssue[] {
+  if ("anyOf" in schema) {
+    let bestIssues: ValidationIssue[] | null = null;
+    for (const option of schema.anyOf) {
+      const issues = validateNode(value, option, currentPath);
+      if (issues.length === 0) {
+        return [];
+      }
+      if (bestIssues === null || issues.length < bestIssues.length) {
+        bestIssues = issues;
+      }
     }
-    validateItem(item, itemPath, issues);
-  });
-}
-
-function validateBriefText(value: unknown, path: string, issues: ValidationIssue[]): void {
-  if (!expectObject(value, path, issues)) {
-    return;
+    return bestIssues ?? [`${currentPath} must be ${schemaLabel(schema)}`];
   }
-  expectNonEmptyString(value.summary, `${path}.summary`, issues);
-}
 
-function expectNumber(value: unknown, path: string, issues: ValidationIssue[]): void {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    issues.push(`${path} must be a number`);
+  switch (schema.type) {
+    case "string":
+      if (typeof value !== "string" || (schema.nonEmpty && value.trim().length === 0)) {
+        return [`${currentPath} must be ${schemaLabel(schema)}`];
+      }
+      return [];
+    case "boolean":
+      return typeof value === "boolean" ? [] : [`${currentPath} must be a boolean`];
+    case "number":
+      return typeof value === "number" && !Number.isNaN(value) ? [] : [`${currentPath} must be a number`];
+    case "null":
+      return value === null ? [] : [`${currentPath} must be null`];
+    case "array": {
+      if (!Array.isArray(value)) {
+        return [`${currentPath} must be an array`];
+      }
+      if (schema.minItems !== undefined && value.length < schema.minItems) {
+        return [schema.minItems === 1 ? `${currentPath} must not be empty` : `${currentPath} must contain at least ${schema.minItems} items`];
+      }
+      return value.flatMap((item, index) => validateNode(item, schema.items, `${currentPath}[${index}]`));
+    }
+    case "object": {
+      if (!isRecord(value)) {
+        return [`${currentPath} must be an object`];
+      }
+
+      const issues: ValidationIssue[] = [];
+      const properties = schema.properties ?? {};
+      const required = new Set(schema.required ?? []);
+
+      for (const propertyName of required) {
+        issues.push(...validateNode(value[propertyName], properties[propertyName] ?? { type: "object" }, `${currentPath}.${propertyName}`));
+      }
+
+      for (const [propertyName, propertySchema] of Object.entries(properties)) {
+        if (required.has(propertyName) || !(propertyName in value)) {
+          continue;
+        }
+        issues.push(...validateNode(value[propertyName], propertySchema, `${currentPath}.${propertyName}`));
+      }
+
+      return issues;
+    }
   }
 }
 
-function implementationDesignSchema(): StructuredArtifactSchema {
-  return {
-    id: "implementation-design/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      expectStringArray(value.goals, `${path}.goals`, issues);
-      expectStringArray(value.non_goals, `${path}.non_goals`, issues, true);
-      expectStringArray(value.components, `${path}.components`, issues);
-      expectObjectArray(value.decisions, `${path}.decisions`, issues, (item, itemPath, currentIssues) => {
-        expectNonEmptyString(item.component, `${itemPath}.component`, currentIssues);
-        expectNonEmptyString(item.decision, `${itemPath}.decision`, currentIssues);
-        expectNonEmptyString(item.rationale, `${itemPath}.rationale`, currentIssues);
-      });
-      expectStringArray(value.risks, `${path}.risks`, issues, true);
-      expectStringArray(value.open_questions, `${path}.open_questions`, issues, true);
-      return issues;
-    },
-  };
+function loadSchemaRegistry(): StructuredArtifactSchemaRegistry {
+  if (!existsSync(SCHEMA_REGISTRY_PATH)) {
+    throw new TaskRunnerError(`Structured artifact schema registry not found: ${SCHEMA_REGISTRY_PATH}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(SCHEMA_REGISTRY_PATH, "utf8"));
+  } catch (error) {
+    throw new TaskRunnerError(`Failed to parse structured artifact schema registry: ${(error as Error).message}`);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new TaskRunnerError(`Structured artifact schema registry ${SCHEMA_REGISTRY_PATH} must be a JSON object.`);
+  }
+
+  return parsed as StructuredArtifactSchemaRegistry;
 }
 
-function implementationPlanSchema(): StructuredArtifactSchema {
-  return {
-    id: "implementation-plan/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      expectStringArray(value.prerequisites, `${path}.prerequisites`, issues, true);
-      expectObjectArray(value.implementation_steps, `${path}.implementation_steps`, issues, (item, itemPath, currentIssues) => {
-        expectNonEmptyString(item.id, `${itemPath}.id`, currentIssues);
-        expectNonEmptyString(item.title, `${itemPath}.title`, currentIssues);
-        expectNonEmptyString(item.details, `${itemPath}.details`, currentIssues);
-      });
-      expectStringArray(value.tests, `${path}.tests`, issues);
-      expectStringArray(value.rollout_notes, `${path}.rollout_notes`, issues, true);
-      return issues;
-    },
-  };
-}
-
-function qaPlanSchema(): StructuredArtifactSchema {
-  return {
-    id: "qa-plan/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      expectObjectArray(value.test_scenarios, `${path}.test_scenarios`, issues, (item, itemPath, currentIssues) => {
-        expectNonEmptyString(item.id, `${itemPath}.id`, currentIssues);
-        expectNonEmptyString(item.title, `${itemPath}.title`, currentIssues);
-        expectNonEmptyString(item.expected_result, `${itemPath}.expected_result`, currentIssues);
-      });
-      expectStringArray(value.non_functional_checks, `${path}.non_functional_checks`, issues, true);
-      return issues;
-    },
-  };
-}
-
-function bugAnalysisSchema(): StructuredArtifactSchema {
-  return {
-    id: "bug-analysis/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      if (expectObject(value.suspected_root_cause, `${path}.suspected_root_cause`, issues)) {
-        expectNonEmptyString(value.suspected_root_cause.hypothesis, `${path}.suspected_root_cause.hypothesis`, issues);
-        expectNonEmptyString(value.suspected_root_cause.confidence, `${path}.suspected_root_cause.confidence`, issues);
-      }
-      expectStringArray(value.reproduction_steps, `${path}.reproduction_steps`, issues);
-      expectStringArray(value.affected_components, `${path}.affected_components`, issues);
-      expectStringArray(value.evidence, `${path}.evidence`, issues);
-      expectStringArray(value.risks, `${path}.risks`, issues, true);
-      expectStringArray(value.open_questions, `${path}.open_questions`, issues, true);
-      return issues;
-    },
-  };
-}
-
-function bugFixDesignSchema(): StructuredArtifactSchema {
-  return {
-    id: "bug-fix-design/v1",
-    validate: implementationDesignSchema().validate,
-  };
-}
-
-function bugFixPlanSchema(): StructuredArtifactSchema {
-  return {
-    id: "bug-fix-plan/v1",
-    validate: implementationPlanSchema().validate,
-  };
-}
-
-function reviewFindingsSchema(): StructuredArtifactSchema {
-  return {
-    id: "review-findings/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      expectBoolean(value.ready_to_merge, `${path}.ready_to_merge`, issues);
-      expectObjectArray(value.findings, `${path}.findings`, issues, (item, itemPath, currentIssues) => {
-        expectNonEmptyString(item.severity, `${itemPath}.severity`, currentIssues);
-        expectNonEmptyString(item.title, `${itemPath}.title`, currentIssues);
-        expectNonEmptyString(item.description, `${itemPath}.description`, currentIssues);
-      }, true);
-      return issues;
-    },
-  };
-}
-
-function reviewReplySchema(): StructuredArtifactSchema {
-  return {
-    id: "review-reply/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      expectObjectArray(value.responses, `${path}.responses`, issues, (item, itemPath, currentIssues) => {
-        expectNonEmptyString(item.finding_title, `${itemPath}.finding_title`, currentIssues);
-        expectNonEmptyString(item.disposition, `${itemPath}.disposition`, currentIssues);
-        expectNonEmptyString(item.action, `${itemPath}.action`, currentIssues);
-      }, true);
-      expectBoolean(value.ready_to_merge, `${path}.ready_to_merge`, issues);
-      return issues;
-    },
-  };
-}
-
-function reviewFixReportSchema(): StructuredArtifactSchema {
-  return {
-    id: "review-fix-report/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      expectStringArray(value.completed_actions, `${path}.completed_actions`, issues);
-      expectStringArray(value.validation_steps, `${path}.validation_steps`, issues, true);
-      return issues;
-    },
-  };
-}
-
-function gitlabReviewSchema(): StructuredArtifactSchema {
-  return {
-    id: "gitlab-review/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.summary, `${path}.summary`, issues);
-      expectNonEmptyString(value.merge_request_url, `${path}.merge_request_url`, issues);
-      expectNonEmptyString(value.project_path, `${path}.project_path`, issues);
-      expectNumber(value.merge_request_iid, `${path}.merge_request_iid`, issues);
-      expectNonEmptyString(value.fetched_at, `${path}.fetched_at`, issues);
-      expectObjectArray(
-        value.comments,
-        `${path}.comments`,
-        issues,
-        (item, itemPath, currentIssues) => {
-          expectNonEmptyString(item.id, `${itemPath}.id`, currentIssues);
-          expectNonEmptyString(item.discussion_id, `${itemPath}.discussion_id`, currentIssues);
-          expectNonEmptyString(item.body, `${itemPath}.body`, currentIssues);
-          expectNonEmptyString(item.author, `${itemPath}.author`, currentIssues);
-          expectNonEmptyString(item.created_at, `${itemPath}.created_at`, currentIssues);
-          if (item.file_path !== undefined && item.file_path !== null) {
-            expectNonEmptyString(item.file_path, `${itemPath}.file_path`, currentIssues);
-          }
-        },
-        true,
-      );
-      return issues;
-    },
-  };
-}
-
-function userInputSchema(): StructuredArtifactSchema {
-  return {
-    id: "user-input/v1",
-    validate({ path, value }) {
-      const issues: ValidationIssue[] = [];
-      if (!expectObject(value, path, issues)) {
-        return issues;
-      }
-      expectNonEmptyString(value.form_id, `${path}.form_id`, issues);
-      expectNonEmptyString(value.submitted_at, `${path}.submitted_at`, issues);
-      expectObject(value.values, `${path}.values`, issues);
-      return issues;
-    },
-  };
-}
-
-const schemas: Record<StructuredArtifactSchemaId, StructuredArtifactSchema> = {
-  "bug-analysis/v1": bugAnalysisSchema(),
-  "bug-fix-design/v1": bugFixDesignSchema(),
-  "bug-fix-plan/v1": bugFixPlanSchema(),
-  "gitlab-review/v1": gitlabReviewSchema(),
-  "implementation-design/v1": implementationDesignSchema(),
-  "implementation-plan/v1": implementationPlanSchema(),
-  "jira-description/v1": { id: "jira-description/v1", validate: ({ path, value }) => {
-    const issues: ValidationIssue[] = [];
-    validateBriefText(value, path, issues);
-    return issues;
-  } },
-  "mr-description/v1": { id: "mr-description/v1", validate: ({ path, value }) => {
-    const issues: ValidationIssue[] = [];
-    validateBriefText(value, path, issues);
-    return issues;
-  } },
-  "qa-plan/v1": qaPlanSchema(),
-  "review-findings/v1": reviewFindingsSchema(),
-  "review-fix-report/v1": reviewFixReportSchema(),
-  "review-reply/v1": reviewReplySchema(),
-  "task-summary/v1": { id: "task-summary/v1", validate: ({ path, value }) => {
-    const issues: ValidationIssue[] = [];
-    validateBriefText(value, path, issues);
-    return issues;
-  } },
-  "user-input/v1": userInputSchema(),
-};
+const schemas = loadSchemaRegistry();
 
 export function validateStructuredArtifact(path: string, schemaId: StructuredArtifactSchemaId): void {
   if (!existsSync(path)) {
     throw new TaskRunnerError(`Structured artifact file not found: ${path}`);
   }
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     throw new TaskRunnerError(`Structured artifact ${path} is not valid JSON: ${(error as Error).message}`);
   }
-  const issues = schemas[schemaId].validate({ path, value: parsed });
+
+  const schema = schemas[schemaId];
+  if (!schema) {
+    throw new TaskRunnerError(`Structured artifact schema is not registered: ${schemaId}`);
+  }
+
+  const issues = validateNode(parsed, schema, path);
   if (issues.length > 0) {
     throw new TaskRunnerError(`Structured artifact ${path} failed schema ${schemaId} validation:\n${issues.join("\n")}`);
   }

@@ -42,7 +42,7 @@
               }
             },
             "allowedIssueTypes": {
-              "const": ["Bug"]
+              "const": ["Bug", "Ошибка"]
             }
           }
         },

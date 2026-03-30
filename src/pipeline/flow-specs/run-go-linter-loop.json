@@ -14,10 +14,31 @@
                 { "ref": "params.runGoLinterScript" }
               ]
             },
+            "outputFile": {
+              "artifact": {
+                "kind": "run-go-linter-result-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            },
             "labelText": {
-              "const": "Running run_go_linter.sh locally (attempt 1)"
+              "const": "Running run_go_linter.py locally (attempt 1)"
             }
           },
+          "expect": [
+            {
+              "kind": "require-file",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "path": {
+                "artifact": {
+                  "kind": "run-go-linter-result-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
+                }
+              },
+              "message": "run-go-linter-loop did not produce the structured linter result artifact."
+            }
+          ],
           "stopFlowIf": {
             "equals": [
               { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.ok" },
@@ -36,14 +57,31 @@
           "node": "codex-local-prompt",
           "prompt": {
             "templateRef": "run-go-linter-loop-fix",
+            "vars": {
+              "linter_result_json_file": {
+                "artifact": {
+                  "kind": "run-go-linter-result-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
+                }
+              }
+            },
             "extraPrompt": {
               "appendPrompt": {
                 "base": { "ref": "params.extraPrompt" },
                 "suffix": {
-                  "template": "Последний результат run_go_linter.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
+                  "template": "Последний результат run_go_linter.py сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
                   "vars": {
+                    "result_file": {
+                      "artifact": {
+                        "kind": "run-go-linter-result-json-file",
+                        "taskKey": { "ref": "params.taskKey" },
+                        "iteration": { "const": 1 }
+                      }
+                    },
                     "exit_code": { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.exitCode" },
-                    "summary": { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.summary" }
+                    "summary": { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.summary" },
+                    "raw_output": { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.details.raw" }
                   }
                 }
               }
@@ -84,10 +122,31 @@
                     { "ref": "params.runGoLinterScript" }
                   ]
                 },
+                "outputFile": {
+                  "artifact": {
+                    "kind": "run-go-linter-result-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.attempt" }
+                  }
+                },
                 "labelText": {
-                  "template": "Running run_go_linter.sh locally (attempt ${attempt})"
+                  "template": "Running run_go_linter.py locally (attempt ${attempt})"
                 }
               },
+              "expect": [
+                {
+                  "kind": "require-file",
+                  "when": { "not": { "ref": "context.dryRun" } },
+                  "path": {
+                    "artifact": {
+                      "kind": "run-go-linter-result-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.attempt" }
+                    }
+                  },
+                  "message": "run-go-linter-loop did not produce the structured linter result artifact."
+                }
+              ],
               "stopFlowIf": {
                 "equals": [
                   { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.ok" },
@@ -106,14 +165,31 @@
               "node": "codex-local-prompt",
               "prompt": {
                 "templateRef": "run-go-linter-loop-fix",
+                "vars": {
+                  "linter_result_json_file": {
+                    "artifact": {
+                      "kind": "run-go-linter-result-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.attempt" }
+                    }
+                  }
+                },
                 "extraPrompt": {
                   "appendPrompt": {
                     "base": { "ref": "params.extraPrompt" },
                     "suffix": {
-                      "template": "Последний результат run_go_linter.sh: exitCode={exit_code}, summary={summary}. Исправь только то, что мешает успешному прохождению проверки.",
+                      "template": "Последний результат run_go_linter.py сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
                       "vars": {
+                        "result_file": {
+                          "artifact": {
+                            "kind": "run-go-linter-result-json-file",
+                            "taskKey": { "ref": "params.taskKey" },
+                            "iteration": { "ref": "repeat.attempt" }
+                          }
+                        },
                         "exit_code": { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.exitCode" },
-                        "summary": { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.summary" }
+                        "summary": { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.summary" },
+                        "raw_output": { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.details.raw" }
                       }
                     }
                   }
@@ -145,7 +221,7 @@
               "kind": "step-output",
               "value": { "ref": "steps.run_go_linter_try_5.run_go_linter.outputs.parsed.ok" },
               "equals": { "const": true },
-              "message": "run-go-linter-loop exhausted all attempts without a successful run_go_linter.sh execution."
+              "message": "run-go-linter-loop exhausted all attempts without a successful run_go_linter.py execution."
             }
           ]
         }
