@@ -588,7 +588,7 @@ function buildBaseConfig(
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
     dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
-    runGoTestsScript: path.join(homeDir, "run_go_tests.sh"),
+    runGoTestsScript: path.join(homeDir, "run_go_tests.py"),
     runGoLinterScript: path.join(homeDir, "run_go_linter.py"),
     runGoCoverageScript: path.join(homeDir, "run_go_coverage.sh"),
   };
@@ -721,7 +721,7 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   "review-fix":
     "Исправляет замечания после review-reply, обновляет код и прогоняет обязательные проверки после правок.",
   "run-go-tests-loop":
-    "Циклически запускает `./run_go_tests.sh` локально, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
+    "Циклически запускает `./run_go_tests.py` локально, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
   "run-go-linter-loop":
     "Циклически запускает `./run_go_linter.py` локально, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
 };
