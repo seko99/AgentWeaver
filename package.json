@@ -32,8 +32,8 @@
     "docker-compose.yml",
     "Dockerfile.codex",
     "verify_build.sh",
-    "run_go_tests.sh",
-    "run_go_linter.sh",
+    "run_go_tests.py",
+    "run_go_linter.py",
     "run_go_coverage.sh"
   ],
   "publishConfig": {

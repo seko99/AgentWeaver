@@ -260,7 +260,7 @@ services:
         read_only: true
         bind:
           create_host_path: false
-    entrypoint: ["/usr/local/bin/run_go_tests.sh"]
+    entrypoint: ["/usr/local/bin/run_go_tests.py"]
     cap_drop:
       - ALL
     security_opt:
@@ -321,7 +321,7 @@ services:
         read_only: true
         bind:
           create_host_path: false
-    entrypoint: ["/usr/local/bin/run_go_linter.sh"]
+    entrypoint: ["/usr/local/bin/run_go_linter.py"]
     cap_drop:
       - ALL
     security_opt:

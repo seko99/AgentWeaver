@@ -93,8 +93,8 @@ require_cmd go
 
 cd "$ROOT_DIR"
 
-run_stage "run_go_linter" "$ROOT_DIR/run_go_linter.sh"
-run_stage "run_go_tests" "$ROOT_DIR/run_go_tests.sh"
+run_stage "run_go_linter" "$ROOT_DIR/run_go_linter.py"
+run_stage "run_go_tests" "$ROOT_DIR/run_go_tests.py"
 run_stage "run_go_coverage" "$ROOT_DIR/run_go_coverage.sh"
 
 log "==> Building binary (go build ${BUILD_TARGET})"
@@ -102,4 +102,4 @@ if ! go build -o "$BUILD_OUTPUT" "$BUILD_TARGET" >&2; then
   fail 1 "go build failed" "go build -o <output> ./cmd/user-service" "$(details_json --arg failedStage "go-build" --arg buildTarget "$BUILD_TARGET" --arg buildOutput "$BUILD_OUTPUT" '{failedStage: $failedStage, buildTarget: $buildTarget, buildOutput: $buildOutput}')"
 fi
 
-emit_result true "verify-build" "verify_build" 0 "All verification stages passed" "run_go_linter.sh && run_go_tests.sh && run_go_coverage.sh && go build -o <output> ./cmd/user-service" "$(details_json --arg buildTarget "$BUILD_TARGET" --arg buildOutput "$BUILD_OUTPUT" '{completedStages: ["run_go_linter", "run_go_tests", "run_go_coverage", "go-build"], buildTarget: $buildTarget, buildOutput: $buildOutput}')"
+emit_result true "verify-build" "verify_build" 0 "All verification stages passed" "run_go_linter.py && run_go_tests.py && run_go_coverage.sh && go build -o <output> ./cmd/user-service" "$(details_json --arg buildTarget "$BUILD_TARGET" --arg buildOutput "$BUILD_OUTPUT" '{completedStages: ["run_go_linter", "run_go_tests", "run_go_coverage", "go-build"], buildTarget: $buildTarget, buildOutput: $buildOutput}')"

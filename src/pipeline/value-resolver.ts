@@ -31,6 +31,8 @@ import {
   reviewJsonFile,
   reviewReplyFile,
   reviewReplyJsonFile,
+  runGoLinterResultJsonFile,
+  runGoTestsResultJsonFile,
   taskSummaryFile,
   taskSummaryJsonFile,
 } from "../artifacts.js";
@@ -190,6 +192,16 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
         throw new TaskRunnerError("review-reply-json-file requires iteration");
       }
       return reviewReplyJsonFile(taskKey, iteration);
+    case "run-go-linter-result-json-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("run-go-linter-result-json-file requires iteration");
+      }
+      return runGoLinterResultJsonFile(taskKey, iteration);
+    case "run-go-tests-result-json-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("run-go-tests-result-json-file requires iteration");
+      }
+      return runGoTestsResultJsonFile(taskKey, iteration);
     case "review-reply-summary-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("review-reply-summary-file requires iteration");
