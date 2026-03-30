@@ -67,6 +67,9 @@ type ConfirmSession = {
   selectedAction: "resume" | "restart" | "cancel" | "ok";
 };
 
+const CONFIRM_MIN_WIDTH = 44;
+const CONFIRM_MIN_HEIGHT = 8;
+
 export class InteractiveUi {
   private readonly screen: any;
   private readonly header: any;
@@ -1398,7 +1401,18 @@ export class InteractiveUi {
       lines.push("", session.details.trim());
     }
     lines.push("", actionLabels, "", "Left/Right or Tab: choose    Enter: confirm    Esc: cancel");
-    this.confirm.setContent(lines.join("\n"));
+    const content = lines.join("\n");
+    const contentLines = content.split("\n");
+    const lineCount = contentLines.length;
+    const maxLineLength = contentLines.reduce((max, line) => Math.max(max, stripAnsi(line).length), 0);
+    const screenWidth = Math.max(Number(this.screen.width ?? 0), CONFIRM_MIN_WIDTH);
+    const screenHeight = Math.max(Number(this.screen.height ?? 0), CONFIRM_MIN_HEIGHT);
+    const desiredWidth = Math.max(CONFIRM_MIN_WIDTH, maxLineLength + 6);
+    const desiredHeight = Math.max(CONFIRM_MIN_HEIGHT, lineCount + 4);
+
+    this.confirm.width = Math.min(desiredWidth, Math.max(CONFIRM_MIN_WIDTH, screenWidth - 4));
+    this.confirm.height = Math.min(desiredHeight, Math.max(CONFIRM_MIN_HEIGHT, screenHeight - 2));
+    this.confirm.setContent(content);
     this.confirm.show();
     this.confirm.setFront();
     this.confirm.focus();
