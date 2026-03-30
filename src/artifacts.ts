@@ -210,6 +210,10 @@ export function runGoLinterResultJsonFile(taskKey: string, iteration: number): s
   return artifactJsonFile("run-go-linter-result", taskKey, iteration);
 }
 
+export function runGoTestsResultJsonFile(taskKey: string, iteration: number): string {
+  return artifactJsonFile("run-go-tests-result", taskKey, iteration);
+}
+
 export function requireArtifacts(paths: string[], message: string): void {
   const missing = paths.filter((filePath) => !existsSync(filePath));
   if (missing.length > 0) {

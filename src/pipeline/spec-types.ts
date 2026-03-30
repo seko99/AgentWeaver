@@ -43,6 +43,7 @@ export type ArtifactRefSpec = {
     | "review-reply-file"
     | "review-reply-json-file"
     | "run-go-linter-result-json-file"
+    | "run-go-tests-result-json-file"
     | "review-reply-summary-file"
     | "review-summary-file"
     | "task-summary-file"
