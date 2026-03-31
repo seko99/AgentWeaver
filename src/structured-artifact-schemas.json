@@ -237,6 +237,33 @@
         "items": { "type": "string", "nonEmpty": true },
         "minItems": 1
       },
+      "current_state": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "target_state": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "affected_code": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "area": { "type": "string", "nonEmpty": true },
+            "files": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true }
+            },
+            "details": { "type": "string", "nonEmpty": true }
+          },
+          "required": ["area", "files", "details"]
+        }
+      },
+      "business_rules": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
       "decisions": {
         "type": "array",
         "items": {
@@ -250,7 +277,23 @@
         },
         "minItems": 1
       },
+      "migration_strategy": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "database_changes": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "api_changes": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
       "risks": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "acceptance_criteria": {
         "type": "array",
         "items": { "type": "string", "nonEmpty": true }
       },
@@ -269,6 +312,10 @@
         "type": "array",
         "items": { "type": "string", "nonEmpty": true }
       },
+      "workstreams": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
       "implementation_steps": {
         "type": "array",
         "items": {
@@ -276,7 +323,19 @@
           "properties": {
             "id": { "type": "string", "nonEmpty": true },
             "title": { "type": "string", "nonEmpty": true },
-            "details": { "type": "string", "nonEmpty": true }
+            "details": { "type": "string", "nonEmpty": true },
+            "affected_files": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true }
+            },
+            "verification": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true }
+            },
+            "dependencies": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true }
+            }
           },
           "required": ["id", "title", "details"]
         },
@@ -288,6 +347,10 @@
         "minItems": 1
       },
       "rollout_notes": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "follow_up_items": {
         "type": "array",
         "items": { "type": "string", "nonEmpty": true }
       }
