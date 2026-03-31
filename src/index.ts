@@ -207,7 +207,7 @@ function usage(): string {
   agentweaver
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
-  agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>] <jira-browse-url|jira-issue-key>
+  agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -252,7 +252,8 @@ Optional environment variables:
 
 Notes:
   - Task-only flows will ask for Jira task via user-input when it is not passed as an argument.
-  - Scope-flexible flows use the current git branch by default when Jira task is not provided.`;
+  - Scope-flexible flows use the current git branch by default when Jira task is not provided.
+  - gitlab-review asks for GitLab merge request URL via user-input.`;
 }
 
 function packageVersion(): string {
@@ -599,7 +600,6 @@ function commandRequiresTask(command: CommandName): boolean {
     command === "plan" ||
     command === "bug-analyze" ||
     command === "bug-fix" ||
-    command === "gitlab-review" ||
     command === "mr-description" ||
     command === "task-describe" ||
     command === "auto" ||
@@ -610,6 +610,7 @@ function commandRequiresTask(command: CommandName): boolean {
 
 function commandSupportsProjectScope(command: CommandName): boolean {
   return (
+    command === "gitlab-review" ||
     command === "implement" ||
     command === "review" ||
     command === "review-fix" ||
@@ -1085,15 +1086,6 @@ async function executeCommand(
   }
 
   if (config.command === "gitlab-review") {
-    requireTaskScopeConfig(config);
-    requireJiraTaskFile(config.jiraTaskFile);
-    validateStructuredArtifacts(
-      [
-        { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
-        { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
-      ],
-      "GitLab-review mode requires valid structured plan artifacts from the planning phase.",
-    );
     const iteration = nextReviewIterationForTask(config.taskKey);
     await runDeclarativeFlowBySpecFile(
       "gitlab-review.json",
