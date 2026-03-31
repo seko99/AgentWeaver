@@ -127,6 +127,18 @@ export function jiraTaskFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `${taskKey}.json`);
 }
 
+export function jiraAttachmentsDir(taskKey: string): string {
+  return path.join(taskArtifactsDir(taskKey), "jira-attachments");
+}
+
+export function jiraAttachmentsManifestFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `jira-attachments-${taskKey}.json`);
+}
+
+export function jiraAttachmentsContextFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `jira-attachments-context-${taskKey}.txt`);
+}
+
 export function jiraDescriptionFile(taskKey: string): string {
   return taskWorkspaceFile(taskKey, `jira-${taskKey}-description.md`);
 }

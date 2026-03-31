@@ -195,7 +195,7 @@
           "id": "run_codex_review_reply",
           "node": "codex-local-prompt",
           "prompt": {
-            "templateRef": "review-reply",
+            "templateRef": "review-reply-project",
             "vars": {
               "review_file": {
                 "artifact": {
@@ -209,36 +209,6 @@
                   "kind": "review-json-file",
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "jira_task_file": {
-                "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_file": {
-                "artifact": {
-                  "kind": "design-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_json_file": {
-                "artifact": {
-                  "kind": "design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_file": {
-                "artifact": {
-                  "kind": "plan-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_json_file": {
-                "artifact": {
-                  "kind": "plan-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "review_reply_file": {

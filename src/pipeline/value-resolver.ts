@@ -14,6 +14,8 @@ import {
   gitlabReviewFile,
   gitlabReviewInputJsonFile,
   gitlabReviewJsonFile,
+  jiraAttachmentsContextFile,
+  jiraAttachmentsManifestFile,
   jiraDescriptionFile,
   jiraDescriptionJsonFile,
   jiraTaskFile,
@@ -142,6 +144,10 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return gitlabReviewInputJsonFile(taskKey);
     case "gitlab-review-json-file":
       return gitlabReviewJsonFile(taskKey);
+    case "jira-attachments-context-file":
+      return jiraAttachmentsContextFile(taskKey);
+    case "jira-attachments-manifest-file":
+      return jiraAttachmentsManifestFile(taskKey);
     case "jira-description-file":
       return jiraDescriptionFile(taskKey);
     case "jira-description-json-file":

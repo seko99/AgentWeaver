@@ -15,6 +15,18 @@
                 "kind": "jira-task-file",
                 "taskKey": { "ref": "params.taskKey" }
               }
+            },
+            "attachmentsManifestFile": {
+              "artifact": {
+                "kind": "jira-attachments-manifest-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "attachmentsContextFile": {
+              "artifact": {
+                "kind": "jira-attachments-context-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
             }
           },
           "expect": [
@@ -27,6 +39,26 @@
                 }
               },
               "message": "Jira fetch node did not produce the Jira task file."
+            },
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-attachments-manifest-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira attachments manifest file."
+            },
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-attachments-context-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira attachments context file."
             }
           ]
         },
@@ -172,6 +204,18 @@
               "jira_task_file": {
                 "artifact": {
                   "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "jira_attachments_manifest_file": {
+                "artifact": {
+                  "kind": "jira-attachments-manifest-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "jira_attachments_context_file": {
+                "artifact": {
+                  "kind": "jira-attachments-context-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
