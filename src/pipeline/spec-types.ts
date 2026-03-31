@@ -26,6 +26,8 @@ export type ArtifactRefSpec = {
     | "gitlab-review-file"
     | "gitlab-review-input-json-file"
     | "gitlab-review-json-file"
+    | "jira-attachments-context-file"
+    | "jira-attachments-manifest-file"
     | "jira-description-file"
     | "jira-description-json-file"
     | "jira-task-file"

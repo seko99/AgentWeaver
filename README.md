@@ -122,7 +122,7 @@ agentweaver plan DEMO-3288
 agentweaver plan
 agentweaver bug-analyze DEMO-3288
 agentweaver bug-fix DEMO-3288
-agentweaver gitlab-review DEMO-3288
+agentweaver gitlab-review
 agentweaver mr-description DEMO-3288
 agentweaver task-describe DEMO-3288
 agentweaver implement DEMO-3288
@@ -142,7 +142,7 @@ node dist/index.js plan DEMO-3288
 node dist/index.js plan
 node dist/index.js bug-analyze DEMO-3288
 node dist/index.js bug-fix DEMO-3288
-node dist/index.js gitlab-review DEMO-3288
+node dist/index.js gitlab-review
 node dist/index.js mr-description DEMO-3288
 node dist/index.js task-describe DEMO-3288
 node dist/index.js review
@@ -175,7 +175,8 @@ Notes:
 
 - `--verbose` streams child process `stdout/stderr` in direct CLI mode
 - task-only commands such as `plan` and `auto` ask for Jira task via interactive `user-input` when it is omitted
-- scope-flexible commands such as `review`, `review-fix`, `run-go-tests-loop`, and `run-go-linter-loop` use the current git branch by default when Jira task is omitted
+- scope-flexible commands such as `gitlab-review`, `review`, `review-fix`, `run-go-tests-loop`, and `run-go-linter-loop` use the current git branch by default when Jira task is omitted
+- `gitlab-review` asks for GitLab merge request URL via interactive `user-input`
 - `--scope <name>` lets you override the default project scope name
 - the interactive `Activity` pane is intentionally structured: it shows launch separators, prompts, summaries, and short status messages instead of raw Codex/Claude logs by default
 

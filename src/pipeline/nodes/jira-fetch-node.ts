@@ -3,12 +3,14 @@ import type {
   JiraFetchExecutorInput,
   JiraFetchExecutorResult,
 } from "../../executors/jira-fetch-executor.js";
-import type { PipelineNodeDefinition } from "../types.js";
+import type { NodeCheckSpec, NodeOutputSpec, PipelineNodeDefinition } from "../types.js";
 import { toExecutorContext } from "../types.js";
 
 export type JiraFetchNodeParams = {
   jiraApiUrl: string;
   outputFile: string;
+  attachmentsManifestFile?: string;
+  attachmentsContextFile?: string;
 };
 
 export const jiraFetchNode: PipelineNodeDefinition<JiraFetchNodeParams, JiraFetchExecutorResult> = {
@@ -21,21 +23,45 @@ export const jiraFetchNode: PipelineNodeDefinition<JiraFetchNodeParams, JiraFetc
       {
         jiraApiUrl: params.jiraApiUrl,
         outputFile: params.outputFile,
+        ...(params.attachmentsManifestFile ? { attachmentsManifestFile: params.attachmentsManifestFile } : {}),
+        ...(params.attachmentsContextFile ? { attachmentsContextFile: params.attachmentsContextFile } : {}),
       },
       executor.defaultConfig,
     );
+    const outputs: NodeOutputSpec[] = [{ kind: "file", path: params.outputFile, required: true }];
+    if (params.attachmentsManifestFile) {
+      outputs.push({ kind: "artifact", path: params.attachmentsManifestFile, required: true });
+    }
+    if (params.attachmentsContextFile) {
+      outputs.push({ kind: "artifact", path: params.attachmentsContextFile, required: true });
+    }
     return {
       value,
-      outputs: [{ kind: "file", path: params.outputFile, required: true }],
+      outputs,
     };
   },
   checks(_context, params) {
-    return [
+    const checks: NodeCheckSpec[] = [
       {
         kind: "require-file",
         path: params.outputFile,
         message: `Jira fetch node did not produce ${params.outputFile}.`,
       },
     ];
+    if (params.attachmentsManifestFile) {
+      checks.push({
+        kind: "require-file",
+        path: params.attachmentsManifestFile,
+        message: `Jira fetch node did not produce ${params.attachmentsManifestFile}.`,
+      });
+    }
+    if (params.attachmentsContextFile) {
+      checks.push({
+        kind: "require-file",
+        path: params.attachmentsContextFile,
+        message: `Jira fetch node did not produce ${params.attachmentsContextFile}.`,
+      });
+    }
+    return checks;
   },
 };
