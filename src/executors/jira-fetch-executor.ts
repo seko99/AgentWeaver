@@ -10,10 +10,16 @@ export type JiraFetchExecutorConfig = JsonObject & {
 export type JiraFetchExecutorInput = {
   jiraApiUrl: string;
   outputFile: string;
+  attachmentsManifestFile?: string;
+  attachmentsContextFile?: string;
 };
 
 export type JiraFetchExecutorResult = {
   outputFile: string;
+  attachmentsManifestFile?: string;
+  attachmentsContextFile?: string;
+  downloadedAttachments: number;
+  planningContextAttachments: number;
 };
 
 export const jiraFetchExecutor: ExecutorDefinition<
@@ -25,7 +31,18 @@ export const jiraFetchExecutor: ExecutorDefinition<
   version: 1,
   defaultConfig: jiraFetchExecutorDefaultConfig,
   async execute(_context: ExecutorContext, input: JiraFetchExecutorInput) {
-    await fetchJiraIssue(input.jiraApiUrl, input.outputFile);
-    return { outputFile: input.outputFile };
+    const artifacts = await fetchJiraIssue(
+      input.jiraApiUrl,
+      input.outputFile,
+      input.attachmentsManifestFile,
+      input.attachmentsContextFile,
+    );
+    return {
+      outputFile: artifacts.issueFile,
+      downloadedAttachments: artifacts.downloadedAttachments,
+      planningContextAttachments: artifacts.planningContextAttachments,
+      ...(artifacts.attachmentsManifestFile ? { attachmentsManifestFile: artifacts.attachmentsManifestFile } : {}),
+      ...(artifacts.attachmentsContextFile ? { attachmentsContextFile: artifacts.attachmentsContextFile } : {}),
+    };
   },
 };
