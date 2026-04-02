@@ -71,6 +71,13 @@ function buildPromptSuffix(params: UserInputNodeParams, values: UserInputFormVal
     return buildReviewFixPromptSuffix(params, values);
   }
 
+  if (params.fields.length === 0) {
+    return {
+      promptSuffix: "",
+      summaryText: "",
+    };
+  }
+
   const lines = params.fields.map((field) => {
     const raw = values[field.id];
     if (typeof raw === "boolean") {
@@ -114,7 +121,9 @@ export const userInputNode: PipelineNodeDefinition<UserInputNodeParams, UserInpu
       values: result.values,
     };
     writeFileSync(params.outputFile, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
-    printSummary(params.title, rendered.summaryText);
+    if (rendered.summaryText.trim().length > 0) {
+      printSummary(params.title, rendered.summaryText);
+    }
     return {
       value: {
         formId: result.formId,

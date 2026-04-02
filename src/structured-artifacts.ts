@@ -13,6 +13,7 @@ export const STRUCTURED_ARTIFACT_SCHEMA_IDS = [
   "implementation-plan/v1",
   "jira-description/v1",
   "mr-description/v1",
+  "planning-questions/v1",
   "qa-plan/v1",
   "review-findings/v1",
   "review-fix-report/v1",

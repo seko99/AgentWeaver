@@ -33,6 +33,8 @@ export type ArtifactRefSpec = {
     | "jira-task-file"
     | "mr-description-file"
     | "mr-description-json-file"
+    | "planning-answers-json-file"
+    | "planning-questions-json-file"
     | "plan-file"
     | "plan-json-file"
     | "qa-file"

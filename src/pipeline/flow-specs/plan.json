@@ -196,6 +196,139 @@
           ]
         },
         {
+          "id": "generate_planning_questions",
+          "node": "codex-local-prompt",
+          "prompt": {
+            "templateRef": "plan-questions",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "jira_attachments_manifest_file": {
+                "artifact": {
+                  "kind": "jira-attachments-manifest-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "jira_attachments_context_file": {
+                "artifact": {
+                  "kind": "jira-attachments-context-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "planning_questions_json_file": {
+                "artifact": {
+                  "kind": "planning-questions-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Generating planning questions" },
+            "model": { "const": "gpt-5.4" },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "planning-questions-json-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "planning-questions-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  }
+                ]
+              },
+              "message": "Planning questions step did not produce the questions artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "planning-questions-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "planning-questions/v1"
+                }
+              ],
+              "message": "Planning questions step produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "build_planning_questions_form",
+          "node": "planning-questions-form",
+          "params": {
+            "planningQuestionsJsonFile": {
+              "artifact": {
+                "kind": "planning-questions-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "formId": { "const": "planning-questions" },
+            "title": { "const": "Planning Questions" },
+            "description": {
+              "const": "Ответьте на вопросы модели, если они нужны для точного design/plan. Если вопросов нет, шаг завершится автоматически."
+            }
+          }
+        },
+        {
+          "id": "collect_planning_answers",
+          "node": "user-input",
+          "params": {
+            "formId": { "ref": "steps.plan.build_planning_questions_form.value.formId" },
+            "title": { "ref": "steps.plan.build_planning_questions_form.value.title" },
+            "description": { "ref": "steps.plan.build_planning_questions_form.value.description" },
+            "submitLabel": { "const": "Continue planning" },
+            "fields": { "ref": "steps.plan.build_planning_questions_form.value.fields" },
+            "outputFile": {
+              "artifact": {
+                "kind": "planning-answers-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "planning-answers-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "user-input/v1"
+                }
+              ],
+              "message": "Planning answers input is missing or invalid."
+            }
+          ]
+        },
+        {
           "id": "run_codex_plan",
           "node": "codex-local-prompt",
           "prompt": {
@@ -256,7 +389,12 @@
                 }
               }
             },
-            "extraPrompt": { "ref": "params.extraPrompt" },
+            "extraPrompt": {
+              "appendPrompt": {
+                "base": { "ref": "params.extraPrompt" },
+                "suffix": { "ref": "steps.plan.collect_planning_answers.value.promptSuffix" }
+              }
+            },
             "format": "task-prompt"
           },
           "params": {
