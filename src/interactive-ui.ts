@@ -1446,6 +1446,13 @@ export class InteractiveUi {
     if (this.activeFormSession) {
       return Promise.reject(new TaskRunnerError("Another user input form is already active."));
     }
+    if (form.fields.length === 0) {
+      return Promise.resolve({
+        formId: form.formId,
+        submittedAt: new Date().toISOString(),
+        values: {},
+      });
+    }
     return new Promise<UserInputResult>((resolve, reject) => {
       this.activeFormSession = {
         form,

@@ -16,6 +16,17 @@ export const PLAN_PROMPT_TEMPLATE =
   "Markdown для design и plan оформи развёрнуто, с отдельными секциями Summary, Current State, Target State, Affected Code, Decisions, Migration/DB Changes, Risks, Implementation Steps, Tests, Rollout. " +
   "JSON-файлы должны быть валидными и содержать только JSON без markdown-обёртки. ";
 
+export const PLAN_QUESTIONS_PROMPT_TEMPLATE =
+  "Посмотри и проанализируй задачу в {jira_task_file}. " +
+  "Обязательно проанализируй дополнительные материалы из Jira attachments manifest {jira_attachments_manifest_file} и текстовый контекст {jira_attachments_context_file}; если attachment содержит более детальную постановку, ограничения, список файлов, migration strategy или инварианты, считай attachment source of truth для planning наравне с Jira issue. " +
+  "Перед финальным planning определи, нужны ли уточнения от пользователя. " +
+  "Если уточнения не нужны, запиши в {planning_questions_json_file} JSON-объект { summary: string, questions: [] }. " +
+  "Если уточнения нужны, запиши в {planning_questions_json_file} JSON-объект { summary: string, questions: [{ id: string, question: string, details: string, required: boolean, multiline: boolean, placeholder: string }] }. " +
+  "Задавай только вопросы, без ответа на которые design/plan могут оказаться неверными или слишком предположительными. " +
+  "Не задавай очевидные, декоративные или дублирующие вопросы. " +
+  "Обычно достаточно 1-5 вопросов. " +
+  "JSON-файл должен быть валидным и содержать только JSON без markdown-обёртки. ";
+
 export const BUG_ANALYZE_PROMPT_TEMPLATE =
   "Посмотри и проанализируй баг в {jira_task_file}. " +
   "Сначала создай структурированные JSON-артефакты, они являются source of truth для следующих flow. " +

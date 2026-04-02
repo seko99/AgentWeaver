@@ -21,6 +21,8 @@ import {
   jiraTaskFile,
   mrDescriptionFile,
   mrDescriptionJsonFile,
+  planningAnswersJsonFile,
+  planningQuestionsJsonFile,
   planArtifacts,
   planFile,
   planJsonFile,
@@ -158,6 +160,10 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return mrDescriptionFile(taskKey);
     case "mr-description-json-file":
       return mrDescriptionJsonFile(taskKey);
+    case "planning-answers-json-file":
+      return planningAnswersJsonFile(taskKey);
+    case "planning-questions-json-file":
+      return planningQuestionsJsonFile(taskKey);
     case "plan-file":
       return planFile(taskKey);
     case "plan-json-file":

@@ -371,6 +371,28 @@
     },
     "required": ["summary"]
   },
+  "planning-questions/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "questions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "nonEmpty": true },
+            "question": { "type": "string", "nonEmpty": true },
+            "details": { "type": "string" },
+            "required": { "type": "boolean" },
+            "multiline": { "type": "boolean" },
+            "placeholder": { "type": "string" }
+          },
+          "required": ["id", "question", "details", "required", "multiline", "placeholder"]
+        }
+      }
+    },
+    "required": ["summary", "questions"]
+  },
   "qa-plan/v1": {
     "type": "object",
     "properties": {

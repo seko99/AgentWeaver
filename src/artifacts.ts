@@ -79,6 +79,14 @@ export function planJsonFile(taskKey: string): string {
   return artifactJsonFile("plan", taskKey, 1);
 }
 
+export function planningQuestionsJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `planning-questions-${taskKey}.json`);
+}
+
+export function planningAnswersJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `planning-answers-${taskKey}.json`);
+}
+
 export function bugAnalyzeFile(taskKey: string): string {
   return taskWorkspaceFile(taskKey, `bug-analyze-${taskKey}.md`);
 }
