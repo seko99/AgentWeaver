@@ -2,6 +2,7 @@ import { commandCheckExecutor } from "../executors/command-check-executor.js";
 import { claudeExecutor } from "../executors/claude-executor.js";
 import { codexDockerExecutor } from "../executors/codex-docker-executor.js";
 import { codexLocalExecutor } from "../executors/codex-local-executor.js";
+import { fetchGitLabDiffExecutor } from "../executors/fetch-gitlab-diff-executor.js";
 import { fetchGitLabReviewExecutor } from "../executors/fetch-gitlab-review-executor.js";
 import { jiraFetchExecutor } from "../executors/jira-fetch-executor.js";
 import { processExecutor } from "../executors/process-executor.js";
@@ -11,6 +12,7 @@ import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
 export type ExecutorId =
   | "process"
   | "command-check"
+  | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
   | "jira-fetch"
   | "codex-local"
@@ -29,6 +31,7 @@ type AnyExecutorDefinition = ExecutorDefinition<JsonValue, unknown, unknown>;
 const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   process: processExecutor as unknown as AnyExecutorDefinition,
   "command-check": commandCheckExecutor as unknown as AnyExecutorDefinition,
+  "fetch-gitlab-diff": fetchGitLabDiffExecutor as unknown as AnyExecutorDefinition,
   "fetch-gitlab-review": fetchGitLabReviewExecutor as unknown as AnyExecutorDefinition,
   "jira-fetch": jiraFetchExecutor as unknown as AnyExecutorDefinition,
   "codex-local": codexLocalExecutor as unknown as AnyExecutorDefinition,
