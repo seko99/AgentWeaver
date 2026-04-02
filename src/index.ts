@@ -15,6 +15,8 @@ import {
   bugFixDesignJsonFile,
   bugFixPlanJsonFile,
   designJsonFile,
+  gitlabDiffFile,
+  gitlabDiffJsonFile,
   ensureScopeWorkspaceDir,
   gitlabReviewFile,
   gitlabReviewJsonFile,
@@ -23,6 +25,7 @@ import {
   qaJsonFile,
   readyToMergeFile,
   requireArtifacts,
+  reviewFile,
   reviewReplyJsonFile,
   reviewFixSelectionJsonFile,
   reviewJsonFile,
@@ -76,6 +79,7 @@ import {
 const COMMANDS = [
   "bug-analyze",
   "bug-fix",
+  "gitlab-diff-review",
   "gitlab-review",
   "mr-description",
   "plan",
@@ -207,6 +211,7 @@ function usage(): string {
   agentweaver
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
+  agentweaver gitlab-diff-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -253,7 +258,7 @@ Optional environment variables:
 Notes:
   - Task-only flows will ask for Jira task via user-input when it is not passed as an argument.
   - Scope-flexible flows use the current git branch by default when Jira task is not provided.
-  - gitlab-review asks for GitLab merge request URL via user-input.`;
+  - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.`;
 }
 
 function packageVersion(): string {
@@ -610,6 +615,7 @@ function commandRequiresTask(command: CommandName): boolean {
 
 function commandSupportsProjectScope(command: CommandName): boolean {
   return (
+    command === "gitlab-diff-review" ||
     command === "gitlab-review" ||
     command === "implement" ||
     command === "review" ||
@@ -680,7 +686,7 @@ function checkPrerequisites(config: Config): void {
   ) {
     resolveCmd("codex", "CODEX_BIN");
   }
-  if (config.command === "review") {
+  if (config.command === "review" || config.command === "gitlab-diff-review") {
     resolveCmd("claude", "CLAUDE_BIN");
   }
 }
@@ -708,6 +714,8 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   auto: "Полный пайплайн задачи: планирование, реализация, проверки, ревью, ответы на ревью и повторные итерации до готовности к merge.",
   "bug-analyze":
     "Анализирует баг по Jira и создаёт структурированные артефакты: гипотезу причины, дизайн исправления и план работ.",
+  "gitlab-diff-review":
+    "Запрашивает GitLab MR URL через user-input, загружает diff merge request по API и запускает код-ревью через Claude Opus с сохранением markdown и structured JSON artifacts.",
   "gitlab-review":
     "Запрашивает GitLab MR URL через user-input, загружает комментарии код-ревью по API и сохраняет markdown плюс structured JSON artifact.",
   "bug-fix":
@@ -772,6 +780,7 @@ function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
     autoFlowDefinition(),
     declarativeFlowDefinition("bug-analyze", "bug-analyze", "bug-analyze.json"),
     declarativeFlowDefinition("bug-fix", "bug-fix", "bug-fix.json"),
+    declarativeFlowDefinition("gitlab-diff-review", "gitlab-diff-review", "gitlab-diff-review.json"),
     declarativeFlowDefinition("gitlab-review", "gitlab-review", "gitlab-review.json"),
     declarativeFlowDefinition("mr-description", "mr-description", "mr-description.json"),
     declarativeFlowDefinition("plan", "plan", "plan.json"),
@@ -1101,6 +1110,29 @@ async function executeCommand(
     );
     if (!config.dryRun) {
       printSummary("GitLab Review", `Artifacts:\n${gitlabReviewFile(config.taskKey)}\n${gitlabReviewJsonFile(config.taskKey)}`);
+    }
+    return false;
+  }
+
+  if (config.command === "gitlab-diff-review") {
+    const iteration = nextReviewIterationForTask(config.taskKey);
+    await runDeclarativeFlowBySpecFile(
+      "gitlab-diff-review.json",
+      config,
+      {
+        taskKey: config.taskKey,
+        iteration,
+        extraPrompt: config.extraPrompt,
+      },
+      requestUserInput,
+      undefined,
+      launchMode,
+    );
+    if (!config.dryRun) {
+      printSummary(
+        "GitLab Diff Review",
+        `Artifacts:\n${gitlabDiffFile(config.taskKey)}\n${gitlabDiffJsonFile(config.taskKey)}\n${reviewFile(config.taskKey, iteration)}\n${reviewJsonFile(config.taskKey, iteration)}`,
+      );
     }
     return false;
   }

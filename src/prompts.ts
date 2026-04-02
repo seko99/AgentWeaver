@@ -71,6 +71,14 @@ export const REVIEW_PROJECT_PROMPT_TEMPLATE =
   "Затем запиши производную markdown-версию в {review_file}. " +
   "Если ready_to_merge=true и нет блокеров, создай файл {ready_to_merge_file}.";
 
+export const GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE =
+  "Проведи код-ревью diff merge request из GitLab. " +
+  "Используй structured diff artifact {gitlab_diff_json_file} как source of truth, а markdown {gitlab_diff_file} только как удобное представление для чтения человеком. " +
+  "Оцени только изменения из diff: корректность, риски регрессий, отсутствие тестов, опасные edge cases, нарушения контрактов и поддерживаемость. " +
+  "Сначала запиши структурированный результат в {review_json_file} в виде объекта { summary: string, ready_to_merge: boolean, findings: [{ severity: string, title: string, description: string }] }. " +
+  "Затем запиши производную markdown-версию в {review_file}. " +
+  "Если ready_to_merge=true и нет блокеров, создай файл {ready_to_merge_file}.";
+
 export const REVIEW_REPLY_PROMPT_TEMPLATE =
   "Твой коллега провёл код-ревью и записал структурированный результат в {review_json_file}. " +
   "Используй только структурированные артефакты как source of truth: задачу в {jira_task_file}, дизайн в {design_json_file}, план в {plan_json_file} и review в {review_json_file}. " +
