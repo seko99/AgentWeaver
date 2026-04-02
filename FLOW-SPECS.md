@@ -121,6 +121,7 @@
 Примеры:
 
 - `jira-fetch`
+- `fetch-gitlab-diff`
 - `codex-local-prompt`
 - `claude-prompt`
 - `verify-build`
