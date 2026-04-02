@@ -156,6 +156,14 @@ function parseBoolean(value: string): boolean | null {
 }
 
 export async function requestUserInputInTerminal(form: UserInputFormDefinition): Promise<UserInputResult> {
+  if (form.fields.length === 0) {
+    return {
+      formId: form.formId,
+      submittedAt: new Date().toISOString(),
+      values: {},
+    };
+  }
+
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new TaskRunnerError(
       `Flow requires interactive user input for form '${form.formId}', but no TTY is available.`,
