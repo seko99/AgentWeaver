@@ -3,6 +3,7 @@ import { claudePromptNode } from "./nodes/claude-prompt-node.js";
 import { codexDockerPromptNode } from "./nodes/codex-docker-prompt-node.js";
 import { codexLocalPromptNode } from "./nodes/codex-local-prompt-node.js";
 import { commandCheckNode } from "./nodes/command-check-node.js";
+import { fetchGitLabDiffNode } from "./nodes/fetch-gitlab-diff-node.js";
 import { fetchGitLabReviewNode } from "./nodes/fetch-gitlab-review-node.js";
 import { fileCheckNode } from "./nodes/file-check-node.js";
 import { flowRunNode } from "./nodes/flow-run-node.js";
@@ -26,6 +27,7 @@ export type NodeKind =
   | "codex-docker-prompt"
   | "codex-local-prompt"
   | "command-check"
+  | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
   | "file-check"
   | "flow-run"
@@ -64,6 +66,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "codex-docker-prompt": codexDockerPromptNode as unknown as AnyNodeDefinition,
   "codex-local-prompt": codexLocalPromptNode as unknown as AnyNodeDefinition,
   "command-check": commandCheckNode as unknown as AnyNodeDefinition,
+  "fetch-gitlab-diff": fetchGitLabDiffNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-review": fetchGitLabReviewNode as unknown as AnyNodeDefinition,
   "file-check": fileCheckNode as unknown as AnyNodeDefinition,
   "flow-run": flowRunNode as unknown as AnyNodeDefinition,
@@ -92,6 +95,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
   },
   "codex-local-prompt": { kind: "codex-local-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },
   "command-check": { kind: "command-check", version: 1, prompt: "forbidden", requiredParams: ["commands"] },
+  "fetch-gitlab-diff": {
+    kind: "fetch-gitlab-diff",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["mergeRequestUrl", "outputFile", "outputJsonFile"],
+  },
   "fetch-gitlab-review": {
     kind: "fetch-gitlab-review",
     version: 1,

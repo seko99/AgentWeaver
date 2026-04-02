@@ -175,6 +175,18 @@ export function gitlabReviewInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `gitlab-review-input-${taskKey}.json`);
 }
 
+export function gitlabDiffFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `gitlab-diff-${taskKey}.md`);
+}
+
+export function gitlabDiffJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `gitlab-diff-${taskKey}.json`);
+}
+
+export function gitlabDiffReviewInputJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `gitlab-diff-review-input-${taskKey}.json`);
+}
+
 export function autoStateFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `.agentweaver-state-${taskKey}.json`);
 }
