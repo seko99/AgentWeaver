@@ -8,6 +8,7 @@ export const STRUCTURED_ARTIFACT_SCHEMA_IDS = [
   "bug-analysis/v1",
   "bug-fix-design/v1",
   "bug-fix-plan/v1",
+  "gitlab-mr-diff/v1",
   "gitlab-review/v1",
   "implementation-design/v1",
   "implementation-plan/v1",

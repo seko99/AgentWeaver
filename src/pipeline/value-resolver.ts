@@ -9,11 +9,14 @@ import {
   bugFixDesignJsonFile,
   bugFixPlanFile,
   bugFixPlanJsonFile,
-  designFile,
-  designJsonFile,
-  gitlabReviewFile,
-  gitlabReviewInputJsonFile,
-  gitlabReviewJsonFile,
+    designFile,
+    designJsonFile,
+    gitlabDiffFile,
+    gitlabDiffJsonFile,
+    gitlabDiffReviewInputJsonFile,
+    gitlabReviewFile,
+    gitlabReviewInputJsonFile,
+    gitlabReviewJsonFile,
   jiraAttachmentsContextFile,
   jiraAttachmentsManifestFile,
   jiraDescriptionFile,
@@ -140,6 +143,12 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return designFile(taskKey);
     case "design-json-file":
       return designJsonFile(taskKey);
+    case "gitlab-diff-file":
+      return gitlabDiffFile(taskKey);
+    case "gitlab-diff-json-file":
+      return gitlabDiffJsonFile(taskKey);
+    case "gitlab-diff-review-input-json-file":
+      return gitlabDiffReviewInputJsonFile(taskKey);
     case "gitlab-review-file":
       return gitlabReviewFile(taskKey);
     case "gitlab-review-input-json-file":
