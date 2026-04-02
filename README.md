@@ -12,10 +12,11 @@ The package is designed to run as an npm CLI and includes an interactive termina
 
 - Fetches a Jira issue by key or browse URL
 - Fetches GitLab merge request review comments into reusable markdown and JSON artifacts
+- Fetches GitLab merge request diffs into reusable markdown and JSON artifacts and can run Claude-based diff review directly from MR
 - Generates workflow artifacts such as design, implementation plan, QA plan, bug analysis, reviews, and summaries
 - Machine-readable JSON artifacts are stored under `.agentweaver/scopes/<scope-key>/.artifacts/` and act as the source of truth between workflow steps; Markdown artifacts remain for human inspection
 - Workflow artifacts are isolated by scope; for Jira-driven flows the scope key defaults to the Jira task key, otherwise it defaults to `<git-branch>--<worktree-hash>`
-- Runs workflow stages like `bug-analyze`, `bug-fix`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
+- Runs workflow stages like `bug-analyze`, `bug-fix`, `gitlab-diff-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
 - Persists compact `auto` pipeline state on disk so runs can resume without storing large agent outputs
 - Uses Docker runtime services for isolated Codex execution and build verification
 
@@ -26,7 +27,7 @@ The CLI now uses an executor + node + declarative flow architecture.
 - `src/index.ts` remains the CLI entrypoint and high-level orchestration layer
 - `src/executors/` contains first-class executors for external actions such as Jira fetch, GitLab review fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
-- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
+- `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-diff-review`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
 - `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
 
 This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
@@ -89,7 +90,7 @@ Required:
 Common optional variables:
 
 - `JIRA_BASE_URL` — required when you pass only an issue key like `DEMO-123`
-- `GITLAB_TOKEN` — personal access token for `gitlab-review`
+- `GITLAB_TOKEN` — personal access token for `gitlab-review` and `gitlab-diff-review`
 - `AGENTWEAVER_HOME` — path to the AgentWeaver installation directory
 - `DOCKER_COMPOSE_BIN` — override compose command, for example `docker compose`
 - `CODEX_BIN` — override `codex` executable path
@@ -122,6 +123,7 @@ agentweaver plan DEMO-3288
 agentweaver plan
 agentweaver bug-analyze DEMO-3288
 agentweaver bug-fix DEMO-3288
+agentweaver gitlab-diff-review
 agentweaver gitlab-review
 agentweaver mr-description DEMO-3288
 agentweaver task-describe DEMO-3288
@@ -142,6 +144,7 @@ node dist/index.js plan DEMO-3288
 node dist/index.js plan
 node dist/index.js bug-analyze DEMO-3288
 node dist/index.js bug-fix DEMO-3288
+node dist/index.js gitlab-diff-review
 node dist/index.js gitlab-review
 node dist/index.js mr-description DEMO-3288
 node dist/index.js task-describe DEMO-3288
@@ -175,8 +178,8 @@ Notes:
 
 - `--verbose` streams child process `stdout/stderr` in direct CLI mode
 - task-only commands such as `plan` and `auto` ask for Jira task via interactive `user-input` when it is omitted
-- scope-flexible commands such as `gitlab-review`, `review`, `review-fix`, `run-go-tests-loop`, and `run-go-linter-loop` use the current git branch by default when Jira task is omitted
-- `gitlab-review` asks for GitLab merge request URL via interactive `user-input`
+- scope-flexible commands such as `gitlab-diff-review`, `gitlab-review`, `review`, `review-fix`, `run-go-tests-loop`, and `run-go-linter-loop` use the current git branch by default when Jira task is omitted
+- `gitlab-review` and `gitlab-diff-review` ask for GitLab merge request URL via interactive `user-input`
 - `--scope <name>` lets you override the default project scope name
 - the interactive `Activity` pane is intentionally structured: it shows launch separators, prompts, summaries, and short status messages instead of raw Codex/Claude logs by default
 
