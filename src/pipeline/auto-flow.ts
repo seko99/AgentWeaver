@@ -1,12 +1,6 @@
-import { loadDeclarativeFlow } from "./declarative-flows.js";
-import type { ExpandedPhaseSpec } from "./spec-types.js";
+import { loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
 
-type LoadedAutoFlow = {
-  kind: string;
-  version: number;
-  constants: Record<string, unknown>;
-  phases: ExpandedPhaseSpec[];
-};
+type LoadedAutoFlow = LoadedDeclarativeFlow;
 
 let cachedAutoFlow: LoadedAutoFlow | null = null;
 
@@ -14,6 +8,6 @@ export function loadAutoFlow(): LoadedAutoFlow {
   if (cachedAutoFlow) {
     return cachedAutoFlow;
   }
-  cachedAutoFlow = loadDeclarativeFlow("auto.json");
+  cachedAutoFlow = loadDeclarativeFlow({ source: "built-in", fileName: "auto.json" });
   return cachedAutoFlow;
 }
