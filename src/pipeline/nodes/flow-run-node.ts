@@ -1,6 +1,6 @@
 import { printInfo } from "../../tui.js";
 import { runExpandedPhase } from "../declarative-flow-runner.js";
-import { loadDeclarativeFlow } from "../declarative-flows.js";
+import { loadNamedDeclarativeFlow } from "../declarative-flows.js";
 import type { FlowExecutionState } from "../spec-types.js";
 import type { PipelineNodeDefinition } from "../types.js";
 
@@ -28,7 +28,7 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
       printInfo(String(labelText));
     }
 
-    const flow = loadDeclarativeFlow(fileName);
+    const flow = loadNamedDeclarativeFlow(fileName, context.cwd);
     const executionState: FlowExecutionState = {
       flowKind: flow.kind,
       flowVersion: flow.version,

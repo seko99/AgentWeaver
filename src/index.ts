@@ -48,8 +48,9 @@ import { validateStructuredArtifacts } from "./structured-artifacts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { createPipelineContext } from "./pipeline/context.js";
 import { loadAutoFlow } from "./pipeline/auto-flow.js";
-import { loadDeclarativeFlow } from "./pipeline/declarative-flows.js";
+import { loadDeclarativeFlow, type DeclarativeFlowRef } from "./pipeline/declarative-flows.js";
 import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
+import { findCatalogEntry, isBuiltInCommandFlowId, loadInteractiveFlowCatalog, toDeclarativeFlowRef, type FlowCatalogEntry } from "./pipeline/flow-catalog.js";
 import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { agentweaverHome, defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
@@ -107,7 +108,7 @@ const runtimeServices: RuntimeServices = {
 };
 
 type BaseConfig = {
-  command: CommandName;
+  command: string;
   jiraRef?: string | null;
   scopeName?: string | null;
   reviewFixPoints?: string | null;
@@ -572,7 +573,7 @@ function latestReviewReplyIteration(taskKey: string): number | null {
 }
 
 function buildBaseConfig(
-  command: CommandName,
+  command: string,
   options: {
     jiraRef?: string | null;
     scopeName?: string | null;
@@ -600,7 +601,7 @@ function buildBaseConfig(
   };
 }
 
-function commandRequiresTask(command: CommandName): boolean {
+function commandRequiresTask(command: string): boolean {
   return (
     command === "plan" ||
     command === "bug-analyze" ||
@@ -613,7 +614,7 @@ function commandRequiresTask(command: CommandName): boolean {
   );
 }
 
-function commandSupportsProjectScope(command: CommandName): boolean {
+function commandSupportsProjectScope(command: string): boolean {
   return (
     command === "gitlab-diff-review" ||
     command === "gitlab-review" ||
@@ -739,12 +740,14 @@ function flowDescription(id: string): string {
   return FLOW_DESCRIPTIONS[id] ?? "Описание для этого flow пока не задано.";
 }
 
-function declarativeFlowDefinition(id: string, label: string, fileName: string): InteractiveFlowDefinition {
-  const flow = loadDeclarativeFlow(fileName);
+function interactiveFlowDefinition(entry: FlowCatalogEntry): InteractiveFlowDefinition {
+  const flow = entry.flow;
   return {
-    id,
-    label,
-    description: flowDescription(id),
+    id: entry.id,
+    label: entry.id,
+    description: flowDescription(entry.id),
+    source: entry.source,
+    ...(entry.source === "project-local" ? { sourcePath: entry.absolutePath } : {}),
     phases: flow.phases.map((phase) => ({
       id: phase.id,
       repeatVars: Object.fromEntries(
@@ -757,40 +760,8 @@ function declarativeFlowDefinition(id: string, label: string, fileName: string):
   };
 }
 
-function autoFlowDefinition(): InteractiveFlowDefinition {
-  const flow = loadAutoFlow();
-  return {
-    id: "auto",
-    label: "auto",
-    description: flowDescription("auto"),
-    phases: flow.phases.map((phase) => ({
-      id: phase.id,
-      repeatVars: Object.fromEntries(
-        Object.entries(phase.repeatVars).map(([key, value]) => [key, value as string | number | boolean | null]),
-      ),
-      steps: phase.steps.map((step) => ({
-        id: step.id,
-      })),
-    })),
-  };
-}
-
-function interactiveFlowDefinitions(): InteractiveFlowDefinition[] {
-  return [
-    autoFlowDefinition(),
-    declarativeFlowDefinition("bug-analyze", "bug-analyze", "bug-analyze.json"),
-    declarativeFlowDefinition("bug-fix", "bug-fix", "bug-fix.json"),
-    declarativeFlowDefinition("gitlab-diff-review", "gitlab-diff-review", "gitlab-diff-review.json"),
-    declarativeFlowDefinition("gitlab-review", "gitlab-review", "gitlab-review.json"),
-    declarativeFlowDefinition("mr-description", "mr-description", "mr-description.json"),
-    declarativeFlowDefinition("plan", "plan", "plan.json"),
-    declarativeFlowDefinition("task-describe", "task-describe", "task-describe.json"),
-    declarativeFlowDefinition("implement", "implement", "implement.json"),
-    declarativeFlowDefinition("review", "review", "review.json"),
-    declarativeFlowDefinition("review-fix", "review-fix", "review-fix.json"),
-    declarativeFlowDefinition("run-go-tests-loop", "run-go-tests-loop", "run-go-tests-loop.json"),
-    declarativeFlowDefinition("run-go-linter-loop", "run-go-linter-loop", "run-go-linter-loop.json"),
-  ];
+function interactiveFlowDefinitions(catalog: FlowCatalogEntry[]): InteractiveFlowDefinition[] {
+  return catalog.map((entry) => interactiveFlowDefinition(entry));
 }
 
 function publishFlowState(flowId: string, executionState: FlowExecutionState): void {
@@ -837,8 +808,9 @@ function findCurrentFlowExecutionStep(state: FlowRunState): string | null {
   return null;
 }
 
-async function runDeclarativeFlowBySpecFile(
-  fileName: string,
+async function runDeclarativeFlowByRef(
+  flowId: string,
+  flowRef: DeclarativeFlowRef,
   config: Config,
   flowParams: Record<string, unknown>,
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
@@ -854,28 +826,27 @@ async function runDeclarativeFlowBySpecFile(
     ...(setSummary ? { setSummary } : {}),
     requestUserInput,
   });
-  const flow = loadDeclarativeFlow(fileName);
+  const flow = loadDeclarativeFlow(flowRef);
   const initialExecutionState: FlowExecutionState = {
     flowKind: flow.kind,
     flowVersion: flow.version,
     terminated: false,
     phases: [],
   };
-  let persistedState =
-    launchMode === "resume" ? loadFlowRunState(config.scope.scopeKey, config.command) : null;
+  let persistedState = launchMode === "resume" ? loadFlowRunState(config.scope.scopeKey, flowId) : null;
   if (persistedState && launchMode === "resume") {
     persistedState = prepareFlowStateForResume(persistedState);
   } else if (launchMode === "restart") {
-    resetFlowRunState(config.scope.scopeKey, config.command);
+    resetFlowRunState(config.scope.scopeKey, flowId);
   }
   const executionState = persistedState?.executionState ?? initialExecutionState;
-  const state = persistedState ?? createFlowRunState(config.scope.scopeKey, config.command, executionState);
+  const state = persistedState ?? createFlowRunState(config.scope.scopeKey, flowId, executionState);
   state.status = "running";
   state.lastError = null;
   state.currentStep = findCurrentFlowExecutionStep(state);
   state.executionState = executionState;
   saveFlowRunState(state);
-  publishFlowState(config.command, executionState);
+  publishFlowState(flowId, executionState);
   try {
     for (const phase of flow.phases) {
       await runExpandedPhase(phase, context, flowParams, flow.constants, {
@@ -886,7 +857,7 @@ async function runDeclarativeFlowBySpecFile(
           state.executionState = nextExecutionState;
           state.currentStep = findCurrentFlowExecutionStep(state);
           saveFlowRunState(state);
-          publishFlowState(config.command, nextExecutionState);
+          publishFlowState(flowId, nextExecutionState);
         },
         onStepStart: async (currentPhase, step) => {
           state.currentStep = `${currentPhase.id}:${step.id}`;
@@ -914,6 +885,43 @@ async function runDeclarativeFlowBySpecFile(
     saveFlowRunState(state);
     throw error;
   }
+}
+
+async function runDeclarativeFlowBySpecFile(
+  fileName: string,
+  config: Config,
+  flowParams: Record<string, unknown>,
+  requestUserInput: UserInputRequester = requestUserInputInTerminal,
+  setSummary?: (markdown: string) => void,
+  launchMode: FlowLaunchMode = "restart",
+): Promise<void> {
+  await runDeclarativeFlowByRef(
+    config.command,
+    { source: "built-in", fileName },
+    config,
+    flowParams,
+    requestUserInput,
+    setSummary,
+    launchMode,
+  );
+}
+
+function defaultDeclarativeFlowParams(config: Config, forceRefreshSummary = false): Record<string, unknown> {
+  return {
+    taskKey: config.taskKey,
+    jiraRef: config.jiraRef,
+    jiraBrowseUrl: config.jiraBrowseUrl,
+    jiraApiUrl: config.jiraApiUrl,
+    jiraTaskFile: config.jiraTaskFile,
+    scopeKey: config.scope.scopeKey,
+    dockerComposeFile: config.dockerComposeFile,
+    runGoTestsScript: config.runGoTestsScript,
+    runGoLinterScript: config.runGoLinterScript,
+    runGoCoverageScript: config.runGoCoverageScript,
+    extraPrompt: config.extraPrompt,
+    reviewFixPoints: config.reviewFixPoints,
+    forceRefresh: forceRefreshSummary,
+  };
 }
 
 async function runAutoPhaseViaSpec(
@@ -1464,6 +1472,7 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
 async function runInteractive(jiraRef?: string | null, forceRefresh = false, scopeName?: string | null): Promise<number> {
   let currentScope = jiraRef?.trim() ? resolveTaskScope(jiraRef, scopeName) : resolveProjectScope(scopeName);
   const gitBranchName = detectGitBranchName();
+  const flowCatalog = loadInteractiveFlowCatalog(process.cwd());
 
   let exiting = false;
   const ui = new InteractiveUi(
@@ -1473,8 +1482,12 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
       summaryText: "",
       cwd: process.cwd(),
       gitBranchName,
-      flows: interactiveFlowDefinitions(),
+      flows: interactiveFlowDefinitions(flowCatalog),
       getRunConfirmation: async (flowId) => {
+        const flowEntry = findCatalogEntry(flowId, flowCatalog);
+        if (!flowEntry) {
+          throw new TaskRunnerError(`Unknown flow: ${flowId}`);
+        }
         if (flowId === "auto") {
           if (currentScope.scopeType !== "task") {
             return { resumeAvailable: false, hasExistingState: false };
@@ -1497,7 +1510,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             details: buildAutoResumeDetails(state),
           };
         }
-        if (commandRequiresTask(flowId as CommandName) && currentScope.scopeType !== "task") {
+        if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId) && commandRequiresTask(flowId) && currentScope.scopeType !== "task") {
           return { resumeAvailable: false, hasExistingState: false };
         }
         const state = loadFlowRunState(currentScope.scopeKey, flowId);
@@ -1512,28 +1525,48 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
       },
       onRun: async (flowId, launchMode) => {
         try {
+          const flowEntry = findCatalogEntry(flowId, flowCatalog);
+          if (!flowEntry) {
+            throw new TaskRunnerError(`Unknown flow: ${flowId}`);
+          }
           const previousScopeType = currentScope.scopeType;
           const previousScopeKey = currentScope.scopeKey;
-          const baseConfig = buildBaseConfig(flowId as CommandName, {
+          const baseConfig = buildBaseConfig(flowId, {
             ...(currentScope.scopeType === "task" ? { jiraRef: currentScope.jiraRef } : {}),
             ...(currentScope.scopeType === "task" && currentScope.scopeKey !== currentScope.jiraIssueKey
               ? { scopeName: currentScope.scopeKey }
               : {}),
             ...(currentScope.scopeType === "project" ? { scopeName: currentScope.scopeKey } : {}),
           });
-          const nextScope = await resolveScopeForCommand(baseConfig, (form) => ui.requestUserInput(form));
-          currentScope = nextScope;
+          if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
+            const nextScope = await resolveScopeForCommand(baseConfig, (form) => ui.requestUserInput(form));
+            currentScope = nextScope;
+          }
           ui.setScope(currentScope.scopeKey, currentScope.scopeType === "task" ? currentScope.jiraIssueKey : null);
           if (currentScope.scopeType === "task" && (previousScopeType !== "task" || previousScopeKey !== currentScope.scopeKey)) {
             syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
           }
-          await executeCommand(
-            baseConfig,
-            true,
+          if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
+            await executeCommand(
+              baseConfig,
+              true,
+              (form) => ui.requestUserInput(form),
+              currentScope,
+              (markdown) => ui.setSummary(markdown),
+              forceRefresh,
+              launchMode,
+            );
+            return;
+          }
+
+          const runtimeConfig = buildRuntimeConfig(baseConfig, currentScope);
+          await runDeclarativeFlowByRef(
+            flowId,
+            toDeclarativeFlowRef(flowEntry),
+            runtimeConfig,
+            defaultDeclarativeFlowParams(runtimeConfig, forceRefresh),
             (form) => ui.requestUserInput(form),
-            currentScope,
             (markdown) => ui.setSummary(markdown),
-            forceRefresh,
             launchMode,
           );
         } catch (error) {

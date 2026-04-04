@@ -24,6 +24,8 @@ export type ExecutorRegistry = {
   get: <TConfig extends JsonValue, TInput, TResult>(
     id: ExecutorId,
   ) => ExecutorDefinition<TConfig, TInput, TResult>;
+  has: (id: string) => id is ExecutorId;
+  ids: () => ExecutorId[];
 };
 
 type AnyExecutorDefinition = ExecutorDefinition<JsonValue, unknown, unknown>;
@@ -44,6 +46,12 @@ export function createExecutorRegistry(): ExecutorRegistry {
   return {
     get<TConfig extends JsonValue, TInput, TResult>(id: ExecutorId) {
       return builtInExecutors[id] as unknown as ExecutorDefinition<TConfig, TInput, TResult>;
+    },
+    has(id: string): id is ExecutorId {
+      return id in builtInExecutors;
+    },
+    ids() {
+      return Object.keys(builtInExecutors) as ExecutorId[];
     },
   };
 }

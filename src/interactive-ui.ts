@@ -18,6 +18,8 @@ type InteractiveFlowDefinition = {
   id: string;
   label: string;
   description: string;
+  source: "built-in" | "project-local";
+  sourcePath?: string;
   phases: Array<{
     id: string;
     repeatVars: Record<string, string | number | boolean | null>;
@@ -657,7 +659,7 @@ export class InteractiveUi {
     this.summaryVisible = this.summaryText.length > 0;
     this.applyRightPaneLayout();
     this.updateHeader();
-    this.flowList.setItems(this.options.flows.map((flow) => flow.label));
+    this.flowList.setItems(this.options.flows.map((flow) => this.renderFlowListLabel(flow)));
     this.flowList.select(this.options.flows.findIndex((flow) => flow.id === this.selectedFlowId));
     this.renderDescription();
     this.renderSummary();
@@ -994,7 +996,20 @@ export class InteractiveUi {
   private renderDescription(): void {
     const flow = this.flowMap.get(this.selectedFlowId);
     const description = flow?.description?.trim() || "Описание для этого flow пока не задано.";
-    this.description.setContent(renderMarkdownToTerminal(stripAnsi(description)));
+    const details = [
+      flow ? `Источник: ${flow.source === "project-local" ? "project-local" : "built-in"}` : "",
+      flow?.source === "project-local" && flow.sourcePath ? `Файл: ${flow.sourcePath}` : "",
+    ]
+      .filter((line) => line.length > 0)
+      .join("\n");
+    this.description.setContent(renderMarkdownToTerminal(stripAnsi(details ? `${description}\n\n${details}` : description)));
+  }
+
+  private renderFlowListLabel(flow: InteractiveFlowDefinition): string {
+    if (flow.source === "project-local") {
+      return `{yellow-fg}${flow.label}{/yellow-fg}`;
+    }
+    return flow.label;
   }
 
   private createAdapter(): OutputAdapter {
