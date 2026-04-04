@@ -2,7 +2,11 @@
 
 ## Зачем нужен этот файл
 
-`src/pipeline/flow-specs/*.json` описывают pipeline декларативно.
+`src/pipeline/flow-specs/*.json` описывают встроенные pipeline декларативно.
+
+Дополнительно flow можно положить в `.agentweaver/.flows/*.json` в текущем проекте.
+
+Обе группы flow проходят одинаковую runtime-валидацию при загрузке.
 
 Идея такая:
 
@@ -18,6 +22,29 @@
 - step описывает `expect`, то есть postconditions после выполнения node
 
 Этот документ объясняет, как читать flow spec и где проходит граница ответственности.
+
+## Где может лежать flow
+
+- built-in flow: `src/pipeline/flow-specs/*.json`
+- project-local flow: `.agentweaver/.flows/*.json`
+
+Для project-local flow действуют ограничения:
+
+- поддерживаются только файлы верхнего уровня в `.agentweaver/.flows`
+- `id` flow берётся из имени файла без `.json`
+- конфликт `id` с built-in flow считается ошибкой загрузки
+
+При загрузке flow валидируются:
+
+- `node`
+- executor-зависимости, объявленные в metadata соответствующего node
+- `prompt.templateRef`
+- `artifact.kind`
+- `artifactList.kind`
+- `StructuredArtifactSchemaId`
+- ссылки `ref` между шагами
+
+Для `flow-run` дополнительно проверяется существование вложенного flow, если `params.fileName` задан константой.
 
 ## Базовые сущности
 

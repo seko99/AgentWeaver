@@ -28,6 +28,7 @@ The CLI now uses an executor + node + declarative flow architecture.
 - `src/executors/` contains first-class executors for external actions such as Jira fetch, GitLab review fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
 - `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-diff-review`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
+- project-local flow may additionally be placed in `.agentweaver/.flows/*.json`; they are discovered at runtime from the current workspace
 - `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
 
 This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
@@ -37,6 +38,7 @@ This keeps command handlers focused on choosing a flow and providing parameters 
 - `src/` — main TypeScript sources
 - `src/index.ts` — CLI entrypoint and workflow orchestration
 - `src/pipeline/flow-specs/` — declarative JSON specs for workflow stages
+- `.agentweaver/.flows/` — optional project-local declarative flow specs loaded from the current repository
 - `src/pipeline/nodes/` — reusable pipeline nodes executed by the declarative runner
 - `src/interactive-ui.ts` — interactive TUI built with `neo-blessed`
 - `src/markdown.ts` — markdown-to-terminal renderer for the TUI
@@ -200,6 +202,14 @@ Current navigation:
 - `PgUp` / `PgDn` / `Home` / `End` — scroll focused panes
 - `h` — help overlay
 - `q` or `Ctrl+C` — exit
+
+Flow discovery and highlighting:
+
+- built-in flow are loaded from the packaged `src/pipeline/flow-specs/`
+- project-local flow are loaded from `.agentweaver/.flows/*.json`
+- project-local flow are shown in a different color in the `Flows` pane
+- when a project-local flow is selected, the description pane also shows its source file path
+- if a local flow conflicts with a built-in flow id or uses unknown node / executor / prompt / schema types, interactive startup fails fast with a validation error
 
 Activity pane behavior:
 

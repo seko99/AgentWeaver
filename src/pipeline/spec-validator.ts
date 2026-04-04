@@ -1,7 +1,15 @@
 import { TaskRunnerError } from "../errors.js";
+import { STRUCTURED_ARTIFACT_SCHEMA_IDS } from "../structured-artifacts.js";
 import type { NodeRegistry } from "./node-registry.js";
 import { isPromptTemplateRef } from "./prompt-registry.js";
+import type { ExecutorRegistry } from "./registry.js";
+import {
+  ARTIFACT_LIST_REF_KINDS as artifactListRefKinds,
+  ARTIFACT_REF_KINDS as artifactRefKinds,
+} from "./spec-types.js";
 import type {
+  ArtifactListRefSpec,
+  ArtifactRefSpec,
   ConditionSpec,
   DeclarativeFlowSpec,
   DeclarativePhaseSpec,
@@ -12,6 +20,31 @@ import type {
   ValueSpec,
 } from "./spec-types.js";
 
+type ValidateFlowSpecOptions = {
+  resolveFlowByName?: (fileName: string) => unknown;
+};
+
+function isArtifactRefKind(value: string): value is (typeof artifactRefKinds)[number] {
+  return (artifactRefKinds as readonly string[]).includes(value);
+}
+
+function isArtifactListRefKind(value: string): value is (typeof artifactListRefKinds)[number] {
+  return (artifactListRefKinds as readonly string[]).includes(value);
+}
+
+function validateArtifactRefSpec(spec: ArtifactRefSpec, path: string): void {
+  assert(isArtifactRefKind(spec.kind), `Unknown artifact kind '${spec.kind}' at ${path}.kind`);
+  validateValueSpec(spec.taskKey, `${path}.taskKey`);
+  if (spec.iteration) {
+    validateValueSpec(spec.iteration, `${path}.iteration`);
+  }
+}
+
+function validateArtifactListRefSpec(spec: ArtifactListRefSpec, path: string): void {
+  assert(isArtifactListRefKind(spec.kind), `Unknown artifact list kind '${spec.kind}' at ${path}.kind`);
+  validateValueSpec(spec.taskKey, `${path}.taskKey`);
+}
+
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new TaskRunnerError(message);
@@ -19,7 +52,15 @@ function assert(condition: boolean, message: string): void {
 }
 
 function validateValueSpec(value: ValueSpec, path: string): void {
-  if ("const" in value || "ref" in value || "artifact" in value || "artifactList" in value) {
+  if ("const" in value || "ref" in value) {
+    return;
+  }
+  if ("artifact" in value) {
+    validateArtifactRefSpec(value.artifact, `${path}.artifact`);
+    return;
+  }
+  if ("artifactList" in value) {
+    validateArtifactListRefSpec(value.artifactList, `${path}.artifactList`);
     return;
   }
   if ("template" in value) {
@@ -79,9 +120,18 @@ function validateCondition(condition: ConditionSpec | undefined, path: string): 
   throw new TaskRunnerError(`Unsupported condition at ${path}`);
 }
 
-function validateStep(step: DeclarativeStepSpec, nodeRegistry: NodeRegistry, path: string): void {
+function validateStep(
+  step: DeclarativeStepSpec,
+  nodeRegistry: NodeRegistry,
+  executorRegistry: ExecutorRegistry,
+  path: string,
+  options: ValidateFlowSpecOptions,
+): void {
   assert(nodeRegistry.has(step.node), `Unknown node kind '${step.node}' at ${path}.node`);
   const nodeMeta = nodeRegistry.getMeta(step.node);
+  for (const executorId of nodeMeta.executors ?? []) {
+    assert(executorRegistry.has(executorId), `Unknown executor '${executorId}' required by node '${step.node}' at ${path}.node`);
+  }
   validateCondition(step.when, `${path}.when`);
   if (step.prompt) {
     assert(nodeMeta.prompt !== "forbidden", `Node '${step.node}' does not accept prompt binding at ${path}.prompt`);
@@ -110,6 +160,24 @@ function validateStep(step: DeclarativeStepSpec, nodeRegistry: NodeRegistry, pat
       validateValueSpec(value, `${path}.params.${key}`);
     }
   }
+  if (nodeMeta.nestedFlowParam) {
+    const nestedValue = step.params?.[nodeMeta.nestedFlowParam];
+    if (nestedValue && "const" in nestedValue && typeof nestedValue.const === "string" && nestedValue.const.trim().length > 0) {
+      const resolveFlowByName = options.resolveFlowByName;
+      if (typeof resolveFlowByName !== "function") {
+        throw new TaskRunnerError(
+          `Flow validator cannot resolve nested flow '${nestedValue.const}' at ${path}.params.${nodeMeta.nestedFlowParam}`,
+        );
+      }
+      try {
+        resolveFlowByName(nestedValue.const);
+      } catch (error) {
+        throw new TaskRunnerError(
+          `Unknown nested flow '${nestedValue.const}' at ${path}.params.${nodeMeta.nestedFlowParam}: ${(error as Error).message}`,
+        );
+      }
+    }
+  }
   if (step.expect) {
     step.expect.forEach((expectation, index) => validateExpectation(expectation, `${path}.expect[${index}]`));
   }
@@ -130,6 +198,10 @@ function validateExpectation(expectation: ExpectationSpec, path: string): void {
   if (expectation.kind === "require-structured-artifacts") {
     expectation.items.forEach((item, index) => {
       validateValueSpec(item.path, `${path}.items[${index}].path`);
+      assert(
+        STRUCTURED_ARTIFACT_SCHEMA_IDS.includes(item.schemaId),
+        `Unknown structured artifact schema '${item.schemaId}' at ${path}.items[${index}].schemaId`,
+      );
     });
     return;
   }
@@ -156,10 +228,16 @@ function validateAfterAction(action: StepAfterActionSpec, path: string): void {
   throw new TaskRunnerError(`Unsupported after action at ${path}`);
 }
 
-function validatePhase(phase: DeclarativePhaseSpec, nodeRegistry: NodeRegistry, path: string): void {
+function validatePhase(
+  phase: DeclarativePhaseSpec,
+  nodeRegistry: NodeRegistry,
+  executorRegistry: ExecutorRegistry,
+  path: string,
+  options: ValidateFlowSpecOptions,
+): void {
   assert(phase.id.trim().length > 0, `Phase id must be non-empty at ${path}.id`);
   validateCondition(phase.when, `${path}.when`);
-  phase.steps.forEach((step, index) => validateStep(step, nodeRegistry, `${path}.steps[${index}]`));
+  phase.steps.forEach((step, index) => validateStep(step, nodeRegistry, executorRegistry, `${path}.steps[${index}]`, options));
 }
 
 function validateRefPath(
@@ -287,17 +365,24 @@ function validateExpandedCondition(
   }
 }
 
-export function validateFlowSpec(spec: DeclarativeFlowSpec, nodeRegistry: NodeRegistry): void {
+export function validateFlowSpec(
+  spec: DeclarativeFlowSpec,
+  nodeRegistry: NodeRegistry,
+  executorRegistry: ExecutorRegistry,
+  options: ValidateFlowSpecOptions = {},
+): void {
   assert(spec.kind.trim().length > 0, "Flow spec kind must be non-empty");
   assert(Number.isInteger(spec.version) && spec.version > 0, "Flow spec version must be a positive integer");
   spec.phases.forEach((item, index) => {
     if ("repeat" in item) {
       assert(item.repeat.var.trim().length > 0, `Repeat var must be non-empty at phases[${index}].repeat.var`);
       assert(item.repeat.to >= item.repeat.from, `Repeat range is invalid at phases[${index}].repeat`);
-      item.phases.forEach((phase, phaseIndex) => validatePhase(phase, nodeRegistry, `phases[${index}].phases[${phaseIndex}]`));
+      item.phases.forEach((phase, phaseIndex) =>
+        validatePhase(phase, nodeRegistry, executorRegistry, `phases[${index}].phases[${phaseIndex}]`, options),
+      );
       return;
     }
-    validatePhase(item, nodeRegistry, `phases[${index}]`);
+    validatePhase(item, nodeRegistry, executorRegistry, `phases[${index}]`, options);
   });
 }
 

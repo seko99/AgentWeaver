@@ -3,6 +3,51 @@ import type { StructuredArtifactSchemaId } from "../structured-artifacts.js";
 import type { NodeKind } from "./node-registry.js";
 import type { PromptTemplateRef } from "./prompt-registry.js";
 
+export const ARTIFACT_REF_KINDS = [
+  "bug-analyze-file",
+  "bug-analyze-json-file",
+  "bug-fix-design-file",
+  "bug-fix-design-json-file",
+  "bug-fix-plan-file",
+  "bug-fix-plan-json-file",
+  "design-file",
+  "design-json-file",
+  "gitlab-diff-file",
+  "gitlab-diff-json-file",
+  "gitlab-diff-review-input-json-file",
+  "gitlab-review-file",
+  "gitlab-review-input-json-file",
+  "gitlab-review-json-file",
+  "jira-attachments-context-file",
+  "jira-attachments-manifest-file",
+  "jira-description-file",
+  "jira-description-json-file",
+  "jira-task-file",
+  "mr-description-file",
+  "mr-description-json-file",
+  "planning-answers-json-file",
+  "planning-questions-json-file",
+  "plan-file",
+  "plan-json-file",
+  "qa-file",
+  "qa-json-file",
+  "ready-to-merge-file",
+  "review-file",
+  "review-json-file",
+  "review-fix-file",
+  "review-fix-json-file",
+  "review-reply-file",
+  "review-reply-json-file",
+  "run-go-linter-result-json-file",
+  "run-go-tests-result-json-file",
+  "review-reply-summary-file",
+  "review-summary-file",
+  "task-summary-file",
+  "task-summary-json-file",
+] as const;
+
+export const ARTIFACT_LIST_REF_KINDS = ["bug-analyze-artifacts", "plan-artifacts"] as const;
+
 export type ValueSpec =
   | { const: JsonValue }
   | { ref: string }
@@ -14,53 +59,13 @@ export type ValueSpec =
   | { list: ValueSpec[] };
 
 export type ArtifactRefSpec = {
-  kind:
-    | "bug-analyze-file"
-    | "bug-analyze-json-file"
-    | "bug-fix-design-file"
-    | "bug-fix-design-json-file"
-    | "bug-fix-plan-file"
-    | "bug-fix-plan-json-file"
-    | "design-file"
-    | "design-json-file"
-    | "gitlab-diff-file"
-    | "gitlab-diff-json-file"
-    | "gitlab-diff-review-input-json-file"
-    | "gitlab-review-file"
-    | "gitlab-review-input-json-file"
-    | "gitlab-review-json-file"
-    | "jira-attachments-context-file"
-    | "jira-attachments-manifest-file"
-    | "jira-description-file"
-    | "jira-description-json-file"
-    | "jira-task-file"
-    | "mr-description-file"
-    | "mr-description-json-file"
-    | "planning-answers-json-file"
-    | "planning-questions-json-file"
-    | "plan-file"
-    | "plan-json-file"
-    | "qa-file"
-    | "qa-json-file"
-    | "ready-to-merge-file"
-    | "review-file"
-    | "review-json-file"
-    | "review-fix-file"
-    | "review-fix-json-file"
-    | "review-reply-file"
-    | "review-reply-json-file"
-    | "run-go-linter-result-json-file"
-    | "run-go-tests-result-json-file"
-    | "review-reply-summary-file"
-    | "review-summary-file"
-    | "task-summary-file"
-    | "task-summary-json-file";
+  kind: (typeof ARTIFACT_REF_KINDS)[number];
   taskKey: ValueSpec;
   iteration?: ValueSpec;
 };
 
 export type ArtifactListRefSpec = {
-  kind: "bug-analyze-artifacts" | "plan-artifacts";
+  kind: (typeof ARTIFACT_LIST_REF_KINDS)[number];
   taskKey: ValueSpec;
 };
 
