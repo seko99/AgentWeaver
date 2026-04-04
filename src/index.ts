@@ -30,6 +30,7 @@ import {
   reviewFixSelectionJsonFile,
   reviewJsonFile,
   scopeWorkspaceDir,
+  scopesRootDir,
   taskSummaryFile,
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
@@ -501,6 +502,97 @@ function buildFlowResumeDetails(state: FlowRunState): string {
   return lines.join("\n");
 }
 
+type FlowResumeLookup =
+  | {
+      kind: "none";
+      hasExistingState: boolean;
+      details?: string;
+    }
+  | {
+      kind: "single";
+      state: FlowRunState;
+      scopeKey: string;
+      details: string;
+    }
+  | {
+      kind: "multiple";
+      scopeKeys: string[];
+      details: string;
+    };
+
+function findResumableFlowStates(flowId: string): Array<{ scopeKey: string; state: FlowRunState }> {
+  const root = scopesRootDir();
+  if (!existsSync(root)) {
+    return [];
+  }
+
+  const matches: Array<{ scopeKey: string; state: FlowRunState }> = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const scopeKey = entry.name;
+    let state: FlowRunState | null = null;
+    try {
+      state = loadFlowRunState(scopeKey, flowId);
+    } catch {
+      continue;
+    }
+    if (state && hasResumableFlowState(state)) {
+      matches.push({ scopeKey, state });
+    }
+  }
+  return matches;
+}
+
+function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): FlowResumeLookup {
+  const directState = loadFlowRunState(currentScope.scopeKey, flowEntry.id);
+  if (directState && hasResumableFlowState(directState)) {
+    return {
+      kind: "single",
+      state: directState,
+      scopeKey: currentScope.scopeKey,
+      details: buildFlowResumeDetails(directState),
+    };
+  }
+
+  if (!(flowRequiresTaskScope(flowEntry) && currentScope.scopeType !== "task")) {
+    return {
+      kind: "none",
+      hasExistingState: Boolean(directState),
+    };
+  }
+
+  const matches = findResumableFlowStates(flowEntry.id);
+  if (matches.length === 0) {
+    return {
+      kind: "none",
+      hasExistingState: false,
+    };
+  }
+  if (matches.length === 1) {
+    const match = matches[0];
+    if (!match) {
+      return {
+        kind: "none",
+        hasExistingState: false,
+      };
+    }
+    return {
+      kind: "single",
+      state: match.state,
+      scopeKey: match.scopeKey,
+      details: `${buildFlowResumeDetails(match.state)}\nScope: ${match.scopeKey}`,
+    };
+  }
+  const scopeKeys = matches.map((match) => match.scopeKey).sort((left, right) => left.localeCompare(right));
+  return {
+    kind: "multiple",
+    scopeKeys,
+    details: `Multiple interrupted runs found for '${flowEntry.id}':\n${scopeKeys.join("\n")}\nOpen UI in the target task scope to resume one of them.`,
+  };
+}
+
 function printAutoPhasesHelp(): void {
   const phaseLines = ["Available auto phases:", "", ...autoPhaseIds()];
   phaseLines.push("", "You can resume auto from a phase with:", "agentweaver auto --from <phase> <jira>", "or in interactive mode:", "/auto --from <phase>");
@@ -924,6 +1016,32 @@ function defaultDeclarativeFlowParams(config: Config, forceRefreshSummary = fals
     reviewFixPoints: config.reviewFixPoints,
     forceRefresh: forceRefreshSummary,
   };
+}
+
+const TASK_SCOPE_PARAM_REFS = new Set(["params.jiraApiUrl", "params.jiraBrowseUrl", "params.jiraTaskFile"]);
+
+function valueReferencesTaskScopeParams(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => valueReferencesTaskScopeParams(item));
+  }
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  if (
+    "ref" in value &&
+    typeof (value as { ref?: unknown }).ref === "string" &&
+    TASK_SCOPE_PARAM_REFS.has((value as { ref: string }).ref)
+  ) {
+    return true;
+  }
+  return Object.values(value).some((item) => valueReferencesTaskScopeParams(item));
+}
+
+function flowRequiresTaskScope(entry: FlowCatalogEntry): boolean {
+  if (entry.source === "built-in" && isBuiltInCommandFlowId(entry.id)) {
+    return commandRequiresTask(entry.id);
+  }
+  return valueReferencesTaskScopeParams(entry.flow.phases);
 }
 
 async function runAutoPhaseViaSpec(
@@ -1512,17 +1630,25 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             details: buildAutoResumeDetails(state),
           };
         }
-        if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId) && commandRequiresTask(flowId) && currentScope.scopeType !== "task") {
-          return { resumeAvailable: false, hasExistingState: false };
+        const resumeLookup = lookupInteractiveFlowResume(flowEntry, currentScope);
+        if (resumeLookup.kind === "single") {
+          return {
+            resumeAvailable: true,
+            hasExistingState: true,
+            details: resumeLookup.details,
+          };
         }
-        const state = loadFlowRunState(currentScope.scopeKey, flowId);
-        if (!state || !hasResumableFlowState(state)) {
-          return { resumeAvailable: false, hasExistingState: Boolean(state) };
+        if (resumeLookup.kind === "multiple") {
+          return {
+            resumeAvailable: false,
+            hasExistingState: true,
+            details: resumeLookup.details,
+          };
         }
         return {
-          resumeAvailable: true,
-          hasExistingState: true,
-          details: buildFlowResumeDetails(state),
+          resumeAvailable: false,
+          hasExistingState: resumeLookup.hasExistingState,
+          ...(resumeLookup.details ? { details: resumeLookup.details } : {}),
         };
       },
       onRun: async (flowId, launchMode) => {
@@ -1540,9 +1666,20 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
               : {}),
             ...(currentScope.scopeType === "project" ? { scopeName: currentScope.scopeKey } : {}),
           });
+          const resumeLookup = lookupInteractiveFlowResume(flowEntry, currentScope);
           if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
             const nextScope = await resolveScopeForCommand(baseConfig, (form) => ui.requestUserInput(form));
             currentScope = nextScope;
+          } else if (
+            launchMode === "resume" &&
+            resumeLookup.kind === "single" &&
+            resumeLookup.scopeKey !== currentScope.scopeKey &&
+            flowRequiresTaskScope(flowEntry)
+          ) {
+            currentScope = resolveTaskScope(resumeLookup.scopeKey);
+          } else if (flowRequiresTaskScope(flowEntry) && currentScope.scopeType !== "task") {
+            const taskScope = await requestTaskScope((form) => ui.requestUserInput(form));
+            currentScope = resolveTaskScope(taskScope.jiraRef, currentScope.scopeKey);
           }
           ui.setScope(currentScope.scopeKey, currentScope.scopeType === "task" ? currentScope.jiraIssueKey : null);
           if (currentScope.scopeType === "task" && (previousScopeType !== "task" || previousScopeKey !== currentScope.scopeKey)) {
