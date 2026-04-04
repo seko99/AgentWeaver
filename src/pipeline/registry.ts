@@ -5,6 +5,7 @@ import { codexLocalExecutor } from "../executors/codex-local-executor.js";
 import { fetchGitLabDiffExecutor } from "../executors/fetch-gitlab-diff-executor.js";
 import { fetchGitLabReviewExecutor } from "../executors/fetch-gitlab-review-executor.js";
 import { jiraFetchExecutor } from "../executors/jira-fetch-executor.js";
+import { opencodeExecutor } from "../executors/opencode-executor.js";
 import { processExecutor } from "../executors/process-executor.js";
 import { verifyBuildExecutor } from "../executors/verify-build-executor.js";
 import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
@@ -17,6 +18,7 @@ export type ExecutorId =
   | "jira-fetch"
   | "codex-local"
   | "codex-docker"
+  | "opencode"
   | "claude"
   | "verify-build";
 
@@ -38,6 +40,7 @@ const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   "jira-fetch": jiraFetchExecutor as unknown as AnyExecutorDefinition,
   "codex-local": codexLocalExecutor as unknown as AnyExecutorDefinition,
   "codex-docker": codexDockerExecutor as unknown as AnyExecutorDefinition,
+  opencode: opencodeExecutor as unknown as AnyExecutorDefinition,
   claude: claudeExecutor as unknown as AnyExecutorDefinition,
   "verify-build": verifyBuildExecutor as unknown as AnyExecutorDefinition,
 };
