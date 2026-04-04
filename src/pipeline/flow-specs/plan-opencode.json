@@ -1,0 +1,603 @@
+{
+  "kind": "plan-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "plan-opencode",
+      "steps": [
+        {
+          "id": "fetch_jira",
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": {
+              "ref": "params.jiraApiUrl"
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "attachmentsManifestFile": {
+              "artifact": {
+                "kind": "jira-attachments-manifest-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "attachmentsContextFile": {
+              "artifact": {
+                "kind": "jira-attachments-context-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
+            },
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-attachments-manifest-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira attachments manifest file."
+            },
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-attachments-context-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira attachments context file."
+            }
+          ]
+        },
+        {
+          "id": "load_existing_task_summary",
+          "when": {
+            "all": [
+              {
+                "not": {
+                  "ref": "params.forceRefresh"
+                }
+              },
+              {
+                "exists": {
+                  "artifact": {
+                    "kind": "task-summary-file",
+                    "taskKey": {
+                      "ref": "params.taskKey"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "summary-file-load",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "task-summary-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "generate_task_summary",
+          "when": {
+            "any": [
+              {
+                "ref": "params.forceRefresh"
+              },
+              {
+                "not": {
+                  "exists": {
+                    "artifact": {
+                      "kind": "task-summary-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "claude-prompt",
+          "prompt": {
+            "templateRef": "task-summary",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "task_summary_file": {
+                "artifact": {
+                  "kind": "task-summary-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "task_summary_json_file": {
+                "artifact": {
+                  "kind": "task-summary-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              }
+            },
+            "format": "plain"
+          },
+          "params": {
+            "labelText": {
+              "const": "Preparing task summary"
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "task-summary-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "task-summary-json-file",
+                    "taskKey": {
+                      "ref": "params.taskKey"
+                    }
+                  }
+                }
+              ]
+            },
+            "model": {
+              "const": "haiku"
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "task-summary-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  }
+                ]
+              },
+              "message": "Claude summary did not produce the task summary artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "task-summary-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  },
+                  "schemaId": "task-summary/v1"
+                }
+              ],
+              "message": "Claude summary produced invalid structured artifacts."
+            }
+          ],
+          "after": [
+            {
+              "kind": "set-summary-from-file",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "path": {
+                "artifact": {
+                  "kind": "task-summary-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "generate_planning_questions",
+          "node": "opencode-prompt",
+          "prompt": {
+            "templateRef": "plan-questions",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "jira_attachments_manifest_file": {
+                "artifact": {
+                  "kind": "jira-attachments-manifest-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "jira_attachments_context_file": {
+                "artifact": {
+                  "kind": "jira-attachments-context-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "planning_questions_json_file": {
+                "artifact": {
+                  "kind": "planning-questions-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              }
+            },
+            "extraPrompt": {
+              "ref": "params.extraPrompt"
+            },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "const": "Generating planning questions"
+            },
+            "model": {
+              "const": "opencode/qwen3.6-plus-free"
+            },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "planning-questions-json-file",
+                    "taskKey": {
+                      "ref": "params.taskKey"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "planning-questions-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  }
+                ]
+              },
+              "message": "Planning questions step did not produce the questions artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "planning-questions-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  },
+                  "schemaId": "planning-questions/v1"
+                }
+              ],
+              "message": "Planning questions step produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "build_planning_questions_form",
+          "node": "planning-questions-form",
+          "params": {
+            "planningQuestionsJsonFile": {
+              "artifact": {
+                "kind": "planning-questions-json-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "formId": {
+              "const": "planning-questions"
+            },
+            "title": {
+              "const": "Planning Questions"
+            },
+            "description": {
+              "const": "Ответьте на вопросы модели, если они нужны для точного design/plan. Если вопросов нет, шаг завершится автоматически."
+            }
+          }
+        },
+        {
+          "id": "collect_planning_answers",
+          "node": "user-input",
+          "params": {
+            "formId": {
+              "ref": "steps.plan-opencode.build_planning_questions_form.value.formId"
+            },
+            "title": {
+              "ref": "steps.plan-opencode.build_planning_questions_form.value.title"
+            },
+            "description": {
+              "ref": "steps.plan-opencode.build_planning_questions_form.value.description"
+            },
+            "submitLabel": {
+              "const": "Continue planning"
+            },
+            "fields": {
+              "ref": "steps.plan-opencode.build_planning_questions_form.value.fields"
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "planning-answers-json-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "planning-answers-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  },
+                  "schemaId": "user-input/v1"
+                }
+              ],
+              "message": "Planning answers input is missing or invalid."
+            }
+          ]
+        },
+        {
+          "id": "run_opencode_plan",
+          "node": "opencode-prompt",
+          "prompt": {
+            "templateRef": "plan",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "jira_attachments_manifest_file": {
+                "artifact": {
+                  "kind": "jira-attachments-manifest-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "jira_attachments_context_file": {
+                "artifact": {
+                  "kind": "jira-attachments-context-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "qa_file": {
+                "artifact": {
+                  "kind": "qa-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "qa_json_file": {
+                "artifact": {
+                  "kind": "qa-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              }
+            },
+            "extraPrompt": {
+              "appendPrompt": {
+                "base": {
+                  "ref": "params.extraPrompt"
+                },
+                "suffix": {
+                  "ref": "steps.plan-opencode.collect_planning_answers.value.promptSuffix"
+                }
+              }
+            },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "const": "Running OpenCode planning mode"
+            },
+            "model": {
+              "const": "opencode/qwen3.6-plus-free"
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "paths": {
+                "artifactList": {
+                  "kind": "plan-artifacts",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "message": "Plan mode did not produce the required artifacts."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "design-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  },
+                  "schemaId": "implementation-design/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "plan-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  },
+                  "schemaId": "implementation-plan/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "qa-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  },
+                  "schemaId": "qa-plan/v1"
+                }
+              ],
+              "message": "Plan mode produced invalid structured artifacts."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
