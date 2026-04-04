@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
 
@@ -8,29 +7,20 @@ import { TaskRunnerError } from "./errors.js";
 import { buildJiraApiUrl, buildJiraBrowseUrl, extractIssueKey } from "./jira.js";
 import type { UserInputFormDefinition, UserInputRequester } from "./user-input.js";
 
-export type ScopeType = "task" | "project";
-
-export type ResolvedTaskScope = {
-  scopeType: "task";
-  scopeKey: string;
-  jiraRef: string;
-  jiraIssueKey: string;
-  jiraBrowseUrl: string;
-  jiraApiUrl: string;
-  jiraTaskFile: string;
-};
-
-export type ResolvedProjectScope = {
+export type ResolvedScope = {
   scopeType: "project";
   scopeKey: string;
   gitBranchName: string | null;
   worktreeHash: string;
   projectRoot: string;
+  jiraRef?: string;
+  jiraIssueKey?: string;
+  jiraBrowseUrl?: string;
+  jiraApiUrl?: string;
+  jiraTaskFile?: string;
 };
 
-export type ResolvedScope = ResolvedTaskScope | ResolvedProjectScope;
-
-type ParsedTaskScope = {
+export type RequestedJiraContext = {
   jiraRef: string;
   jiraIssueKey: string;
   jiraBrowseUrl: string;
@@ -70,10 +60,7 @@ export function sanitizeScopeName(value: string): string {
 
 export function detectGitBranchName(): string | null {
   const branchName = gitOutput(["rev-parse", "--abbrev-ref", "HEAD"]);
-  if (!branchName) {
-    return null;
-  }
-  if (branchName === "HEAD") {
+  if (!branchName || branchName === "HEAD") {
     return null;
   }
   return branchName;
@@ -110,7 +97,7 @@ export function buildProjectScopeKey(explicitScope?: string | null): {
   };
 }
 
-function parseTaskScope(jiraRef: string): ParsedTaskScope {
+export function parseJiraContext(jiraRef: string): RequestedJiraContext {
   return {
     jiraRef,
     jiraIssueKey: extractIssueKey(jiraRef),
@@ -119,30 +106,34 @@ function parseTaskScope(jiraRef: string): ParsedTaskScope {
   };
 }
 
-export function resolveTaskScope(jiraRef: string, explicitScope?: string | null): ResolvedTaskScope {
-  const parsedTaskScope = parseTaskScope(jiraRef);
-  const scopeKey = explicitScope?.trim() ? sanitizeScopeName(explicitScope) : parsedTaskScope.jiraIssueKey;
-  ensureScopeWorkspaceDir(scopeKey);
-  return {
-    scopeType: "task",
-    scopeKey,
-    jiraRef: parsedTaskScope.jiraRef,
-    jiraIssueKey: parsedTaskScope.jiraIssueKey,
-    jiraBrowseUrl: parsedTaskScope.jiraBrowseUrl,
-    jiraApiUrl: parsedTaskScope.jiraApiUrl,
-    jiraTaskFile: jiraTaskFile(scopeKey),
-  };
-}
-
-export function resolveProjectScope(explicitScope?: string | null): ResolvedProjectScope {
+export function resolveProjectScope(explicitScope?: string | null, jiraRef?: string | null): ResolvedScope {
   const { scopeKey, gitBranchName, worktreeHash, projectRoot } = buildProjectScopeKey(explicitScope);
   ensureScopeWorkspaceDir(scopeKey);
-  return {
+  const baseScope: ResolvedScope = {
     scopeType: "project",
     scopeKey,
     gitBranchName,
     worktreeHash,
     projectRoot,
+  };
+  if (!jiraRef?.trim()) {
+    return baseScope;
+  }
+  const jiraContext = parseJiraContext(jiraRef);
+  return {
+    ...baseScope,
+    ...jiraContext,
+    jiraTaskFile: jiraTaskFile(scopeKey),
+  };
+}
+
+export function attachJiraContext(scope: ResolvedScope, jiraRef: string): ResolvedScope {
+  const jiraContext = parseJiraContext(jiraRef);
+  ensureScopeWorkspaceDir(scope.scopeKey);
+  return {
+    ...scope,
+    ...jiraContext,
+    jiraTaskFile: jiraTaskFile(scope.scopeKey),
   };
 }
 
@@ -164,20 +155,11 @@ export function buildJiraTaskInputForm(): UserInputFormDefinition {
   };
 }
 
-export async function requestTaskScope(requestUserInput: UserInputRequester): Promise<ResolvedTaskScope> {
+export async function requestJiraContext(requestUserInput: UserInputRequester): Promise<RequestedJiraContext> {
   const result = await requestUserInput(buildJiraTaskInputForm());
   const jiraRef = String(result.values.jira_ref ?? "").trim();
   if (!jiraRef) {
     throw new TaskRunnerError("Jira issue key or browse URL is required.");
   }
-  const parsedTaskScope = parseTaskScope(jiraRef);
-  return {
-    scopeType: "task",
-    scopeKey: parsedTaskScope.jiraIssueKey,
-    jiraRef: parsedTaskScope.jiraRef,
-    jiraIssueKey: parsedTaskScope.jiraIssueKey,
-    jiraBrowseUrl: parsedTaskScope.jiraBrowseUrl,
-    jiraApiUrl: parsedTaskScope.jiraApiUrl,
-    jiraTaskFile: jiraTaskFile(parsedTaskScope.jiraIssueKey),
-  };
+  return parseJiraContext(jiraRef);
 }
