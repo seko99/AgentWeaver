@@ -30,7 +30,6 @@ import {
   reviewFixSelectionJsonFile,
   reviewJsonFile,
   scopeWorkspaceDir,
-  scopesRootDir,
   taskSummaryFile,
 } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
@@ -70,12 +69,11 @@ import {
 } from "./tui.js";
 import { requestUserInputInTerminal, type UserInputRequester } from "./user-input.js";
 import {
+  attachJiraContext,
   detectGitBranchName,
-  requestTaskScope,
+  requestJiraContext,
   resolveProjectScope,
-  resolveTaskScope,
   type ResolvedScope,
-  type ResolvedTaskScope,
 } from "./scope.js";
 
 const COMMANDS = [
@@ -233,7 +231,7 @@ function usage(): string {
 
 Interactive Mode:
   When started without a command, the script opens an interactive UI.
-  If a Jira task is provided, interactive mode starts in task scope; otherwise it starts in project scope.
+  If a Jira task is provided, interactive mode starts in the current project scope with Jira context attached.
   Use Up/Down to select a flow, Enter to confirm launch, h for help, q to exit.
 
 Flags:
@@ -261,7 +259,7 @@ Optional environment variables:
 
 Notes:
   - Task-only flows will ask for Jira task via user-input when it is not passed as an argument.
-  - Scope-flexible flows use the current git branch by default when Jira task is not provided.
+  - All flow state and artifacts are stored in the current project scope by default.
   - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.`;
 }
 
@@ -502,94 +500,24 @@ function buildFlowResumeDetails(state: FlowRunState): string {
   return lines.join("\n");
 }
 
-type FlowResumeLookup =
-  | {
-      kind: "none";
-      hasExistingState: boolean;
-      details?: string;
-    }
-  | {
-      kind: "single";
-      state: FlowRunState;
-      scopeKey: string;
-      details: string;
-    }
-  | {
-      kind: "multiple";
-      scopeKeys: string[];
-      details: string;
-    };
-
-function findResumableFlowStates(flowId: string): Array<{ scopeKey: string; state: FlowRunState }> {
-  const root = scopesRootDir();
-  if (!existsSync(root)) {
-    return [];
-  }
-
-  const matches: Array<{ scopeKey: string; state: FlowRunState }> = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    const scopeKey = entry.name;
-    let state: FlowRunState | null = null;
-    try {
-      state = loadFlowRunState(scopeKey, flowId);
-    } catch {
-      continue;
-    }
-    if (state && hasResumableFlowState(state)) {
-      matches.push({ scopeKey, state });
-    }
-  }
-  return matches;
-}
+type FlowResumeLookup = {
+  resumeAvailable: boolean;
+  hasExistingState: boolean;
+  details?: string;
+};
 
 function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): FlowResumeLookup {
   const directState = loadFlowRunState(currentScope.scopeKey, flowEntry.id);
   if (directState && hasResumableFlowState(directState)) {
     return {
-      kind: "single",
-      state: directState,
-      scopeKey: currentScope.scopeKey,
+      resumeAvailable: true,
+      hasExistingState: true,
       details: buildFlowResumeDetails(directState),
     };
   }
-
-  if (!(flowRequiresTaskScope(flowEntry) && currentScope.scopeType !== "task")) {
-    return {
-      kind: "none",
-      hasExistingState: Boolean(directState),
-    };
-  }
-
-  const matches = findResumableFlowStates(flowEntry.id);
-  if (matches.length === 0) {
-    return {
-      kind: "none",
-      hasExistingState: false,
-    };
-  }
-  if (matches.length === 1) {
-    const match = matches[0];
-    if (!match) {
-      return {
-        kind: "none",
-        hasExistingState: false,
-      };
-    }
-    return {
-      kind: "single",
-      state: match.state,
-      scopeKey: match.scopeKey,
-      details: `${buildFlowResumeDetails(match.state)}\nScope: ${match.scopeKey}`,
-    };
-  }
-  const scopeKeys = matches.map((match) => match.scopeKey).sort((left, right) => left.localeCompare(right));
   return {
-    kind: "multiple",
-    scopeKeys,
-    details: `Multiple interrupted runs found for '${flowEntry.id}':\n${scopeKeys.join("\n")}\nOpen UI in the target task scope to resume one of them.`,
+    resumeAvailable: false,
+    hasExistingState: Boolean(directState),
   };
 }
 
@@ -725,12 +653,12 @@ async function resolveScopeForCommand(
   requestUserInput: UserInputRequester,
 ): Promise<ResolvedScope> {
   if (config.jiraRef?.trim()) {
-    return resolveTaskScope(config.jiraRef, config.scopeName);
+    return resolveProjectScope(config.scopeName, config.jiraRef);
   }
   if (commandRequiresTask(config.command)) {
     try {
-      const taskScope = await requestTaskScope(requestUserInput);
-      return config.scopeName ? resolveTaskScope(taskScope.jiraRef, config.scopeName) : taskScope;
+      const jiraContext = await requestJiraContext(requestUserInput);
+      return resolveProjectScope(config.scopeName, jiraContext.jiraRef);
     } catch (error) {
       if (error instanceof TaskRunnerError && error.message.includes("no TTY is available")) {
         throw new TaskRunnerError(
@@ -749,22 +677,14 @@ async function resolveScopeForCommand(
 
 function buildRuntimeConfig(baseConfig: BaseConfig, scope: ResolvedScope): Config {
   ensureScopeWorkspaceDir(scope.scopeKey);
-  if (scope.scopeType === "task") {
-    return {
-      ...baseConfig,
-      scope,
-      taskKey: scope.scopeKey,
-      jiraRef: scope.jiraRef,
-      jiraBrowseUrl: scope.jiraBrowseUrl,
-      jiraApiUrl: scope.jiraApiUrl,
-      jiraTaskFile: scope.jiraTaskFile,
-    };
-  }
   return {
     ...baseConfig,
     scope,
     taskKey: scope.scopeKey,
-    jiraRef: scope.scopeKey,
+    jiraRef: scope.jiraRef ?? scope.scopeKey,
+    ...(scope.jiraBrowseUrl ? { jiraBrowseUrl: scope.jiraBrowseUrl } : {}),
+    ...(scope.jiraApiUrl ? { jiraApiUrl: scope.jiraApiUrl } : {}),
+    ...(scope.jiraTaskFile ? { jiraTaskFile: scope.jiraTaskFile } : {}),
   };
 }
 
@@ -876,7 +796,7 @@ function syncInteractiveTaskSummary(
   scope: ResolvedScope,
   forceRefresh = false,
 ): void {
-  if (scope.scopeType !== "task" || forceRefresh) {
+  if (forceRefresh) {
     ui.clearSummary();
     return;
   }
@@ -1141,9 +1061,9 @@ async function summarizeBuildFailure(output: string): Promise<string> {
   );
 }
 
-function requireTaskScopeConfig(config: Config): asserts config is Config & { scope: ResolvedTaskScope; jiraBrowseUrl: string; jiraApiUrl: string; jiraTaskFile: string } {
-  if (config.scope.scopeType !== "task" || !config.jiraBrowseUrl || !config.jiraApiUrl || !config.jiraTaskFile) {
-    throw new TaskRunnerError(`Command '${config.command}' requires Jira task scope.`);
+function requireJiraConfig(config: Config): asserts config is Config & { jiraBrowseUrl: string; jiraApiUrl: string; jiraTaskFile: string } {
+  if (!config.jiraBrowseUrl || !config.jiraApiUrl || !config.jiraTaskFile) {
+    throw new TaskRunnerError(`Command '${config.command}' requires Jira context in the current project scope.`);
   }
 }
 
@@ -1180,7 +1100,7 @@ async function executeCommand(
   }
 
   checkPrerequisites(config);
-  if (config.scope.scopeType === "task") {
+  if (config.jiraBrowseUrl && config.jiraApiUrl && config.jiraTaskFile) {
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl ?? "";
     process.env.JIRA_API_URL = config.jiraApiUrl ?? "";
     process.env.JIRA_TASK_FILE = config.jiraTaskFile ?? "";
@@ -1191,7 +1111,7 @@ async function executeCommand(
   }
 
   if (config.command === "plan") {
-    requireTaskScopeConfig(config);
+    requireJiraConfig(config);
     if (config.verbose) {
       process.stdout.write(`Fetching Jira issue from browse URL: ${config.jiraBrowseUrl}\n`);
       process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
@@ -1207,7 +1127,7 @@ async function executeCommand(
   }
 
   if (config.command === "bug-analyze") {
-    requireTaskScopeConfig(config);
+    requireJiraConfig(config);
     if (config.verbose) {
       process.stdout.write(`Fetching Jira issue from browse URL: ${config.jiraBrowseUrl}\n`);
       process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
@@ -1266,7 +1186,7 @@ async function executeCommand(
   }
 
   if (config.command === "bug-fix") {
-    requireTaskScopeConfig(config);
+    requireJiraConfig(config);
     requireJiraTaskFile(config.jiraTaskFile);
     requireArtifacts(bugAnalyzeArtifacts(config.taskKey), "Bug-fix mode requires bug-analyze artifacts from the bug analysis phase.");
     validateStructuredArtifacts(
@@ -1285,7 +1205,7 @@ async function executeCommand(
   }
 
   if (config.command === "mr-description") {
-    requireTaskScopeConfig(config);
+    requireJiraConfig(config);
     requireJiraTaskFile(config.jiraTaskFile);
     await runDeclarativeFlowBySpecFile("mr-description.json", config, {
       taskKey: config.taskKey,
@@ -1295,7 +1215,7 @@ async function executeCommand(
   }
 
   if (config.command === "task-describe") {
-    requireTaskScopeConfig(config);
+    requireJiraConfig(config);
     await runDeclarativeFlowBySpecFile("task-describe.json", config, {
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
@@ -1323,8 +1243,8 @@ async function executeCommand(
 
   if (config.command === "review") {
     const iteration = nextReviewIterationForTask(config.taskKey);
-    if (config.scope.scopeType === "task") {
-      requireTaskScopeConfig(config);
+    if (config.jiraBrowseUrl && config.jiraApiUrl && config.jiraTaskFile) {
+      requireJiraConfig(config);
       validateStructuredArtifacts(
         [
           { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
@@ -1418,7 +1338,7 @@ async function runAutoPipeline(
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
 ): Promise<void> {
-  requireTaskScopeConfig(config);
+  requireJiraConfig(config);
   if (config.dryRun) {
     await runAutoPipelineDryRun(config, setSummary, forceRefreshSummary);
     return;
@@ -1590,7 +1510,7 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
 }
 
 async function runInteractive(jiraRef?: string | null, forceRefresh = false, scopeName?: string | null): Promise<number> {
-  let currentScope = jiraRef?.trim() ? resolveTaskScope(jiraRef, scopeName) : resolveProjectScope(scopeName);
+  let currentScope = resolveProjectScope(scopeName, jiraRef);
   const gitBranchName = detectGitBranchName();
   const flowCatalog = loadInteractiveFlowCatalog(process.cwd());
 
@@ -1598,7 +1518,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
   const ui = new InteractiveUi(
     {
       scopeKey: currentScope.scopeKey,
-      jiraIssueKey: currentScope.scopeType === "task" ? currentScope.jiraIssueKey : null,
+      jiraIssueKey: currentScope.jiraIssueKey ?? null,
       summaryText: "",
       cwd: process.cwd(),
       gitBranchName,
@@ -1609,12 +1529,12 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           throw new TaskRunnerError(`Unknown flow: ${flowId}`);
         }
         if (flowId === "auto") {
-          if (currentScope.scopeType !== "task") {
+          if (!currentScope.jiraRef) {
             return { resumeAvailable: false, hasExistingState: false };
           }
           const baseConfig = buildBaseConfig("auto", {
             jiraRef: currentScope.jiraRef,
-            scopeName: currentScope.scopeKey !== currentScope.jiraIssueKey ? currentScope.scopeKey : null,
+            scopeName: currentScope.scopeKey,
           });
           const state = loadAutoPipelineState(buildRuntimeConfig(baseConfig, currentScope));
           if (!state) {
@@ -1631,25 +1551,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           };
         }
         const resumeLookup = lookupInteractiveFlowResume(flowEntry, currentScope);
-        if (resumeLookup.kind === "single") {
-          return {
-            resumeAvailable: true,
-            hasExistingState: true,
-            details: resumeLookup.details,
-          };
-        }
-        if (resumeLookup.kind === "multiple") {
-          return {
-            resumeAvailable: false,
-            hasExistingState: true,
-            details: resumeLookup.details,
-          };
-        }
-        return {
-          resumeAvailable: false,
-          hasExistingState: resumeLookup.hasExistingState,
-          ...(resumeLookup.details ? { details: resumeLookup.details } : {}),
-        };
+        return resumeLookup;
       },
       onRun: async (flowId, launchMode) => {
         try {
@@ -1657,32 +1559,20 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           if (!flowEntry) {
             throw new TaskRunnerError(`Unknown flow: ${flowId}`);
           }
-          const previousScopeType = currentScope.scopeType;
           const previousScopeKey = currentScope.scopeKey;
           const baseConfig = buildBaseConfig(flowId, {
-            ...(currentScope.scopeType === "task" ? { jiraRef: currentScope.jiraRef } : {}),
-            ...(currentScope.scopeType === "task" && currentScope.scopeKey !== currentScope.jiraIssueKey
-              ? { scopeName: currentScope.scopeKey }
-              : {}),
-            ...(currentScope.scopeType === "project" ? { scopeName: currentScope.scopeKey } : {}),
+            ...(currentScope.jiraRef ? { jiraRef: currentScope.jiraRef } : {}),
+            scopeName: currentScope.scopeKey,
           });
-          const resumeLookup = lookupInteractiveFlowResume(flowEntry, currentScope);
           if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
             const nextScope = await resolveScopeForCommand(baseConfig, (form) => ui.requestUserInput(form));
             currentScope = nextScope;
-          } else if (
-            launchMode === "resume" &&
-            resumeLookup.kind === "single" &&
-            resumeLookup.scopeKey !== currentScope.scopeKey &&
-            flowRequiresTaskScope(flowEntry)
-          ) {
-            currentScope = resolveTaskScope(resumeLookup.scopeKey);
-          } else if (flowRequiresTaskScope(flowEntry) && currentScope.scopeType !== "task") {
-            const taskScope = await requestTaskScope((form) => ui.requestUserInput(form));
-            currentScope = resolveTaskScope(taskScope.jiraRef, currentScope.scopeKey);
+          } else if (flowRequiresTaskScope(flowEntry) && !currentScope.jiraRef) {
+            const jiraContext = await requestJiraContext((form) => ui.requestUserInput(form));
+            currentScope = attachJiraContext(currentScope, jiraContext.jiraRef);
           }
-          ui.setScope(currentScope.scopeKey, currentScope.scopeType === "task" ? currentScope.jiraIssueKey : null);
-          if (currentScope.scopeType === "task" && (previousScopeType !== "task" || previousScopeKey !== currentScope.scopeKey)) {
+          ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null);
+          if (previousScopeKey !== currentScope.scopeKey || currentScope.jiraIssueKey) {
             syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
           }
           if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
@@ -1732,13 +1622,10 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
   ui.mount();
   printInfo(`Interactive mode for ${currentScope.scopeKey}`);
   printInfo("Use h to see help.");
-  if (currentScope.scopeType !== "task") {
+  if (!currentScope.jiraIssueKey) {
     ui.appendLog("[scope] project scope active; task summary will appear after a Jira-backed flow runs");
   }
-
-  if (currentScope.scopeType === "task") {
-    syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
-  }
+  syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
 
   return await new Promise<number>((resolve, reject) => {
     const interval = setInterval(() => {
