@@ -130,7 +130,7 @@
               }
             ]
           },
-          "node": "claude-prompt",
+          "node": "opencode-prompt",
           "prompt": {
             "templateRef": "task-summary",
             "vars": {
@@ -186,7 +186,7 @@
               ]
             },
             "model": {
-              "const": "haiku"
+              "const": "minimax-coding-plan/MiniMax-M2.7"
             }
           },
           "expect": [
@@ -302,7 +302,7 @@
               "const": "Generating planning questions"
             },
             "model": {
-              "const": "opencode/qwen3.6-plus-free"
+              "const": "minimax-coding-plan/MiniMax-M2.7"
             },
             "requiredArtifacts": {
               "list": [
@@ -530,7 +530,7 @@
               "const": "Running OpenCode planning mode"
             },
             "model": {
-              "const": "opencode/qwen3.6-plus-free"
+              "const": "minimax-coding-plan/MiniMax-M2.7"
             }
           },
           "expect": [
