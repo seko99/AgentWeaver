@@ -19,6 +19,7 @@ import { reviewReplyCodexNode } from "./nodes/review-reply-codex-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
 import { verifyBuildNode } from "./nodes/verify-build-node.js";
+import type { ExecutorId } from "./registry.js";
 import type { PipelineNodeDefinition } from "./types.js";
 
 export type NodeKind =
@@ -58,6 +59,8 @@ export type NodeContractMetadata = {
   version: number;
   prompt: "required" | "allowed" | "forbidden";
   requiredParams?: string[];
+  executors?: ExecutorId[];
+  nestedFlowParam?: string;
 };
 
 const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
@@ -85,37 +88,76 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
 };
 
 const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
-  "build-failure-summary": { kind: "build-failure-summary", version: 1, prompt: "forbidden", requiredParams: ["output"] },
-  "claude-prompt": { kind: "claude-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },
+  "build-failure-summary": {
+    kind: "build-failure-summary",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["output"],
+    executors: ["process"],
+  },
+  "claude-prompt": {
+    kind: "claude-prompt",
+    version: 1,
+    prompt: "required",
+    requiredParams: ["labelText"],
+    executors: ["claude"],
+  },
   "codex-docker-prompt": {
     kind: "codex-docker-prompt",
     version: 1,
     prompt: "required",
     requiredParams: ["dockerComposeFile", "labelText"],
+    executors: ["codex-docker"],
   },
-  "codex-local-prompt": { kind: "codex-local-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },
-  "command-check": { kind: "command-check", version: 1, prompt: "forbidden", requiredParams: ["commands"] },
+  "codex-local-prompt": {
+    kind: "codex-local-prompt",
+    version: 1,
+    prompt: "required",
+    requiredParams: ["labelText"],
+    executors: ["codex-local"],
+  },
+  "command-check": {
+    kind: "command-check",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["commands"],
+    executors: ["command-check"],
+  },
   "fetch-gitlab-diff": {
     kind: "fetch-gitlab-diff",
     version: 1,
     prompt: "forbidden",
     requiredParams: ["mergeRequestUrl", "outputFile", "outputJsonFile"],
+    executors: ["fetch-gitlab-diff"],
   },
   "fetch-gitlab-review": {
     kind: "fetch-gitlab-review",
     version: 1,
     prompt: "forbidden",
     requiredParams: ["mergeRequestUrl", "outputFile", "outputJsonFile"],
+    executors: ["fetch-gitlab-review"],
   },
   "file-check": { kind: "file-check", version: 1, prompt: "forbidden", requiredParams: ["path"] },
-  "flow-run": { kind: "flow-run", version: 1, prompt: "forbidden", requiredParams: ["fileName"] },
+  "flow-run": {
+    kind: "flow-run",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["fileName"],
+    nestedFlowParam: "fileName",
+  },
   "gitlab-review-artifacts": {
     kind: "gitlab-review-artifacts",
     version: 1,
     prompt: "forbidden",
     requiredParams: ["gitlabReviewJsonFile", "reviewFile", "reviewJsonFile"],
   },
-  "jira-fetch": { kind: "jira-fetch", version: 1, prompt: "forbidden", requiredParams: ["jiraApiUrl", "outputFile"] },
+  "jira-fetch": {
+    kind: "jira-fetch",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["jiraApiUrl", "outputFile"],
+    executors: ["jira-fetch"],
+  },
   "jira-issue-check": {
     kind: "jira-issue-check",
     version: 1,
@@ -123,7 +165,13 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     requiredParams: ["jiraTaskFile", "allowedIssueTypes"],
   },
   "local-script-check": { kind: "local-script-check", version: 1, prompt: "forbidden", requiredParams: ["argv", "labelText"] },
-  "plan-codex": { kind: "plan-codex", version: 1, prompt: "forbidden", requiredParams: ["prompt", "requiredArtifacts"] },
+  "plan-codex": {
+    kind: "plan-codex",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["prompt", "requiredArtifacts"],
+    executors: ["codex-local"],
+  },
   "planning-questions-form": {
     kind: "planning-questions-form",
     version: 1,
@@ -135,6 +183,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["jiraTaskFile", "taskKey", "iteration", "claudeCmd"],
+    executors: ["claude"],
   },
   "review-findings-form": {
     kind: "review-findings-form",
@@ -147,6 +196,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["jiraTaskFile", "taskKey", "iteration", "codexCmd"],
+    executors: ["codex-local"],
   },
   "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden", requiredParams: ["path"] },
   "user-input": {
@@ -155,7 +205,13 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["formId", "title", "fields", "outputFile"],
   },
-  "verify-build": { kind: "verify-build", version: 1, prompt: "forbidden", requiredParams: ["dockerComposeFile", "labelText"] },
+  "verify-build": {
+    kind: "verify-build",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["dockerComposeFile", "labelText"],
+    executors: ["verify-build"],
+  },
 };
 
 export function createNodeRegistry(): NodeRegistry {
