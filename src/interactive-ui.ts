@@ -19,6 +19,7 @@ type InteractiveFlowDefinition = {
   label: string;
   description: string;
   source: "built-in" | "project-local";
+  treePath: string[];
   sourcePath?: string;
   phases: Array<{
     id: string;
@@ -72,6 +73,150 @@ type ConfirmSession = {
 const CONFIRM_MIN_WIDTH = 44;
 const CONFIRM_MIN_HEIGHT = 8;
 
+type FlowTreeFolderNode = {
+  kind: "folder";
+  key: string;
+  name: string;
+  pathSegments: string[];
+  children: FlowTreeNode[];
+};
+
+type FlowTreeFlowNode = {
+  kind: "flow";
+  key: string;
+  name: string;
+  pathSegments: string[];
+  flow: InteractiveFlowDefinition;
+};
+
+type FlowTreeNode = FlowTreeFolderNode | FlowTreeFlowNode;
+
+type VisibleFlowTreeItem =
+  | {
+      kind: "folder";
+      key: string;
+      name: string;
+      depth: number;
+      pathSegments: string[];
+    }
+  | {
+      kind: "flow";
+      key: string;
+      name: string;
+      depth: number;
+      pathSegments: string[];
+      flow: InteractiveFlowDefinition;
+    };
+
+function compareTreeNames(left: string, right: string): number {
+  return left.localeCompare(right, "ru");
+}
+
+function makeFolderKey(pathSegments: string[]): string {
+  return `folder:${pathSegments.join("/")}`;
+}
+
+function makeFlowKey(flowId: string): string {
+  return `flow:${flowId}`;
+}
+
+function buildFlowTree(flows: InteractiveFlowDefinition[]): FlowTreeNode[] {
+  const roots = new Map<string, FlowTreeFolderNode>();
+
+  const ensureFolder = (pathSegments: string[]): FlowTreeFolderNode => {
+    const firstSegment = pathSegments[0];
+    if (!firstSegment) {
+      throw new Error("Flow tree folder path cannot be empty.");
+    }
+
+    const rootFolder = roots.get(firstSegment);
+    let currentFolder: FlowTreeFolderNode;
+    if (rootFolder) {
+      currentFolder = rootFolder;
+    } else {
+      currentFolder = {
+        kind: "folder",
+        key: makeFolderKey([firstSegment]),
+        name: firstSegment,
+        pathSegments: [firstSegment],
+        children: [],
+      };
+      roots.set(firstSegment, currentFolder);
+    }
+
+    for (let index = 1; index < pathSegments.length; index += 1) {
+      const segment = pathSegments[index] ?? "";
+      const folderPath = pathSegments.slice(0, index + 1);
+      let nextFolder = currentFolder.children.find(
+        (child): child is FlowTreeFolderNode => child.kind === "folder" && child.name === segment,
+      );
+      if (!nextFolder) {
+        nextFolder = {
+          kind: "folder",
+          key: makeFolderKey(folderPath),
+          name: segment,
+          pathSegments: folderPath,
+          children: [],
+        };
+        currentFolder.children.push(nextFolder);
+      }
+      currentFolder = nextFolder;
+    }
+
+    return currentFolder;
+  };
+
+  for (const flow of flows) {
+    if (flow.treePath.length === 0) {
+      continue;
+    }
+    const folderPath = flow.treePath.slice(0, -1);
+    const leafName = flow.treePath[flow.treePath.length - 1] ?? flow.id;
+    const parent = ensureFolder(folderPath);
+    parent.children.push({
+      kind: "flow",
+      key: makeFlowKey(flow.id),
+      name: leafName,
+      pathSegments: [...flow.treePath],
+      flow,
+    });
+  }
+
+  const sortNodes = (nodes: FlowTreeNode[]): FlowTreeNode[] =>
+    [...nodes]
+      .sort((left, right) => {
+        if (left.kind !== right.kind) {
+          return left.kind === "folder" ? -1 : 1;
+        }
+        return compareTreeNames(left.name, right.name);
+      })
+      .map((node) =>
+        node.kind === "folder"
+          ? {
+              ...node,
+              children: sortNodes(node.children),
+            }
+          : node,
+      );
+
+  const orderedRootNames = ["custom", "default"];
+  const sortedRoots = [...roots.values()].sort((left, right) => {
+    const leftIndex = orderedRootNames.indexOf(left.name);
+    const rightIndex = orderedRootNames.indexOf(right.name);
+    if (leftIndex !== -1 || rightIndex !== -1) {
+      if (leftIndex === -1) {
+        return 1;
+      }
+      if (rightIndex === -1) {
+        return -1;
+      }
+      return leftIndex - rightIndex;
+    }
+    return compareTreeNames(left.name, right.name);
+  });
+  return sortNodes(sortedRoots);
+}
+
 export class InteractiveUi {
   private readonly screen: any;
   private readonly header: any;
@@ -86,9 +231,13 @@ export class InteractiveUi {
   private readonly confirm: any;
   private readonly formModal: any;
   private readonly flowMap: Map<string, InteractiveFlowDefinition>;
+  private readonly flowTree: FlowTreeNode[];
+  private readonly expandedFlowFolders = new Set<string>();
+  private visibleFlowItems: VisibleFlowTreeItem[] = [];
   private busy = false;
   private currentFlowId: string | null = null;
   private selectedFlowId: string;
+  private selectedFlowItemKey: string;
   private summaryText = "";
   private focusedPane: FocusPane = "flows";
   private currentNode: string | null = null;
@@ -115,7 +264,10 @@ export class InteractiveUi {
       throw new Error("Interactive UI requires at least one flow.");
     }
     this.flowMap = new Map(options.flows.map((flow) => [flow.id, flow]));
+    this.flowTree = buildFlowTree(options.flows);
     this.selectedFlowId = options.flows[0]?.id ?? "auto";
+    this.visibleFlowItems = this.computeVisibleFlowItems();
+    this.selectedFlowItemKey = this.visibleFlowItems[0]?.key ?? makeFlowKey(this.selectedFlowId);
     this.scopeKey = options.scopeKey;
     this.jiraIssueKey = options.jiraIssueKey ?? null;
     this.summaryVisible = options.summaryText.trim().length > 0;
@@ -459,11 +611,15 @@ export class InteractiveUi {
       if (this.hasActiveForm()) {
         return;
       }
-      const flow = this.options.flows[index];
-      if (!flow) {
+      const selectedItem = this.visibleFlowItems[index];
+      if (!selectedItem) {
         return;
       }
-      this.selectedFlowId = flow.id;
+      this.selectedFlowItemKey = selectedItem.key;
+      if (selectedItem.kind === "flow") {
+        this.selectedFlowId = selectedItem.flow.id;
+      }
+      this.updateHeader();
       this.renderDescription();
       this.renderProgress();
       this.requestRender();
@@ -473,7 +629,26 @@ export class InteractiveUi {
       if (this.busy || this.confirm.visible || !this.help.hidden || this.hasActiveForm()) {
         return;
       }
+      const selectedItem = this.selectedFlowTreeItem();
+      if (selectedItem?.kind === "folder") {
+        this.toggleFlowFolder(selectedItem.key);
+        return;
+      }
       await this.openConfirm();
+    });
+
+    this.flowList.key(["right"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
+      this.expandSelectedFlowFolder();
+    });
+
+    this.flowList.key(["left"], () => {
+      if (this.hasActiveForm()) {
+        return;
+      }
+      this.collapseSelectedFlowFolderOrSelectParent();
     });
 
     this.flowList.key(["pageup"], () => {
@@ -649,7 +824,7 @@ export class InteractiveUi {
     }
 
     this.footer.setContent(
-      ` Focus: ${pane} | Up/Down: select flow | Enter: confirm run | h: help | Esc: close | Tab: switch pane | q: exit `,
+      ` Focus: ${pane} | Up/Down: select | Left/Right: fold | Enter: toggle/run | h: help | Esc: close | Tab: switch pane | q: exit `,
     );
     this.requestRender();
   }
@@ -659,8 +834,7 @@ export class InteractiveUi {
     this.summaryVisible = this.summaryText.length > 0;
     this.applyRightPaneLayout();
     this.updateHeader();
-    this.flowList.setItems(this.options.flows.map((flow) => this.renderFlowListLabel(flow)));
-    this.flowList.select(this.options.flows.findIndex((flow) => flow.id === this.selectedFlowId));
+    this.renderFlowTreeList();
     this.renderDescription();
     this.renderSummary();
     this.renderProgress();
@@ -671,26 +845,28 @@ export class InteractiveUi {
           "AgentWeaver interactive mode",
           "",
           "Клавиши:",
-          "Up / Down    выбрать flow",
-          "Enter        открыть подтверждение запуска",
+          "Up / Down    выбрать папку или flow",
+          "Right        раскрыть папку",
+          "Left         свернуть папку или перейти к родителю",
+          "Enter        раскрыть папку или открыть запуск flow",
           "Enter        подтвердить запуск в модалке",
           "Esc          закрыть help или модалку",
-          "h / F1       открыть или закрыть help",
+          "F1           открыть или закрыть help",
           "Tab          переключить pane",
           "Ctrl+L       очистить лог",
           "q / Ctrl+C   выйти",
           "",
           "Доступные flow:",
-          ...this.options.flows.map((flow) => flow.label),
+          ...this.options.flows.map((flow) => flow.treePath.join("/")),
         ].join("\n"),
       ),
     );
 
-    this.footer.setContent(" Up/Down: select flow | Enter: confirm run | h: help | Tab: switch pane | q: exit ");
+    this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | h: help | Tab: switch pane | q: exit ");
   }
 
   private updateHeader(): void {
-    const current = this.currentFlowId ?? this.selectedFlowId;
+    const current = this.currentFlowId ?? this.selectedHeaderLabel();
     const pathParts = this.options.cwd.split(path.sep).filter(Boolean);
     const folderName = pathParts.slice(-3).join("/") || this.options.cwd;
     const branchLabel = this.options.gitBranchName ? this.options.gitBranchName : "detached-head";
@@ -745,7 +921,7 @@ export class InteractiveUi {
   private renderActiveForm(): void {
     if (!this.activeFormSession) {
       this.formModal.hide();
-      this.footer.setContent(" Up/Down: select flow | Enter: confirm run | h: help | Tab: switch pane | q: exit ");
+      this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | h: help | Tab: switch pane | q: exit ");
       this.requestRender();
       return;
     }
@@ -994,22 +1170,34 @@ export class InteractiveUi {
   }
 
   private renderDescription(): void {
-    const flow = this.flowMap.get(this.selectedFlowId);
-    const description = flow?.description?.trim() || "Описание для этого flow пока не задано.";
+    const selectedItem = this.selectedFlowTreeItem();
+    if (!selectedItem) {
+      this.description.setContent("Flow structure is not available.");
+      return;
+    }
+
+    if (selectedItem.kind === "folder") {
+      const kindLabel = selectedItem.pathSegments[0] === "custom" ? "project-local" : "built-in";
+      const folderDescription = [
+        `Папка flow \`${selectedItem.pathSegments.join("/")}\`.`,
+        "",
+        `Источник: ${kindLabel}`,
+        `Статус: ${this.expandedFlowFolders.has(selectedItem.key) ? "развёрнута" : "свёрнута"}`,
+      ].join("\n");
+      this.description.setContent(renderMarkdownToTerminal(stripAnsi(folderDescription)));
+      return;
+    }
+
+    const { flow } = selectedItem;
+    const description = flow.description?.trim() || "Описание для этого flow пока не задано.";
     const details = [
-      flow ? `Источник: ${flow.source === "project-local" ? "project-local" : "built-in"}` : "",
-      flow?.source === "project-local" && flow.sourcePath ? `Файл: ${flow.sourcePath}` : "",
+      `Путь: ${flow.treePath.join("/")}`,
+      `Источник: ${flow.source === "project-local" ? "project-local" : "built-in"}`,
+      flow.source === "project-local" && flow.sourcePath ? `Файл: ${flow.sourcePath}` : "",
     ]
       .filter((line) => line.length > 0)
       .join("\n");
     this.description.setContent(renderMarkdownToTerminal(stripAnsi(details ? `${description}\n\n${details}` : description)));
-  }
-
-  private renderFlowListLabel(flow: InteractiveFlowDefinition): string {
-    if (flow.source === "project-local") {
-      return `{yellow-fg}${flow.label}{/yellow-fg}`;
-    }
-    return flow.label;
   }
 
   private createAdapter(): OutputAdapter {
@@ -1040,14 +1228,20 @@ export class InteractiveUi {
   }
 
   private progressFlowDefinition(): InteractiveFlowDefinition | undefined {
-    const preferredFlowId = this.busy ? this.activeFlowId() : this.selectedFlowId;
-    return this.flowMap.get(preferredFlowId);
+    if (this.busy) {
+      return this.flowMap.get(this.activeFlowId());
+    }
+    const selectedItem = this.selectedFlowTreeItem();
+    if (selectedItem?.kind === "flow") {
+      return selectedItem.flow;
+    }
+    return undefined;
   }
 
   private renderProgress(): void {
     const flow = this.progressFlowDefinition();
     if (!flow) {
-      this.progress.setContent("Flow structure is not available.");
+      this.progress.setContent("Выберите конкретный flow в дереве, чтобы увидеть его прогресс.");
       return;
     }
 
@@ -1435,7 +1629,11 @@ export class InteractiveUi {
   }
 
   private async openConfirm(): Promise<void> {
-    const flow = this.flowMap.get(this.selectedFlowId);
+    const selectedItem = this.selectedFlowTreeItem();
+    if (!selectedItem || selectedItem.kind !== "flow") {
+      return;
+    }
+    const flow = selectedItem.flow;
     if (!flow) {
       return;
     }
@@ -1595,6 +1793,124 @@ export class InteractiveUi {
       this.currentFlowId = flowId;
     }
     this.renderProgress();
+    this.requestRender();
+  }
+
+  private computeVisibleFlowItems(): VisibleFlowTreeItem[] {
+    const items: VisibleFlowTreeItem[] = [];
+    const walk = (nodes: FlowTreeNode[], depth: number): void => {
+      for (const node of nodes) {
+        if (node.kind === "folder") {
+          items.push({
+            kind: "folder",
+            key: node.key,
+            name: node.name,
+            depth,
+            pathSegments: [...node.pathSegments],
+          });
+          if (this.expandedFlowFolders.has(node.key)) {
+            walk(node.children, depth + 1);
+          }
+          continue;
+        }
+        items.push({
+          kind: "flow",
+          key: node.key,
+          name: node.name,
+          depth,
+          pathSegments: [...node.pathSegments],
+          flow: node.flow,
+        });
+      }
+    };
+    walk(this.flowTree, 0);
+    return items;
+  }
+
+  private selectedFlowTreeItem(): VisibleFlowTreeItem | undefined {
+    return this.visibleFlowItems.find((item) => item.key === this.selectedFlowItemKey);
+  }
+
+  private selectedHeaderLabel(): string {
+    const selectedItem = this.selectedFlowTreeItem();
+    if (!selectedItem) {
+      return this.selectedFlowId;
+    }
+    return selectedItem.kind === "folder" ? selectedItem.pathSegments.join("/") : selectedItem.flow.label;
+  }
+
+  private refreshVisibleFlowItems(): void {
+    this.visibleFlowItems = this.computeVisibleFlowItems();
+    if (!this.visibleFlowItems.some((item) => item.key === this.selectedFlowItemKey)) {
+      this.selectedFlowItemKey = this.visibleFlowItems[0]?.key ?? makeFlowKey(this.selectedFlowId);
+    }
+    const selectedItem = this.selectedFlowTreeItem();
+    if (selectedItem?.kind === "flow") {
+      this.selectedFlowId = selectedItem.flow.id;
+    }
+  }
+
+  private renderFlowTreeList(): void {
+    this.refreshVisibleFlowItems();
+    this.flowList.setItems(this.visibleFlowItems.map((item) => this.renderFlowTreeLabel(item)));
+    const selectedIndex = this.visibleFlowItems.findIndex((item) => item.key === this.selectedFlowItemKey);
+    this.flowList.select(selectedIndex >= 0 ? selectedIndex : 0);
+  }
+
+  private renderFlowTreeLabel(item: VisibleFlowTreeItem): string {
+    const indent = "  ".repeat(item.depth);
+    if (item.kind === "folder") {
+      const expanded = this.expandedFlowFolders.has(item.key);
+      const color = item.pathSegments[0] === "custom" ? "yellow" : "cyan";
+      return `${indent}{${color}-fg}${expanded ? "▾" : "▸"} ${item.name}{/${color}-fg}`;
+    }
+    const color = item.flow.source === "project-local" ? "yellow" : "white";
+    return `${indent}{${color}-fg}• ${item.name}{/${color}-fg}`;
+  }
+
+  private toggleFlowFolder(folderKey: string): void {
+    if (this.expandedFlowFolders.has(folderKey)) {
+      this.expandedFlowFolders.delete(folderKey);
+    } else {
+      this.expandedFlowFolders.add(folderKey);
+    }
+    this.renderFlowTreeList();
+    this.renderDescription();
+    this.renderProgress();
+    this.updateHeader();
+    this.requestRender();
+  }
+
+  private expandSelectedFlowFolder(): void {
+    const selectedItem = this.selectedFlowTreeItem();
+    if (!selectedItem || selectedItem.kind !== "folder" || this.expandedFlowFolders.has(selectedItem.key)) {
+      return;
+    }
+    this.toggleFlowFolder(selectedItem.key);
+  }
+
+  private collapseSelectedFlowFolderOrSelectParent(): void {
+    const selectedItem = this.selectedFlowTreeItem();
+    if (!selectedItem) {
+      return;
+    }
+    if (selectedItem.kind === "folder" && this.expandedFlowFolders.has(selectedItem.key)) {
+      this.toggleFlowFolder(selectedItem.key);
+      return;
+    }
+    const parentPath = selectedItem.pathSegments.slice(0, -1);
+    if (parentPath.length === 0) {
+      return;
+    }
+    const parentKey = makeFolderKey(parentPath);
+    if (!this.visibleFlowItems.some((item) => item.key === parentKey)) {
+      return;
+    }
+    this.selectedFlowItemKey = parentKey;
+    this.renderFlowTreeList();
+    this.renderDescription();
+    this.renderProgress();
+    this.updateHeader();
     this.requestRender();
   }
 

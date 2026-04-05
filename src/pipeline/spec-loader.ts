@@ -38,15 +38,28 @@ export function listBuiltInFlowSpecFiles(): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function collectJsonFilesRecursively(directory: string): string[] {
+  const entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+  const files: string[] = [];
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectJsonFilesRecursively(entryPath));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith(".json")) {
+      files.push(entryPath);
+    }
+  }
+  return files;
+}
+
 export function listProjectFlowSpecFiles(cwd: string): string[] {
   const directory = projectFlowSpecsDir(cwd);
   if (!existsSync(directory)) {
     return [];
   }
-  return readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => path.join(directory, entry.name))
-    .sort((left, right) => left.localeCompare(right));
+  return collectJsonFilesRecursively(directory);
 }
 
 export function loadFlowSpecSync(source: FlowSpecSource): DeclarativeFlowSpec {
