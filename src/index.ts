@@ -32,7 +32,7 @@ import {
   scopeWorkspaceDir,
   taskSummaryFile,
 } from "./artifacts.js";
-import { TaskRunnerError } from "./errors.js";
+import { FlowInterruptedError, TaskRunnerError } from "./errors.js";
 import {
   createFlowRunState,
   hasResumableFlowState,
@@ -99,12 +99,16 @@ type CommandName = (typeof COMMANDS)[number];
 const AUTO_STATE_SCHEMA_VERSION = 3;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(MODULE_DIR, "..");
-const runtimeServices: RuntimeServices = {
-  resolveCmd,
-  resolveDockerComposeCmd,
-  dockerRuntimeEnv: () => dockerRuntimeEnv(PACKAGE_ROOT),
-  runCommand,
-};
+function createRuntimeServices(signal?: AbortSignal): RuntimeServices {
+  return {
+    resolveCmd,
+    resolveDockerComposeCmd,
+    dockerRuntimeEnv: () => dockerRuntimeEnv(PACKAGE_ROOT),
+    runCommand: (argv, options = {}) => runCommand(argv, { ...options, ...(signal ? { signal } : {}) }),
+  };
+}
+
+const runtimeServices = createRuntimeServices();
 
 type BaseConfig = {
   command: string;
@@ -232,7 +236,7 @@ function usage(): string {
 Interactive Mode:
   When started without a command, the script opens an interactive UI.
   If a Jira task is provided, interactive mode starts in the current project scope with Jira context attached.
-  Use Up/Down to select a flow, Enter to confirm launch, h for help, q to exit.
+  Use Up/Down to move in the flow tree, Left/Right to collapse or expand folders, Enter to toggle a folder or run a flow, h for help, q to exit.
 
 Flags:
   --version       Show package version
@@ -761,6 +765,7 @@ function interactiveFlowDefinition(entry: FlowCatalogEntry): InteractiveFlowDefi
     label: entry.id,
     description: flowDescription(entry.id),
     source: entry.source,
+    treePath: [...entry.treePath],
     ...(entry.source === "project-local" ? { sourcePath: entry.absolutePath } : {}),
     phases: flow.phases.map((phase) => ({
       id: phase.id,
@@ -830,13 +835,14 @@ async function runDeclarativeFlowByRef(
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
   setSummary?: (markdown: string) => void,
   launchMode: FlowLaunchMode = "restart",
+  runtime: RuntimeServices = runtimeServices,
 ): Promise<void> {
   const context = createPipelineContext({
     issueKey: config.taskKey,
     jiraRef: config.jiraRef,
     dryRun: config.dryRun,
     verbose: config.verbose,
-    runtime: runtimeServices,
+    runtime,
     ...(setSummary ? { setSummary } : {}),
     requestUserInput,
   });
@@ -908,6 +914,7 @@ async function runDeclarativeFlowBySpecFile(
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
   setSummary?: (markdown: string) => void,
   launchMode: FlowLaunchMode = "restart",
+  runtime: RuntimeServices = runtimeServices,
 ): Promise<void> {
   await runDeclarativeFlowByRef(
     config.command,
@@ -917,10 +924,13 @@ async function runDeclarativeFlowBySpecFile(
     requestUserInput,
     setSummary,
     launchMode,
+    runtime,
   );
 }
 
 function defaultDeclarativeFlowParams(config: Config, forceRefreshSummary = false): Record<string, unknown> {
+  const iteration = nextReviewIterationForTask(config.taskKey);
+  const latestIteration = latestReviewReplyIteration(config.taskKey);
   return {
     taskKey: config.taskKey,
     jiraRef: config.jiraRef,
@@ -934,6 +944,9 @@ function defaultDeclarativeFlowParams(config: Config, forceRefreshSummary = fals
     runGoCoverageScript: config.runGoCoverageScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
+    iteration,
+    latestIteration,
+    ...(latestIteration !== null ? { reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration) } : {}),
     forceRefresh: forceRefreshSummary,
   };
 }
@@ -971,13 +984,14 @@ async function runAutoPhaseViaSpec(
   state?: AutoPipelineState,
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
+  runtime: RuntimeServices = runtimeServices,
 ): Promise<"done" | "skipped"> {
   const context = createPipelineContext({
     issueKey: config.taskKey,
     jiraRef: config.jiraRef,
     dryRun: config.dryRun,
     verbose: config.verbose,
-    runtime: runtimeServices,
+    runtime,
     ...(setSummary ? { setSummary } : {}),
     requestUserInput: requestUserInputInTerminal,
   });
@@ -1075,13 +1089,14 @@ async function executeCommand(
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
   launchMode: FlowLaunchMode = "restart",
+  runtime: RuntimeServices = runtimeServices,
 ): Promise<boolean> {
   const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
   if (config.command === "auto") {
     if (launchMode === "restart") {
       resetAutoPipelineState(config);
     }
-    await runAutoPipeline(config, setSummary, forceRefreshSummary);
+    await runAutoPipeline(config, setSummary, forceRefreshSummary, runtime);
     return false;
   }
   if (config.command === "auto-status") {
@@ -1122,7 +1137,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, requestUserInput, setSummary, launchMode);
+    }, requestUserInput, setSummary, launchMode, runtime);
     return false;
   }
 
@@ -1138,7 +1153,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, requestUserInput, setSummary, launchMode);
+    }, requestUserInput, setSummary, launchMode, runtime);
     return false;
   }
 
@@ -1155,6 +1170,7 @@ async function executeCommand(
       requestUserInput,
       undefined,
       launchMode,
+      runtime,
     );
     if (!config.dryRun) {
       printSummary("GitLab Review", `Artifacts:\n${gitlabReviewFile(config.taskKey)}\n${gitlabReviewJsonFile(config.taskKey)}`);
@@ -1175,6 +1191,7 @@ async function executeCommand(
       requestUserInput,
       undefined,
       launchMode,
+      runtime,
     );
     if (!config.dryRun) {
       printSummary(
@@ -1200,7 +1217,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput, undefined, launchMode);
+    }, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1210,7 +1227,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("mr-description.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput, undefined, launchMode);
+    }, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1220,7 +1237,7 @@ async function executeCommand(
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput, undefined, launchMode);
+    }, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1256,13 +1273,13 @@ async function executeCommand(
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, requestUserInput, undefined, launchMode);
+      }, requestUserInput, undefined, launchMode, runtime);
     } else {
       await runDeclarativeFlowBySpecFile("review-project.json", config, {
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, requestUserInput, undefined, launchMode);
+      }, requestUserInput, undefined, launchMode, runtime);
     }
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
@@ -1285,7 +1302,7 @@ async function executeCommand(
       reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
       extraPrompt: config.extraPrompt,
       reviewFixPoints: config.reviewFixPoints,
-    }, requestUserInput, undefined, launchMode);
+    }, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1302,6 +1319,7 @@ async function executeCommand(
       requestUserInput,
       undefined,
       launchMode,
+      runtime,
     );
     return false;
   }
@@ -1313,6 +1331,7 @@ async function runAutoPipelineDryRun(
   config: Config,
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
+  runtime: RuntimeServices = runtimeServices,
 ): Promise<void> {
   checkAutoPrerequisites(config);
   printInfo("Dry-run auto pipeline from declarative spec");
@@ -1326,7 +1345,7 @@ async function runAutoPipelineDryRun(
   publishFlowState("auto", executionState);
   for (const phase of autoFlow.phases) {
     printInfo(`Dry-run auto phase: ${phase.id}`);
-    await runAutoPhaseViaSpec(config, phase.id, executionState, undefined, setSummary, forceRefreshSummary);
+    await runAutoPhaseViaSpec(config, phase.id, executionState, undefined, setSummary, forceRefreshSummary, runtime);
     if (executionState.terminated) {
       break;
     }
@@ -1337,10 +1356,11 @@ async function runAutoPipeline(
   config: Config,
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
+  runtime: RuntimeServices = runtimeServices,
 ): Promise<void> {
   requireJiraConfig(config);
   if (config.dryRun) {
-    await runAutoPipelineDryRun(config, setSummary, forceRefreshSummary);
+    await runAutoPipelineDryRun(config, setSummary, forceRefreshSummary, runtime);
     return;
   }
 
@@ -1389,6 +1409,7 @@ async function runAutoPipeline(
         state,
         setSummary,
         forceRefreshSummary,
+        runtime,
       );
       step.status = status;
       step.finishedAt = nowIso8601();
@@ -1513,6 +1534,8 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
   let currentScope = resolveProjectScope(scopeName, jiraRef);
   const gitBranchName = detectGitBranchName();
   const flowCatalog = loadInteractiveFlowCatalog(process.cwd());
+  let activeAbortController: AbortController | null = null;
+  let activeFlowId: string | null = null;
 
   let exiting = false;
   const ui = new InteractiveUi(
@@ -1554,6 +1577,9 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
         return resumeLookup;
       },
       onRun: async (flowId, launchMode) => {
+        const abortController = new AbortController();
+        activeAbortController = abortController;
+        activeFlowId = flowId;
         try {
           const flowEntry = findCatalogEntry(flowId, flowCatalog);
           if (!flowEntry) {
@@ -1584,6 +1610,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
               (markdown) => ui.setSummary(markdown),
               forceRefresh,
               launchMode,
+              createRuntimeServices(abortController.signal),
             );
             return;
           }
@@ -1597,8 +1624,14 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             (form) => ui.requestUserInput(form),
             (markdown) => ui.setSummary(markdown),
             launchMode,
+            createRuntimeServices(abortController.signal),
           );
         } catch (error) {
+          if (error instanceof FlowInterruptedError) {
+            ui.appendLog(`[interrupt] ${error.message}`);
+            printInfo(error.message);
+            return;
+          }
           if (error instanceof TaskRunnerError) {
             ui.setFlowFailed(flowId);
             printError(error.message);
@@ -1611,7 +1644,19 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             return;
           }
           throw error;
+        } finally {
+          if (activeAbortController === abortController) {
+            activeAbortController = null;
+            activeFlowId = null;
+          }
         }
+      },
+      onInterrupt: async (flowId) => {
+        if (!activeAbortController || activeFlowId !== flowId) {
+          return;
+        }
+        ui.interruptActiveForm();
+        activeAbortController.abort();
       },
       onExit: () => {
         exiting = true;
