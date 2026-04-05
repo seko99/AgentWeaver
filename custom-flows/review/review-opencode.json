@@ -1,0 +1,452 @@
+{
+  "kind": "review-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "review",
+      "steps": [
+        {
+          "id": "run_review",
+          "node": "opencode-prompt",
+          "prompt": {
+            "templateRef": "review",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "review_file": {
+                "artifact": {
+                  "kind": "review-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              },
+              "review_json_file": {
+                "artifact": {
+                  "kind": "review-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              }
+            },
+            "extraPrompt": {
+              "ref": "params.extraPrompt"
+            },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "template": "Running OpenCode review mode (iteration {iteration})",
+              "vars": {
+                "iteration": {
+                  "ref": "params.iteration"
+                }
+              }
+            },
+            "model": {
+              "const": "minimax-coding-plan/MiniMax-M2.7"
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "review-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      },
+                      "iteration": {
+                        "ref": "params.iteration"
+                      }
+                    }
+                  }
+                ]
+              },
+              "message": "Review did not produce the required review artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      },
+                      "iteration": {
+                        "ref": "params.iteration"
+                      }
+                    }
+                  },
+                  "schemaId": "review-findings/v1"
+                }
+              ],
+              "message": "Claude review produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "summarize_review",
+          "when": {
+            "not": {
+              "ref": "context.dryRun"
+            }
+          },
+          "node": "opencode-prompt",
+          "prompt": {
+            "templateRef": "review-summary",
+            "vars": {
+              "review_file": {
+                "artifact": {
+                  "kind": "review-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              },
+              "review_summary_file": {
+                "artifact": {
+                  "kind": "review-summary-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              }
+            },
+            "format": "plain"
+          },
+          "params": {
+            "labelText": {
+              "const": "Preparing OpenCode review summary"
+            },
+            "summaryTitle": {
+              "const": "OpenCode Comments"
+            },
+            "model": {
+              "const": "minimax-coding-plan/MiniMax-M2.7"
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "review-summary-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                },
+                "iteration": {
+                  "ref": "params.iteration"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "run_review_reply",
+          "node": "opencode-prompt",
+          "prompt": {
+            "templateRef": "review-reply",
+            "vars": {
+              "review_file": {
+                "artifact": {
+                  "kind": "review-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              },
+              "review_json_file": {
+                "artifact": {
+                  "kind": "review-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              },
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "review_reply_file": {
+                "artifact": {
+                  "kind": "review-reply-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              },
+              "review_reply_json_file": {
+                "artifact": {
+                  "kind": "review-reply-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              }
+            },
+            "extraPrompt": {
+              "ref": "params.extraPrompt"
+            },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "template": "Running OpenCode review reply mode (iteration {iteration})",
+              "vars": {
+                "iteration": {
+                  "ref": "params.iteration"
+                }
+              }
+            },
+            "model": {
+              "const": "minimax-coding-plan/MiniMax-M2.7"
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "review-reply-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      },
+                      "iteration": {
+                        "ref": "params.iteration"
+                      }
+                    }
+                  }
+                ]
+              },
+              "message": "Review reply did not produce the required review-reply artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-reply-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      },
+                      "iteration": {
+                        "ref": "params.iteration"
+                      }
+                    }
+                  },
+                  "schemaId": "review-reply/v1"
+                }
+              ],
+              "message": "Review reply produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "summarize_review_reply",
+          "when": {
+            "not": {
+              "ref": "context.dryRun"
+            }
+          },
+          "node": "opencode-prompt",
+          "prompt": {
+            "templateRef": "review-reply-summary",
+            "vars": {
+              "review_reply_file": {
+                "artifact": {
+                  "kind": "review-reply-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              },
+              "review_reply_summary_file": {
+                "artifact": {
+                  "kind": "review-reply-summary-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  },
+                  "iteration": {
+                    "ref": "params.iteration"
+                  }
+                }
+              }
+            },
+            "format": "plain"
+          },
+          "params": {
+            "labelText": {
+              "const": "Preparing OpenCode reply summary"
+            },
+            "summaryTitle": {
+              "const": "OpenCode Reply Summary"
+            },
+            "model": {
+              "const": "minimax-coding-plan/MiniMax-M2.7"
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "review-reply-summary-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                },
+                "iteration": {
+                  "ref": "params.iteration"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "check_ready_to_merge",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "panelTitle": {
+              "const": "Ready To Merge"
+            },
+            "foundMessage": {
+              "const": "Изменения готовы к merge\nФайл ready-to-merge.md создан."
+            },
+            "tone": {
+              "const": "green"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
