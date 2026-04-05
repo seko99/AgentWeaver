@@ -3,7 +3,7 @@ import path from "node:path";
 import { TaskRunnerError } from "../errors.js";
 import { loadAutoFlow } from "./auto-flow.js";
 import { type DeclarativeFlowRef, loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
-import { listProjectFlowSpecFiles, projectFlowSpecsDir } from "./spec-loader.js";
+import { listBuiltInFlowSpecFiles, listProjectFlowSpecFiles, projectFlowSpecsDir } from "./spec-loader.js";
 
 export type FlowCatalogSource = "built-in" | "project-local";
 
@@ -16,25 +16,26 @@ export type FlowCatalogEntry = {
   flow: LoadedDeclarativeFlow;
 };
 
-export const INTERACTIVE_BUILT_IN_FLOWS = [
-  { id: "auto", fileName: "auto.json" },
-  { id: "bug-analyze", fileName: "bug-analyze.json" },
-  { id: "bug-fix", fileName: "bug-fix.json" },
-  { id: "gitlab-diff-review", fileName: "gitlab-diff-review.json" },
-  { id: "gitlab-review", fileName: "gitlab-review.json" },
-  { id: "mr-description", fileName: "mr-description.json" },
-  { id: "plan", fileName: "plan.json" },
-  { id: "task-describe", fileName: "task-describe.json" },
-  { id: "implement", fileName: "implement.json" },
-  { id: "review", fileName: "review.json" },
-  { id: "review-fix", fileName: "review-fix.json" },
-  { id: "run-go-tests-loop", fileName: "run-go-tests-loop.json" },
-  { id: "run-go-linter-loop", fileName: "run-go-linter-loop.json" },
+export const BUILT_IN_COMMAND_FLOW_IDS = [
+  "auto",
+  "bug-analyze",
+  "bug-fix",
+  "gitlab-diff-review",
+  "gitlab-review",
+  "mr-description",
+  "plan",
+  "task-describe",
+  "implement",
+  "review",
+  "review-fix",
+  "run-go-tests-loop",
+  "run-go-linter-loop",
 ] as const;
 
-function loadBuiltInCatalogEntry(id: string, fileName: string): FlowCatalogEntry {
-  const flow = id === "auto" ? loadAutoFlow() : loadDeclarativeFlow({ source: "built-in", fileName });
+function loadBuiltInCatalogEntry(fileName: string): FlowCatalogEntry {
   const relativePath = fileName.replace(/\.json$/i, "").split(/[\\/]+/).filter((segment) => segment.length > 0);
+  const id = relativePath.join("/");
+  const flow = id === "auto" ? loadAutoFlow() : loadDeclarativeFlow({ source: "built-in", fileName });
   return {
     id,
     source: "built-in",
@@ -61,7 +62,7 @@ function loadProjectCatalogEntry(cwd: string, filePath: string): FlowCatalogEntr
 }
 
 export function loadInteractiveFlowCatalog(cwd: string): FlowCatalogEntry[] {
-  const entries: FlowCatalogEntry[] = INTERACTIVE_BUILT_IN_FLOWS.map((entry) => loadBuiltInCatalogEntry(entry.id, entry.fileName));
+  const entries: FlowCatalogEntry[] = listBuiltInFlowSpecFiles().map((fileName) => loadBuiltInCatalogEntry(fileName));
   for (const filePath of listProjectFlowSpecFiles(cwd)) {
     entries.push(loadProjectCatalogEntry(cwd, filePath));
   }
@@ -84,7 +85,7 @@ export function findCatalogEntry(flowId: string, entries: FlowCatalogEntry[]): F
 }
 
 export function isBuiltInCommandFlowId(flowId: string): boolean {
-  return INTERACTIVE_BUILT_IN_FLOWS.some((entry) => entry.id === flowId);
+  return BUILT_IN_COMMAND_FLOW_IDS.includes(flowId as (typeof BUILT_IN_COMMAND_FLOW_IDS)[number]);
 }
 
 export function toDeclarativeFlowRef(entry: FlowCatalogEntry): DeclarativeFlowRef {
