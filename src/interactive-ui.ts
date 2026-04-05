@@ -4,7 +4,7 @@ import blessed from "neo-blessed";
 import { renderMarkdownToTerminal } from "./markdown.js";
 import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { setOutputAdapter, stripAnsi, type OutputAdapter } from "./tui.js";
-import { TaskRunnerError } from "./errors.js";
+import { FlowInterruptedError, TaskRunnerError } from "./errors.js";
 import {
   buildInitialUserInputValues,
   validateUserInputValues,
@@ -43,6 +43,7 @@ type InteractiveUiOptions = {
     details?: string | null;
   }>;
   onRun: (flowId: string, mode: "resume" | "restart") => Promise<void>;
+  onInterrupt: (flowId: string) => Promise<void>;
   onExit: () => void;
 };
 
@@ -63,11 +64,12 @@ type ActiveFormSession = {
 };
 
 type ConfirmSession = {
+  kind: "run" | "interrupt";
   flowId: string;
   resumeAvailable: boolean;
   hasExistingState: boolean;
   details?: string | null;
-  selectedAction: "resume" | "restart" | "cancel" | "ok";
+  selectedAction: "resume" | "restart" | "cancel" | "ok" | "stop";
 };
 
 const CONFIRM_MIN_WIDTH = 44;
@@ -570,6 +572,10 @@ export class InteractiveUi {
     });
 
     this.screen.key(["escape"], () => {
+      if (this.busy && this.confirm.hidden && this.help.hidden) {
+        this.openInterruptConfirm();
+        return;
+      }
       if (this.hasActiveForm()) {
         this.cancelActiveForm();
         return;
@@ -748,12 +754,20 @@ export class InteractiveUi {
     });
 
     this.confirm.key(["enter"], async () => {
-      if (this.busy || this.confirm.hidden || this.hasActiveForm() || !this.confirmSession) {
+      if (this.confirm.hidden || !this.confirmSession) {
         return;
       }
-      const { flowId, selectedAction } = this.confirmSession;
+      if (this.hasActiveForm() && this.confirmSession.kind !== "interrupt") {
+        return;
+      }
+      const { flowId, selectedAction, kind } = this.confirmSession;
       if (selectedAction === "cancel") {
         this.closeConfirm();
+        return;
+      }
+      if (kind === "interrupt") {
+        this.closeConfirm();
+        await this.options.onInterrupt(flowId);
         return;
       }
       this.closeConfirm();
@@ -761,7 +775,8 @@ export class InteractiveUi {
       this.clearFlowFailure(flowId);
       this.setFlowDisplayState(flowId, null);
       try {
-        await this.options.onRun(flowId, selectedAction === "ok" ? "restart" : selectedAction);
+        const launchMode = selectedAction === "resume" ? "resume" : "restart";
+        await this.options.onRun(flowId, launchMode);
       } finally {
         this.setBusy(false);
         this.focusPane("flows");
@@ -824,7 +839,7 @@ export class InteractiveUi {
     }
 
     this.footer.setContent(
-      ` Focus: ${pane} | Up/Down: select | Left/Right: fold | Enter: toggle/run | h: help | Esc: close | Tab: switch pane | q: exit `,
+      ` Focus: ${pane} | Up/Down: select | Left/Right: fold | Enter: toggle/run | h: help | Esc: close/interrupt | Tab: switch pane | q: exit `,
     );
     this.requestRender();
   }
@@ -850,7 +865,7 @@ export class InteractiveUi {
           "Left         свернуть папку или перейти к родителю",
           "Enter        раскрыть папку или открыть запуск flow",
           "Enter        подтвердить запуск в модалке",
-          "Esc          закрыть help или модалку",
+          "Esc          закрыть help/модалку или прервать running flow",
           "F1           открыть или закрыть help",
           "Tab          переключить pane",
           "Ctrl+L       очистить лог",
@@ -862,7 +877,7 @@ export class InteractiveUi {
       ),
     );
 
-    this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | h: help | Tab: switch pane | q: exit ");
+    this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | Esc: close/interrupt | h: help | Tab: switch pane | q: exit ");
   }
 
   private updateHeader(): void {
@@ -921,7 +936,7 @@ export class InteractiveUi {
   private renderActiveForm(): void {
     if (!this.activeFormSession) {
       this.formModal.hide();
-      this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | h: help | Tab: switch pane | q: exit ");
+      this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | Esc: close/interrupt | h: help | Tab: switch pane | q: exit ");
       this.requestRender();
       return;
     }
@@ -1104,6 +1119,18 @@ export class InteractiveUi {
     this.formModal.hide();
     this.focusPane("flows");
     session.reject(new TaskRunnerError(`User cancelled form '${session.form.formId}'.`));
+    this.renderActiveForm();
+  }
+
+  interruptActiveForm(message = "Flow interrupted by user."): void {
+    if (!this.activeFormSession) {
+      return;
+    }
+    const session = this.activeFormSession;
+    this.activeFormSession = null;
+    this.formModal.hide();
+    this.focusPane("flows");
+    session.reject(new FlowInterruptedError(message));
     this.renderActiveForm();
   }
 
@@ -1576,15 +1603,25 @@ export class InteractiveUi {
     if (!this.confirmSession) {
       return;
     }
-    const actions = this.confirmSession.resumeAvailable
-      ? ["resume", "restart", "cancel"]
-      : this.confirmSession.hasExistingState
-        ? ["restart", "cancel"]
-        : ["ok", "cancel"];
+    const actions = this.confirmActions();
     const currentIndex = actions.indexOf(this.confirmSession.selectedAction);
     const nextIndex = (currentIndex + delta + actions.length) % actions.length;
     this.confirmSession.selectedAction = (actions[nextIndex] ?? "cancel") as ConfirmSession["selectedAction"];
     this.renderConfirm();
+  }
+
+  private confirmActions(): string[] {
+    if (!this.confirmSession) {
+      return ["cancel"];
+    }
+    if (this.confirmSession.kind === "interrupt") {
+      return ["stop", "cancel"];
+    }
+    return this.confirmSession.resumeAvailable
+      ? ["resume", "restart", "cancel"]
+      : this.confirmSession.hasExistingState
+        ? ["restart", "cancel"]
+        : ["ok", "cancel"];
   }
 
   private renderConfirm(): void {
@@ -1593,19 +1630,22 @@ export class InteractiveUi {
       return;
     }
     const flow = this.flowMap.get(session.flowId);
-    const actions = session.resumeAvailable
-      ? ["resume", "restart", "cancel"]
-      : session.hasExistingState
-        ? ["restart", "cancel"]
-        : ["ok", "cancel"];
+    const actions = this.confirmActions();
     const actionLabels = actions
       .map((action) => {
-        const label =
-          action === "resume" ? "Resume" : action === "restart" ? "Restart" : action === "ok" ? "OK" : "Cancel";
+        const label = action === "stop"
+          ? "Stop"
+          : action === "resume"
+            ? "Resume"
+            : action === "restart"
+              ? "Restart"
+              : action === "ok"
+                ? "OK"
+                : "Cancel";
         return session.selectedAction === action ? `[ ${label} ]` : `  ${label}  `;
       })
       .join("   ");
-    const lines = [`Run flow "${flow?.label ?? session.flowId}"?`];
+    const lines = [session.kind === "interrupt" ? `Interrupt flow "${flow?.label ?? session.flowId}"?` : `Run flow "${flow?.label ?? session.flowId}"?`];
     if (session.details?.trim()) {
       lines.push("", session.details.trim());
     }
@@ -1639,11 +1679,28 @@ export class InteractiveUi {
     }
     const confirmation = await this.options.getRunConfirmation(flow.id);
     this.confirmSession = {
+      kind: "run",
       flowId: flow.id,
       resumeAvailable: confirmation.resumeAvailable,
       hasExistingState: confirmation.hasExistingState,
       details: confirmation.details ?? null,
       selectedAction: confirmation.resumeAvailable ? "resume" : confirmation.hasExistingState ? "restart" : "ok",
+    };
+    this.renderConfirm();
+  }
+
+  private openInterruptConfirm(): void {
+    const flowId = this.currentFlowId;
+    if (!flowId || this.confirm.visible) {
+      return;
+    }
+    this.confirmSession = {
+      kind: "interrupt",
+      flowId,
+      resumeAvailable: true,
+      hasExistingState: true,
+      details: "Текущий flow будет остановлен. Состояние сохранится, и его можно будет продолжить через Resume.",
+      selectedAction: "stop",
     };
     this.renderConfirm();
   }
