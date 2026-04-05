@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,5 +20,8 @@ for (const asset of assets) {
     continue;
   }
   mkdirSync(path.dirname(asset.target), { recursive: true });
+  if (existsSync(asset.target)) {
+    rmSync(asset.target, { recursive: true, force: true });
+  }
   cpSync(asset.source, asset.target, { recursive: true });
 }
