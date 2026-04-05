@@ -192,7 +192,7 @@ export function autoStateFile(taskKey: string): string {
 }
 
 export function flowStateFile(scopeKey: string, flowId: string): string {
-  return scopeArtifactsFile(scopeKey, `.agentweaver-flow-state-${flowId}.json`);
+  return scopeArtifactsFile(scopeKey, `.agentweaver-flow-state-${encodeURIComponent(flowId)}.json`);
 }
 
 export function planArtifacts(taskKey: string): string[] {

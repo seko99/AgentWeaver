@@ -3,7 +3,7 @@ import path from "node:path";
 import { TaskRunnerError } from "../errors.js";
 import { loadAutoFlow } from "./auto-flow.js";
 import { type DeclarativeFlowRef, loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
-import { listProjectFlowSpecFiles } from "./spec-loader.js";
+import { listProjectFlowSpecFiles, projectFlowSpecsDir } from "./spec-loader.js";
 
 export type FlowCatalogSource = "built-in" | "project-local";
 
@@ -12,6 +12,7 @@ export type FlowCatalogEntry = {
   source: FlowCatalogSource;
   fileName: string;
   absolutePath: string;
+  treePath: string[];
   flow: LoadedDeclarativeFlow;
 };
 
@@ -33,22 +34,28 @@ export const INTERACTIVE_BUILT_IN_FLOWS = [
 
 function loadBuiltInCatalogEntry(id: string, fileName: string): FlowCatalogEntry {
   const flow = id === "auto" ? loadAutoFlow() : loadDeclarativeFlow({ source: "built-in", fileName });
+  const relativePath = fileName.replace(/\.json$/i, "").split(/[\\/]+/).filter((segment) => segment.length > 0);
   return {
     id,
     source: "built-in",
     fileName,
     absolutePath: flow.absolutePath,
+    treePath: ["default", ...relativePath],
     flow,
   };
 }
 
-function loadProjectCatalogEntry(filePath: string): FlowCatalogEntry {
+function loadProjectCatalogEntry(cwd: string, filePath: string): FlowCatalogEntry {
   const flow = loadDeclarativeFlow({ source: "project-local", filePath });
+  const relativeFilePath = path.relative(projectFlowSpecsDir(cwd), path.resolve(filePath));
+  const relativePathWithoutExt = relativeFilePath.replace(/\.json$/i, "");
+  const relativeSegments = relativePathWithoutExt.split(path.sep).filter((segment) => segment.length > 0);
   return {
-    id: path.basename(filePath, path.extname(filePath)),
+    id: relativeSegments.join("/"),
     source: "project-local",
     fileName: path.basename(filePath),
     absolutePath: path.resolve(filePath),
+    treePath: ["custom", ...relativeSegments],
     flow,
   };
 }
@@ -56,7 +63,7 @@ function loadProjectCatalogEntry(filePath: string): FlowCatalogEntry {
 export function loadInteractiveFlowCatalog(cwd: string): FlowCatalogEntry[] {
   const entries: FlowCatalogEntry[] = INTERACTIVE_BUILT_IN_FLOWS.map((entry) => loadBuiltInCatalogEntry(entry.id, entry.fileName));
   for (const filePath of listProjectFlowSpecFiles(cwd)) {
-    entries.push(loadProjectCatalogEntry(filePath));
+    entries.push(loadProjectCatalogEntry(cwd, filePath));
   }
 
   const byId = new Map<string, FlowCatalogEntry>();

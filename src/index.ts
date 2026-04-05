@@ -232,7 +232,7 @@ function usage(): string {
 Interactive Mode:
   When started without a command, the script opens an interactive UI.
   If a Jira task is provided, interactive mode starts in the current project scope with Jira context attached.
-  Use Up/Down to select a flow, Enter to confirm launch, h for help, q to exit.
+  Use Up/Down to move in the flow tree, Left/Right to collapse or expand folders, Enter to toggle a folder or run a flow, h for help, q to exit.
 
 Flags:
   --version       Show package version
@@ -761,6 +761,7 @@ function interactiveFlowDefinition(entry: FlowCatalogEntry): InteractiveFlowDefi
     label: entry.id,
     description: flowDescription(entry.id),
     source: entry.source,
+    treePath: [...entry.treePath],
     ...(entry.source === "project-local" ? { sourcePath: entry.absolutePath } : {}),
     phases: flow.phases.map((phase) => ({
       id: phase.id,
