@@ -1,37 +1,53 @@
 # AgentWeaver
 
-`AgentWeaver` is a TypeScript/Node.js CLI for engineering workflows around Jira, GitLab review artifacts, Codex, and Claude.
+`AgentWeaver` is a TypeScript/Node.js CLI for harness engineering around coding agents.
 
-It orchestrates a flow like:
+It brings Jira context, GitLab review artifacts, agent-driven steps via Codex and Claude, an interactive terminal UI, and fully automated workflows into one controlled execution harness.
+
+A typical flow looks like:
 
 `plan -> implement -> run-go-linter-loop -> run-go-tests-loop -> review -> review-fix`
 
-The package is designed to run as an npm CLI and includes an interactive terminal UI built on `neo-blessed`.
+The point is not the specific chain above, but that `AgentWeaver` lets you design, run, and reuse agent harnesses:
+
+- with declarative flows and isolated executors
+- with artifacts that survive restarts and let runs resume from the right point
+- with a TUI for semi-automatic operation and visibility
+- with an `auto` mode for fully automated flows without manual handoff
+
+The package runs as an npm CLI and includes a full-screen TUI built on `neo-blessed`.
 
 ## What It Does
 
-- Fetches a Jira issue by key or browse URL
-- Fetches GitLab merge request review comments into reusable markdown and JSON artifacts
-- Fetches GitLab merge request diffs into reusable markdown and JSON artifacts and can run Claude-based diff review directly from MR
-- Generates workflow artifacts such as design, implementation plan, QA plan, bug analysis, reviews, and summaries
-- Machine-readable JSON artifacts are stored under `.agentweaver/scopes/<scope-key>/.artifacts/` and act as the source of truth between workflow steps; Markdown artifacts remain for human inspection
-- Workflow artifacts are isolated by scope; for Jira-driven flows the scope key defaults to the Jira task key, otherwise it defaults to `<git-branch>--<worktree-hash>`
-- Runs workflow stages like `bug-analyze`, `bug-fix`, `gitlab-diff-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
-- Persists compact `auto` pipeline state on disk so runs can resume without storing large agent outputs
+- Fetches a Jira issue by key or browse URL and turns it into working context for agent steps
+- Fetches GitLab review comments and diffs into reusable Markdown and JSON artifacts
+- Runs agent stages such as `plan`, `implement`, `review`, and `review-fix`, plus verification loops such as `run-go-tests-loop` and `run-go-linter-loop`
+- Stores machine-readable JSON artifacts under `.agentweaver/scopes/<scope-key>/.artifacts/` and uses them as the source of truth between steps
+- Isolates workflows by scope: for Jira-backed runs this is usually the issue key, otherwise it defaults to `<git-branch>--<worktree-hash>`
+- Persists compact `auto` pipeline state on disk so runs can resume without keeping full agent transcripts
 - Uses Docker runtime services for isolated Codex execution and build verification
+
+In short, `AgentWeaver` is for cases where you do not want a one-off LLM script, but a durable engineering harness around agents.
+
+## Why AgentWeaver
+
+- Harness engineering instead of ad-hoc prompting. Flows, executors, prompts, and artifacts are separate layers rather than one mixed script.
+- Agent runtime instead of single-shot calls. You can build sequences where one agent plans, another implements, and the next verifies and fixes.
+- TUI instead of blind shell execution. The terminal UI gives you an operational view of flow state, activity, and artifacts.
+- Full automation instead of manual step switching. `auto` can run end-to-end flows that move through planning, implementation, verification, and review on their own.
 
 ## Architecture
 
-The CLI now uses an executor + node + declarative flow architecture.
+The CLI is built around an `executor + node + declarative flow` architecture that fits harness engineering well.
 
-- `src/index.ts` remains the CLI entrypoint and high-level orchestration layer
-- `src/executors/` contains first-class executors for external actions such as Jira fetch, GitLab review fetch, local Codex, Docker-based build verification, Claude, Claude summaries, and process execution
+- `src/index.ts` remains the CLI entrypoint and top-level orchestration layer
+- `src/executors/` contains first-class executors for external actions such as Jira, GitLab, local Codex, Docker-based build verification, Claude, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
 - `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-diff-review`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
-- project-local flow may additionally be placed in `.agentweaver/.flows/*.json`; they are discovered at runtime from the current workspace
-- `src/runtime/` contains shared runtime services such as command resolution, Docker runtime environment setup, and subprocess execution
+- project-local flows can be added under `.agentweaver/.flows/*.json`; they are discovered from the current workspace at runtime
+- `src/runtime/` contains shared runtime services such as command resolution, Docker runtime setup, and subprocess execution
 
-This keeps command handlers focused on choosing a flow and providing parameters instead of assembling prompts and subprocess wiring inline.
+This keeps command handlers focused on selecting flows and passing parameters instead of assembling prompts, subprocess wiring, and side effects inline.
 
 ## Repository Layout
 
@@ -118,6 +134,12 @@ GIT_ALLOW_PROTOCOL=file:https:ssh
 
 ## Usage
 
+Primary usage modes:
+
+- direct execution of individual stages for controlled agent work
+- interactive TUI mode for selecting flows and observing progress
+- fully automated `auto` mode for end-to-end pipelines
+
 Direct CLI usage:
 
 ```bash
@@ -179,18 +201,28 @@ agentweaver auto-reset DEMO-3288
 Notes:
 
 - `--verbose` streams child process `stdout/stderr` in direct CLI mode
-- task-only commands such as `plan` and `auto` ask for Jira task via interactive `user-input` when it is omitted
-- scope-flexible commands such as `gitlab-diff-review`, `gitlab-review`, `review`, `review-fix`, `run-go-tests-loop`, and `run-go-linter-loop` use the current git branch by default when Jira task is omitted
-- `gitlab-review` and `gitlab-diff-review` ask for GitLab merge request URL via interactive `user-input`
-- `--scope <name>` lets you override the default project scope name
-- the interactive `Activity` pane is intentionally structured: it shows launch separators, prompts, summaries, and short status messages instead of raw Codex/Claude logs by default
+- task-only commands such as `plan` and `auto` ask for a Jira task via interactive `user-input` when it is omitted
+- scope-flexible commands such as `gitlab-diff-review`, `gitlab-review`, `review`, `review-fix`, `run-go-tests-loop`, and `run-go-linter-loop` use the current git branch by default when a Jira task is omitted
+- `gitlab-review` and `gitlab-diff-review` ask for a GitLab merge request URL via interactive `user-input`
+- `--scope <name>` lets you override the default workflow scope name
+- the interactive `Activity` pane intentionally shows structured events, prompts, summaries, and short statuses instead of raw Codex/Claude logs by default
+
+For fully automated flows, the main entrypoint looks like:
+
+```bash
+agentweaver auto DEMO-3288
+agentweaver auto-status DEMO-3288
+agentweaver auto-reset DEMO-3288
+```
+
+This lets you run an agent pipeline as a reproducible process rather than a loose set of manual steps.
 
 ## Interactive TUI
 
-Interactive mode opens a full-screen terminal UI with:
+Interactive mode opens a full-screen TUI that works as an operator console for the agent harness:
 
 - flow list
-- current flow progress
+- current progress for the selected flow
 - activity log
 - task summary pane
 - keyboard navigation between panes
@@ -205,11 +237,11 @@ Current navigation:
 
 Flow discovery and highlighting:
 
-- built-in flow are loaded from the packaged `src/pipeline/flow-specs/`
-- project-local flow are loaded from `.agentweaver/.flows/*.json`
-- project-local flow are shown in a different color in the `Flows` pane
+- built-in flows are loaded from `src/pipeline/flow-specs/`
+- project-local flows are loaded from `.agentweaver/.flows/*.json`
+- project-local flows are shown in a different color in the `Flows` pane
 - when a project-local flow is selected, the description pane also shows its source file path
-- if a local flow conflicts with a built-in flow id or uses unknown node / executor / prompt / schema types, interactive startup fails fast with a validation error
+- if a local flow conflicts with a built-in flow id or uses unknown `node` / `executor` / `prompt` / `schema` types, interactive startup fails fast with a validation error
 
 Activity pane behavior:
 
