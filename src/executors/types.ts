@@ -16,6 +16,7 @@ export type RuntimeServices = {
       verbose?: boolean;
       label?: string;
       printFailureOutput?: boolean;
+      signal?: AbortSignal;
     },
   ) => Promise<string>;
 };

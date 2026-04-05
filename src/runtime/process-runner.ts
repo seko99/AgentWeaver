@@ -2,6 +2,7 @@ import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
 
+import { FlowInterruptedError } from "../errors.js";
 import { getExecutionState, getOutputAdapter, printFramedBlock, printInfo, setCurrentExecutor } from "../tui.js";
 import { shellQuote } from "./command-resolution.js";
 
@@ -47,10 +48,15 @@ export async function runCommand(
     verbose?: boolean;
     label?: string;
     printFailureOutput?: boolean;
+    signal?: AbortSignal;
   } = {},
 ): Promise<string> {
-  const { env, dryRun = false, verbose = false, label, printFailureOutput = true } = options;
+  const { env, dryRun = false, verbose = false, label, printFailureOutput = true, signal } = options;
   const outputAdapter = getOutputAdapter();
+
+  if (signal?.aborted) {
+    throw new FlowInterruptedError();
+  }
 
   if (dryRun) {
     setCurrentExecutor(label ?? path.basename(argv[0] ?? argv.join(" ")));
@@ -65,9 +71,29 @@ export async function runCommand(
         stdio: "inherit",
         env,
       });
+      let abortTimer: NodeJS.Timeout | null = null;
+      const abortHandler = () => {
+        child.kill("SIGTERM");
+        abortTimer = setTimeout(() => {
+          child.kill("SIGKILL");
+        }, 2000);
+      };
+      signal?.addEventListener("abort", abortHandler, { once: true });
       child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(String(code ?? 1)))));
       child.on("error", reject);
+      child.on("close", () => {
+        signal?.removeEventListener("abort", abortHandler);
+        if (abortTimer) {
+          clearTimeout(abortTimer);
+        }
+      });
     }).catch((error) => {
+      if (signal?.aborted) {
+        throw Object.assign(new FlowInterruptedError(), {
+          returnCode: 130,
+          output: "",
+        });
+      }
       const code = Number.parseInt((error as Error).message, 10);
       throw Object.assign(new Error(`Command failed with exit code ${Number.isNaN(code) ? 1 : code}`), {
         returnCode: Number.isNaN(code) ? 1 : code,
@@ -108,12 +134,33 @@ export async function runCommand(
 
   try {
     const exitCode = await new Promise<number>((resolve, reject) => {
+      let abortTimer: NodeJS.Timeout | null = null;
+      const abortHandler = () => {
+        child.kill("SIGTERM");
+        abortTimer = setTimeout(() => {
+          child.kill("SIGKILL");
+        }, 2000);
+      };
+      signal?.addEventListener("abort", abortHandler, { once: true });
       child.on("error", reject);
       child.on("exit", (code) => resolve(code ?? 1));
+      child.on("close", () => {
+        signal?.removeEventListener("abort", abortHandler);
+        if (abortTimer) {
+          clearTimeout(abortTimer);
+        }
+      });
     });
 
     if (outputAdapter.renderAuxiliaryOutput !== false) {
       printInfo(`Закончили работу: ${statusLabel} (${formatDuration(Date.now() - startedAt)})`);
+    }
+
+    if (signal?.aborted) {
+      throw Object.assign(new FlowInterruptedError(), {
+        returnCode: 130,
+        output,
+      });
     }
 
     if (exitCode !== 0) {
