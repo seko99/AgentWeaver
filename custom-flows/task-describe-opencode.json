@@ -1,0 +1,148 @@
+{
+  "kind": "task-describe-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "task_describe",
+      "steps": [
+        {
+          "id": "fetch_jira",
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": {
+              "ref": "params.jiraApiUrl"
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
+            }
+          ]
+        },
+        {
+          "id": "run_codex_task_describe",
+          "node": "opencode-prompt",
+          "prompt": {
+            "templateRef": "task-describe",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "jira_description_file": {
+                "artifact": {
+                  "kind": "jira-description-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "jira_description_json_file": {
+                "artifact": {
+                  "kind": "jira-description-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              }
+            },
+            "extraPrompt": {
+              "ref": "params.extraPrompt"
+            },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "const": "Running OpenCode task description mode"
+            },
+            "model": {
+              "const": "minimax-coding-plan/MiniMax-M2.7"
+            },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "jira-description-file",
+                    "taskKey": {
+                      "ref": "params.taskKey"
+                    }
+                  }
+                },
+                {
+                  "artifact": {
+                    "kind": "jira-description-json-file",
+                    "taskKey": {
+                      "ref": "params.taskKey"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "path": {
+                "artifact": {
+                  "kind": "jira-description-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "message": "Task describe mode did not produce the Jira description artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": {
+                "not": {
+                  "ref": "context.dryRun"
+                }
+              },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "jira-description-json-file",
+                      "taskKey": {
+                        "ref": "params.taskKey"
+                      }
+                    }
+                  },
+                  "schemaId": "jira-description/v1"
+                }
+              ],
+              "message": "Task describe mode produced invalid structured artifacts."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

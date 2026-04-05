@@ -922,6 +922,8 @@ async function runDeclarativeFlowBySpecFile(
 }
 
 function defaultDeclarativeFlowParams(config: Config, forceRefreshSummary = false): Record<string, unknown> {
+  const iteration = nextReviewIterationForTask(config.taskKey);
+  const latestIteration = latestReviewReplyIteration(config.taskKey);
   return {
     taskKey: config.taskKey,
     jiraRef: config.jiraRef,
@@ -935,6 +937,9 @@ function defaultDeclarativeFlowParams(config: Config, forceRefreshSummary = fals
     runGoCoverageScript: config.runGoCoverageScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
+    iteration,
+    latestIteration,
+    ...(latestIteration !== null ? { reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration) } : {}),
     forceRefresh: forceRefreshSummary,
   };
 }
