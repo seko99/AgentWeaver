@@ -60,8 +60,8 @@ export function loadDeclarativeFlow(flow: DeclarativeFlowRef | string): LoadedDe
 
 export function resolveNamedDeclarativeFlowRef(fileName: string, cwd: string): DeclarativeFlowRef {
   const projectMatches = listProjectFlowSpecFiles(cwd).filter((candidate) => path.basename(candidate) === fileName);
-  const builtInExists = listBuiltInFlowSpecFiles().includes(fileName);
-  if (projectMatches.length > 0 && builtInExists) {
+  const builtInMatches = listBuiltInFlowSpecFiles().filter((candidate) => path.basename(candidate) === fileName);
+  if (projectMatches.length > 0 && builtInMatches.length > 0) {
     throw new Error(
       `Ambiguous nested flow '${fileName}': both built-in and project-local specs exist in ${projectFlowSpecsDir(cwd)}.`,
     );
@@ -69,11 +69,14 @@ export function resolveNamedDeclarativeFlowRef(fileName: string, cwd: string): D
   if (projectMatches.length > 1) {
     throw new Error(`Ambiguous project-local flow '${fileName}' in ${projectFlowSpecsDir(cwd)}.`);
   }
+  if (builtInMatches.length > 1) {
+    throw new Error(`Ambiguous built-in flow '${fileName}'. Use unique nested flow file names.`);
+  }
   if (projectMatches[0]) {
     return { source: "project-local", filePath: projectMatches[0] };
   }
-  if (builtInExists) {
-    return { source: "built-in", fileName };
+  if (builtInMatches[0]) {
+    return { source: "built-in", fileName: builtInMatches[0] };
   }
   throw new Error(`Nested flow '${fileName}' was not found.`);
 }

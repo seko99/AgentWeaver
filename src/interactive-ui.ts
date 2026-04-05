@@ -1918,10 +1918,10 @@ export class InteractiveUi {
     const indent = "  ".repeat(item.depth);
     if (item.kind === "folder") {
       const expanded = this.expandedFlowFolders.has(item.key);
-      const color = item.pathSegments[0] === "custom" ? "yellow" : "cyan";
+      const color = "cyan";
       return `${indent}{${color}-fg}${expanded ? "▾" : "▸"} ${item.name}{/${color}-fg}`;
     }
-    const color = item.flow.source === "project-local" ? "yellow" : "white";
+    const color = "white";
     return `${indent}{${color}-fg}• ${item.name}{/${color}-fg}`;
   }
 
