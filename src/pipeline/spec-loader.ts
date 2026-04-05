@@ -32,9 +32,8 @@ export function listBuiltInFlowSpecFiles(): string[] {
   if (!existsSync(BUILT_IN_FLOW_SPECS_DIR)) {
     return [];
   }
-  return readdirSync(BUILT_IN_FLOW_SPECS_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => entry.name)
+  return collectJsonFilesRecursively(BUILT_IN_FLOW_SPECS_DIR)
+    .map((filePath) => path.relative(BUILT_IN_FLOW_SPECS_DIR, filePath))
     .sort((left, right) => left.localeCompare(right));
 }
 
