@@ -9,6 +9,7 @@ import { fileCheckNode } from "./nodes/file-check-node.js";
 import { flowRunNode } from "./nodes/flow-run-node.js";
 import { gitlabReviewArtifactsNode } from "./nodes/gitlab-review-artifacts-node.js";
 import { jiraFetchNode } from "./nodes/jira-fetch-node.js";
+import { jiraContextNode } from "./nodes/jira-context-node.js";
 import { jiraIssueCheckNode } from "./nodes/jira-issue-check-node.js";
 import { localScriptCheckNode } from "./nodes/local-script-check-node.js";
 import { opencodePromptNode } from "./nodes/opencode-prompt-node.js";
@@ -34,6 +35,7 @@ export type NodeKind =
   | "file-check"
   | "flow-run"
   | "gitlab-review-artifacts"
+  | "jira-context"
   | "jira-fetch"
   | "jira-issue-check"
   | "local-script-check"
@@ -76,6 +78,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "file-check": fileCheckNode as unknown as AnyNodeDefinition,
   "flow-run": flowRunNode as unknown as AnyNodeDefinition,
   "gitlab-review-artifacts": gitlabReviewArtifactsNode as unknown as AnyNodeDefinition,
+  "jira-context": jiraContextNode as unknown as AnyNodeDefinition,
   "jira-fetch": jiraFetchNode as unknown as AnyNodeDefinition,
   "jira-issue-check": jiraIssueCheckNode as unknown as AnyNodeDefinition,
   "local-script-check": localScriptCheckNode as unknown as AnyNodeDefinition,
@@ -153,6 +156,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["gitlabReviewJsonFile", "reviewFile", "reviewJsonFile"],
+  },
+  "jira-context": {
+    kind: "jira-context",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["jiraRef"],
   },
   "jira-fetch": {
     kind: "jira-fetch",

@@ -66,9 +66,37 @@ function buildReviewFixPromptSuffix(
   return { promptSuffix, summaryText };
 }
 
+function buildTaskDescribePromptSuffix(
+  params: UserInputNodeParams,
+  values: UserInputFormValues,
+): { promptSuffix: string; summaryText: string } {
+  const jiraRef = typeof values.jira_ref === "string" ? values.jira_ref.trim() : "";
+  const taskDescription = typeof values.task_description === "string" ? values.task_description.trim() : "";
+
+  if (jiraRef) {
+    return {
+      promptSuffix: "",
+      summaryText: `Источник задачи: Jira\nJira: ${jiraRef}`,
+    };
+  }
+
+  return {
+    promptSuffix: [
+      "Используй пользовательское описание задачи как source of truth.",
+      `Файл пользовательского ввода: ${params.outputFile}`,
+      `Описание задачи:\n${taskDescription}`,
+    ].join("\n\n"),
+    summaryText: `Источник задачи: user-input\n\n${taskDescription}`,
+  };
+}
+
 function buildPromptSuffix(params: UserInputNodeParams, values: UserInputFormValues): { promptSuffix: string; summaryText: string } {
   if (params.formId === "review-fix-selection") {
     return buildReviewFixPromptSuffix(params, values);
+  }
+
+  if (params.formId === "task-describe-source-input") {
+    return buildTaskDescribePromptSuffix(params, values);
   }
 
   if (params.fields.length === 0) {
