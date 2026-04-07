@@ -221,7 +221,7 @@ function usage(): string {
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
-  agentweaver task-describe [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver task-describe [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver implement [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review-fix [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
@@ -262,7 +262,7 @@ Optional environment variables:
   CLAUDE_MODEL
 
 Notes:
-  - Task-only flows will ask for Jira task via user-input when it is not passed as an argument.
+  - Jira-backed task flows will ask for Jira task via user-input when it is not passed as an argument. task-describe can also work from a manual task description without Jira.
   - All flow state and artifacts are stored in the current project scope by default.
   - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.`;
 }
@@ -633,7 +633,6 @@ function commandRequiresTask(command: string): boolean {
     command === "bug-analyze" ||
     command === "bug-fix" ||
     command === "mr-description" ||
-    command === "task-describe" ||
     command === "auto" ||
     command === "auto-status" ||
     command === "auto-reset"
@@ -644,6 +643,7 @@ function commandSupportsProjectScope(command: string): boolean {
   return (
     command === "gitlab-diff-review" ||
     command === "gitlab-review" ||
+    command === "task-describe" ||
     command === "implement" ||
     command === "review" ||
     command === "review-fix" ||
@@ -742,7 +742,7 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   "mr-description":
     "Готовит краткое intent-описание для merge request на основе задачи и текущих изменений.",
   plan: "Загружает задачу из Jira и создаёт дизайн, план реализации и QA-план в structured JSON и markdown.",
-  "task-describe": "Строит короткое резюме задачи на основе Jira-артефакта для быстрого ознакомления.",
+  "task-describe": "Строит короткое описание задачи либо по Jira, либо по краткому user-input без Jira.",
   implement: "Реализует задачу по утверждённым design/plan артефактам и при необходимости запускает post-verify сборки.",
   review:
     "Запускает Claude-код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания через Codex.",
@@ -1232,7 +1232,6 @@ async function executeCommand(
   }
 
   if (config.command === "task-describe") {
-    requireJiraConfig(config);
     await runDeclarativeFlowBySpecFile("task-describe.json", config, {
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,

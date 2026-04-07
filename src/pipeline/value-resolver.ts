@@ -41,6 +41,7 @@ import {
   runGoLinterResultJsonFile,
   runGoTestsResultJsonFile,
   taskSummaryFile,
+  taskDescribeInputJsonFile,
   taskSummaryJsonFile,
 } from "../artifacts.js";
 import { TaskRunnerError } from "../errors.js";
@@ -237,6 +238,8 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return taskSummaryFile(taskKey);
     case "task-summary-json-file":
       return taskSummaryJsonFile(taskKey);
+    case "task-describe-input-json-file":
+      return taskDescribeInputJsonFile(taskKey);
   }
 }
 
