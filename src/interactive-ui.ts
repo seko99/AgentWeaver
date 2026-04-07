@@ -917,20 +917,20 @@ export class InteractiveUi {
     return this.activeFormSession.form.fields[this.activeFormSession.currentFieldIndex] ?? null;
   }
 
-  private renderTextInputValue(value: string, placeholder?: string): string[] {
-    const rawText = value || placeholder || "Введите текст";
-    const frameWidth = Math.max(36, rawText.length + 6);
+  private renderTextInputValue(value: string, placeholder?: string, rows = 1): string[] {
+    const rawLines = (value || placeholder || "Введите текст").split("\n");
+    const visibleLines = rawLines.slice(0, Math.max(1, rows));
+    const contentWidth = visibleLines.reduce((max, line) => Math.max(max, line.length), 0);
+    const frameWidth = Math.max(36, contentWidth + 6);
     const innerWidth = Math.max(32, frameWidth - 4);
-    const visibleText = rawText.length > innerWidth - 2 ? `${rawText.slice(0, innerWidth - 5)}...` : rawText;
-    const padded = value
-      ? `{white-fg}${visibleText.padEnd(innerWidth - 2, " ")}{/white-fg}`
-      : `{gray-fg}${visibleText.padEnd(innerWidth - 2, " ")}{/gray-fg}`;
+    const renderedRows = Array.from({ length: Math.max(1, rows) }, (_, index) => {
+      const rawLine = visibleLines[index] ?? "";
+      const visibleText = rawLine.length > innerWidth - 2 ? `${rawLine.slice(0, innerWidth - 5)}...` : rawLine;
+      const color = value ? "white-fg" : "gray-fg";
+      return `{cyan-fg}│{/cyan-fg}{black-bg} ${index === 0 ? "{green-fg}>{/green-fg}" : " "} {${color}}${visibleText.padEnd(innerWidth - 2, " ")}{/${color}} {/black-bg}{cyan-fg}│{/cyan-fg}`;
+    });
 
-    return [
-      `{cyan-fg}┌${"─".repeat(frameWidth - 2)}┐{/cyan-fg}`,
-      `{cyan-fg}│{/cyan-fg}{black-bg} {green-fg}>{/green-fg} ${padded} {/black-bg}{cyan-fg}│{/cyan-fg}`,
-      `{cyan-fg}└${"─".repeat(frameWidth - 2)}┘{/cyan-fg}`,
-    ];
+    return [`{cyan-fg}┌${"─".repeat(frameWidth - 2)}┐{/cyan-fg}`, ...renderedRows, `{cyan-fg}└${"─".repeat(frameWidth - 2)}┘{/cyan-fg}`];
   }
 
   private renderActiveForm(): void {
@@ -968,10 +968,10 @@ export class InteractiveUi {
       lines.push("Enter/Tab: next field");
     } else if (field.type === "text") {
       const current = String(session.values[field.id] ?? "");
-      lines.push(...this.renderTextInputValue(current, field.placeholder));
+      lines.push(...this.renderTextInputValue(current, field.placeholder, field.multiline ? Math.max(1, field.rows ?? 3) : 1));
       lines.push("");
-      lines.push("Type text, Backspace: delete");
-      lines.push("Enter/Tab: next field");
+      lines.push(field.multiline ? "Type text, Enter: new line, Backspace: delete" : "Type text, Backspace: delete");
+      lines.push("Tab: next field");
     } else {
       const currentOptionIndex = Math.min(session.currentOptionIndex, Math.max(0, field.options.length - 1));
       session.currentOptionIndex = currentOptionIndex;
@@ -1068,7 +1068,7 @@ export class InteractiveUi {
     }
   }
 
-  private appendActiveFormText(ch: string, key: { name?: string; ctrl?: boolean; meta?: boolean }): void {
+  private appendActiveFormText(ch: string, key: { name?: string; ctrl?: boolean; meta?: boolean }, appendNewline = false): void {
     const session = this.activeFormSession;
     const field = this.currentFormField();
     if (!session || !field || field.type !== "text") {
@@ -1077,6 +1077,11 @@ export class InteractiveUi {
     const current = String(session.values[field.id] ?? "");
     if (key.name === "backspace") {
       session.values[field.id] = current.slice(0, -1);
+      this.renderActiveForm();
+      return;
+    }
+    if (appendNewline) {
+      session.values[field.id] = `${current}\n`;
       this.renderActiveForm();
       return;
     }
@@ -1158,7 +1163,11 @@ export class InteractiveUi {
 
     if (field.type === "text") {
       if (key.name === "enter") {
-        this.moveActiveFormField(1);
+        if (field.multiline) {
+          this.appendActiveFormText(ch, key, true);
+        } else {
+          this.moveActiveFormField(1);
+        }
         return;
       }
       this.appendActiveFormText(ch, key);

@@ -155,6 +155,10 @@ export function jiraDescriptionJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `jira-${taskKey}-description.json`);
 }
 
+export function taskDescribeInputJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `task-describe-input-${taskKey}.json`);
+}
+
 export function mrDescriptionFile(taskKey: string): string {
   return taskWorkspaceFile(taskKey, `mr-description-${taskKey}.md`);
 }

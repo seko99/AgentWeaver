@@ -18,7 +18,7 @@ export type UserInputFieldDefinition =
       required?: boolean;
       default?: boolean;
     }
-  | {
+    | {
       id: string;
       type: "text";
       label: string;
@@ -26,6 +26,7 @@ export type UserInputFieldDefinition =
       required?: boolean;
       default?: string;
       multiline?: boolean;
+      rows?: number;
       placeholder?: string;
     }
   | {
@@ -142,6 +143,17 @@ export function validateUserInputValues(form: UserInputFormDefinition, values: U
       throw new TaskRunnerError("Select at least one finding or enable 'apply all'.");
     }
   }
+
+  if (form.formId === "task-describe-source-input") {
+    const jiraRef = typeof values.jira_ref === "string" ? normalizeText(values.jira_ref) : "";
+    const taskDescription = typeof values.task_description === "string" ? normalizeText(values.task_description) : "";
+    if (!jiraRef && !taskDescription) {
+      throw new TaskRunnerError("Provide either Jira URL/key or a short task description.");
+    }
+    if (jiraRef && taskDescription) {
+      throw new TaskRunnerError("Provide either Jira URL/key or a short task description, not both.");
+    }
+  }
 }
 
 function parseBoolean(value: string): boolean | null {
@@ -200,8 +212,25 @@ export async function requestUserInputInTerminal(form: UserInputFormDefinition):
 
       if (field.type === "text") {
         const current = String(values[field.id] ?? "");
-        const answer = await rl.question(`${field.label}${current ? ` (${current})` : ""}: `);
-        values[field.id] = answer.trim() ? answer : current;
+        if (field.multiline) {
+          process.stdout.write(`${field.label}${current ? " (leave empty to keep current value)" : ""}:\n`);
+          if (field.help?.trim()) {
+            process.stdout.write(`${field.help.trim()}\n`);
+          }
+          process.stdout.write("Finish input with an empty line.\n");
+          const lines: string[] = [];
+          while (true) {
+            const line = await rl.question(lines.length === 0 ? "> " : "... ");
+            if (!line.trim()) {
+              break;
+            }
+            lines.push(line);
+          }
+          values[field.id] = lines.length > 0 ? lines.join("\n") : current;
+        } else {
+          const answer = await rl.question(`${field.label}${current ? ` (${current})` : ""}: `);
+          values[field.id] = answer.trim() ? answer : current;
+        }
         continue;
       }
 

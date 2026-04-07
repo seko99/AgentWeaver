@@ -44,6 +44,7 @@ export const ARTIFACT_REF_KINDS = [
   "review-summary-file",
   "task-summary-file",
   "task-summary-json-file",
+  "task-describe-input-json-file",
 ] as const;
 
 export const ARTIFACT_LIST_REF_KINDS = ["bug-analyze-artifacts", "plan-artifacts"] as const;
