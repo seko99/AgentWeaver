@@ -46,7 +46,9 @@ export const reviewFindingsFormNode: PipelineNodeDefinition<ReviewFindingsFormNo
         disposition: typeof response.disposition === "string" ? response.disposition.trim() : "",
         action: typeof response.action === "string" ? response.action.trim() : "",
       }))
-      .filter((response) => response.findingTitle.length > 0);
+      .filter(
+        (response) => response.findingTitle.length > 0 && response.disposition.toLowerCase() !== "resolved",
+      );
 
     const fields: UserInputFieldDefinition[] = [
       {
