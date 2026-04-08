@@ -1,68 +1,22 @@
 import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { TaskRunnerError } from "./errors.js";
+import {
+  STRUCTURED_ARTIFACT_SCHEMA_IDS,
+  getStructuredArtifactSchema,
+  type StructuredArtifactSchemaId,
+  type StructuredArtifactSchemaNode,
+} from "./structured-artifact-schema-registry.js";
 
-export const STRUCTURED_ARTIFACT_SCHEMA_IDS = [
-  "bug-analysis/v1",
-  "bug-fix-design/v1",
-  "bug-fix-plan/v1",
-  "gitlab-mr-diff/v1",
-  "gitlab-review/v1",
-  "implementation-design/v1",
-  "implementation-plan/v1",
-  "jira-description/v1",
-  "mr-description/v1",
-  "planning-questions/v1",
-  "qa-plan/v1",
-  "review-findings/v1",
-  "review-fix-report/v1",
-  "review-reply/v1",
-  "task-summary/v1",
-  "user-input/v1",
-] as const;
-
-export type StructuredArtifactSchemaId = (typeof STRUCTURED_ARTIFACT_SCHEMA_IDS)[number];
+export { STRUCTURED_ARTIFACT_SCHEMA_IDS };
+export type { StructuredArtifactSchemaId } from "./structured-artifact-schema-registry.js";
 
 type ValidationIssue = string;
-
-type StructuredArtifactSchemaNode =
-  | {
-      anyOf: StructuredArtifactSchemaNode[];
-      type?: never;
-    }
-  | {
-      type: "string";
-      nonEmpty?: boolean;
-      anyOf?: never;
-    }
-  | {
-      type: "boolean" | "number" | "null";
-      anyOf?: never;
-    }
-  | {
-      type: "array";
-      items: StructuredArtifactSchemaNode;
-      minItems?: number;
-      anyOf?: never;
-    }
-  | {
-      type: "object";
-      properties?: Record<string, StructuredArtifactSchemaNode>;
-      required?: string[];
-      anyOf?: never;
-    };
-
-type StructuredArtifactSchemaRegistry = Record<StructuredArtifactSchemaId, StructuredArtifactSchemaNode>;
 
 export type StructuredArtifactCheck = {
   path: string;
   schemaId: StructuredArtifactSchemaId;
 };
-
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const SCHEMA_REGISTRY_PATH = path.join(MODULE_DIR, "structured-artifact-schemas.json");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -149,27 +103,6 @@ function validateNode(value: unknown, schema: StructuredArtifactSchemaNode, curr
   }
 }
 
-function loadSchemaRegistry(): StructuredArtifactSchemaRegistry {
-  if (!existsSync(SCHEMA_REGISTRY_PATH)) {
-    throw new TaskRunnerError(`Structured artifact schema registry not found: ${SCHEMA_REGISTRY_PATH}`);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(SCHEMA_REGISTRY_PATH, "utf8"));
-  } catch (error) {
-    throw new TaskRunnerError(`Failed to parse structured artifact schema registry: ${(error as Error).message}`);
-  }
-
-  if (!isRecord(parsed)) {
-    throw new TaskRunnerError(`Structured artifact schema registry ${SCHEMA_REGISTRY_PATH} must be a JSON object.`);
-  }
-
-  return parsed as StructuredArtifactSchemaRegistry;
-}
-
-const schemas = loadSchemaRegistry();
-
 export function validateStructuredArtifact(path: string, schemaId: StructuredArtifactSchemaId): void {
   if (!existsSync(path)) {
     throw new TaskRunnerError(`Structured artifact file not found: ${path}`);
@@ -182,10 +115,7 @@ export function validateStructuredArtifact(path: string, schemaId: StructuredArt
     throw new TaskRunnerError(`Structured artifact ${path} is not valid JSON: ${(error as Error).message}`);
   }
 
-  const schema = schemas[schemaId];
-  if (!schema) {
-    throw new TaskRunnerError(`Structured artifact schema is not registered: ${schemaId}`);
-  }
+  const schema = getStructuredArtifactSchema(schemaId);
 
   const issues = validateNode(parsed, schema, path);
   if (issues.length > 0) {
