@@ -933,6 +933,126 @@ export class InteractiveUi {
     return [`{cyan-fg}┌${"─".repeat(frameWidth - 2)}┐{/cyan-fg}`, ...renderedRows, `{cyan-fg}└${"─".repeat(frameWidth - 2)}┘{/cyan-fg}`];
   }
 
+  private formModalInnerHeight(): number {
+    const rawHeight = typeof this.formModal.height === "number" ? this.formModal.height : this.formModal?.lpos?.yi
+      ? this.formModal.lpos.yl - this.formModal.lpos.yi + 1
+      : 0;
+    const paddingTop = Number(this.formModal.padding?.top ?? 0);
+    const paddingBottom = Number(this.formModal.padding?.bottom ?? 0);
+    return Math.max(6, rawHeight - 2 - paddingTop - paddingBottom);
+  }
+
+  private formModalInnerWidth(): number {
+    const rawWidth = typeof this.formModal.width === "number" ? this.formModal.width : this.formModal?.lpos?.xi
+      ? this.formModal.lpos.xl - this.formModal.lpos.xi + 1
+      : 0;
+    const paddingLeft = Number(this.formModal.padding?.left ?? 0);
+    const paddingRight = Number(this.formModal.padding?.right ?? 0);
+    return Math.max(24, rawWidth - 2 - paddingLeft - paddingRight);
+  }
+
+  private wrapFormText(text: string, width: number): string[] {
+    const normalized = text.trim();
+    if (!normalized) {
+      return [""];
+    }
+
+    const wrapped: string[] = [];
+    for (const paragraph of normalized.split("\n")) {
+      if (!paragraph.trim()) {
+        wrapped.push("");
+        continue;
+      }
+
+      let remaining = paragraph.trim();
+      while (remaining.length > width) {
+        let splitAt = remaining.lastIndexOf(" ", width);
+        if (splitAt <= 0) {
+          splitAt = width;
+        }
+        wrapped.push(remaining.slice(0, splitAt).trimEnd());
+        remaining = remaining.slice(splitAt).trimStart();
+      }
+      wrapped.push(remaining);
+    }
+
+    return wrapped.length > 0 ? wrapped : [""];
+  }
+
+  private renderSelectableFieldWindow(
+    field: UserInputFieldDefinition & { type: "single-select" | "multi-select" },
+    value: UserInputFormValues[string] | undefined,
+    currentOptionIndex: number,
+    availableLines: number,
+  ): string[] {
+    const contentWidth = this.formModalInnerWidth();
+    const firstLineWidth = Math.max(12, contentWidth - 6);
+    const continuationWidth = Math.max(8, contentWidth - 6);
+    const descriptionWidth = Math.max(8, contentWidth - 4);
+
+    const renderedOptions = field.options.map((option, index) => {
+      const isCursor = index === currentOptionIndex;
+      const isSelected =
+        field.type === "single-select"
+          ? value === option.value
+          : Array.isArray(value) && value.includes(option.value);
+      const cursor = isCursor ? "{cyan-fg}>{/cyan-fg}" : " ";
+      const marker = isSelected ? "[x]" : "[ ]";
+      const labelLines = this.wrapFormText(option.label, firstLineWidth);
+      const itemLines = [`${cursor} ${marker} ${labelLines[0] ?? ""}`];
+
+      for (const continuation of labelLines.slice(1)) {
+        itemLines.push(`      ${continuation.slice(0, continuationWidth)}`);
+      }
+
+      if (option.description?.trim()) {
+        for (const descriptionLine of this.wrapFormText(option.description, descriptionWidth)) {
+          itemLines.push(`    {gray-fg}${descriptionLine}{/gray-fg}`);
+        }
+      }
+
+      return itemLines;
+    });
+
+    if (renderedOptions.length === 0) {
+      return ["{gray-fg}Нет доступных вариантов.{/gray-fg}"];
+    }
+
+    let startIndex = 0;
+    let selectedStartLine = 0;
+    for (let index = 0; index < currentOptionIndex; index += 1) {
+      selectedStartLine += renderedOptions[index]?.length ?? 0;
+    }
+
+    let visibleLines = 0;
+    for (let index = 0; index < renderedOptions.length; index += 1) {
+      const itemHeight = renderedOptions[index]?.length ?? 0;
+      if (index < currentOptionIndex && selectedStartLine + itemHeight > availableLines) {
+        startIndex = index + 1;
+        selectedStartLine -= itemHeight;
+      }
+    }
+
+    const output: string[] = [];
+    for (let index = startIndex; index < renderedOptions.length; index += 1) {
+      const itemLines = renderedOptions[index] ?? [];
+      if (output.length > 0 && output.length + itemLines.length > availableLines) {
+        break;
+      }
+      if (output.length === 0 && itemLines.length > availableLines) {
+        output.push(...itemLines.slice(0, availableLines));
+        break;
+      }
+      output.push(...itemLines);
+      visibleLines += itemLines.length;
+      if (visibleLines >= availableLines) {
+        break;
+      }
+    }
+
+    return output;
+  }
+
   private renderActiveForm(): void {
     if (!this.activeFormSession) {
       this.formModal.hide();
@@ -947,18 +1067,21 @@ export class InteractiveUi {
       return;
     }
 
-    const lines: string[] = [`{bold}${session.form.title}{/bold}`];
+    const headerLines: string[] = [`{bold}${session.form.title}{/bold}`];
     if (session.form.description?.trim()) {
-      lines.push("");
-      lines.push(session.form.description.trim());
+      headerLines.push("");
+      headerLines.push(session.form.description.trim());
     }
-    lines.push("");
-    lines.push(`Field ${session.currentFieldIndex + 1}/${session.form.fields.length}`);
-    lines.push(`{yellow-fg}${field.label}{/yellow-fg}`);
+    headerLines.push("");
+    headerLines.push(`Field ${session.currentFieldIndex + 1}/${session.form.fields.length}`);
+    headerLines.push(`{yellow-fg}${field.label}{/yellow-fg}`);
     if (field.help?.trim()) {
-      lines.push(field.help.trim());
+      headerLines.push(field.help.trim());
     }
-    lines.push("");
+    headerLines.push("");
+
+    const footerLines: string[] = ["", "{green-fg}Ctrl+S{/green-fg}: submit", "{magenta-fg}Shift+Tab{/magenta-fg}: previous field", "{red-fg}Esc{/red-fg}: cancel"];
+    const lines = [...headerLines];
 
     if (field.type === "boolean") {
       const current = session.values[field.id] === true;
@@ -975,32 +1098,18 @@ export class InteractiveUi {
     } else {
       const currentOptionIndex = Math.min(session.currentOptionIndex, Math.max(0, field.options.length - 1));
       session.currentOptionIndex = currentOptionIndex;
-      field.options.forEach((option, index) => {
-        const isCursor = index === currentOptionIndex;
-        const value = session.values[field.id];
-        const isSelected =
-          field.type === "single-select"
-            ? value === option.value
-            : Array.isArray(value) && value.includes(option.value);
-        const cursor = isCursor ? "{cyan-fg}>{/cyan-fg}" : " ";
-        const marker = isSelected ? "[x]" : "[ ]";
-        lines.push(`${cursor} ${marker} ${option.label}`);
-        if (option.description?.trim()) {
-          lines.push(`    {gray-fg}${option.description.trim()}{/gray-fg}`);
-        }
-      });
+      const availableLines = Math.max(3, this.formModalInnerHeight() - headerLines.length - footerLines.length - 3);
+      lines.push(...this.renderSelectableFieldWindow(field, session.values[field.id], currentOptionIndex, availableLines));
       lines.push("");
       lines.push("Up/Down: move");
       lines.push("Space: select/toggle");
       lines.push("Enter/Tab: next field");
     }
 
-    lines.push("");
-    lines.push("{green-fg}Ctrl+S{/green-fg}: submit");
-    lines.push("{magenta-fg}Shift+Tab{/magenta-fg}: previous field");
-    lines.push("{red-fg}Esc{/red-fg}: cancel");
+    lines.push(...footerLines);
 
     this.formModal.setContent(lines.join("\n"));
+    this.formModal.setScroll(0);
     this.formModal.show();
     this.formModal.setFront();
     this.formModal.focus();
