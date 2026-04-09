@@ -10,6 +10,7 @@ export type FlowRunState = {
   schemaVersion: number;
   flowId: string;
   scopeKey: string;
+  jiraRef?: string | null;
   status: "pending" | "running" | "blocked" | "completed";
   currentStep?: string | null;
   updatedAt: string;
@@ -46,11 +47,17 @@ export function stripExecutionStatePayload(executionState: FlowExecutionState): 
   };
 }
 
-export function createFlowRunState(scopeKey: string, flowId: string, executionState: FlowExecutionState): FlowRunState {
+export function createFlowRunState(
+  scopeKey: string,
+  flowId: string,
+  executionState: FlowExecutionState,
+  jiraRef?: string | null,
+): FlowRunState {
   return {
     schemaVersion: FLOW_STATE_SCHEMA_VERSION,
     flowId,
     scopeKey,
+    ...(jiraRef ? { jiraRef } : {}),
     status: "pending",
     currentStep: null,
     updatedAt: nowIso8601(),
