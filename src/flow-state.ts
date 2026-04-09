@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 import { ensureScopeWorkspaceDir, flowStateFile } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
+import type { ResolvedLaunchProfile } from "./pipeline/launch-profile-config.js";
 import type { ExpandedPhaseExecutionState, ExpandedStepExecutionState, FlowExecutionState } from "./pipeline/spec-types.js";
 
 const FLOW_STATE_SCHEMA_VERSION = 1;
@@ -15,6 +16,7 @@ export type FlowRunState = {
   currentStep?: string | null;
   updatedAt: string;
   lastError?: { step?: string; returnCode?: number; message?: string } | null;
+  launchProfile?: ResolvedLaunchProfile;
   executionState: FlowExecutionState;
 };
 
@@ -52,6 +54,7 @@ export function createFlowRunState(
   flowId: string,
   executionState: FlowExecutionState,
   jiraRef?: string | null,
+  launchProfile?: ResolvedLaunchProfile,
 ): FlowRunState {
   return {
     schemaVersion: FLOW_STATE_SCHEMA_VERSION,
@@ -61,6 +64,7 @@ export function createFlowRunState(
     status: "pending",
     currentStep: null,
     updatedAt: nowIso8601(),
+    ...(launchProfile ? { launchProfile } : {}),
     executionState: stripExecutionStatePayload(executionState),
   };
 }
