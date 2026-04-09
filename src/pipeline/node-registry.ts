@@ -12,6 +12,7 @@ import { jiraFetchNode } from "./nodes/jira-fetch-node.js";
 import { jiraContextNode } from "./nodes/jira-context-node.js";
 import { jiraIssueCheckNode } from "./nodes/jira-issue-check-node.js";
 import { localScriptCheckNode } from "./nodes/local-script-check-node.js";
+import { llmPromptNode } from "./nodes/llm-prompt-node.js";
 import { opencodePromptNode } from "./nodes/opencode-prompt-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.js";
@@ -39,6 +40,7 @@ export type NodeKind =
   | "jira-fetch"
   | "jira-issue-check"
   | "local-script-check"
+  | "llm-prompt"
   | "opencode-prompt"
   | "plan-codex"
   | "planning-questions-form"
@@ -82,6 +84,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "jira-fetch": jiraFetchNode as unknown as AnyNodeDefinition,
   "jira-issue-check": jiraIssueCheckNode as unknown as AnyNodeDefinition,
   "local-script-check": localScriptCheckNode as unknown as AnyNodeDefinition,
+  "llm-prompt": llmPromptNode as unknown as AnyNodeDefinition,
   "opencode-prompt": opencodePromptNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
   "planning-questions-form": planningQuestionsFormNode as unknown as AnyNodeDefinition,
@@ -177,6 +180,13 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     requiredParams: ["jiraTaskFile", "allowedIssueTypes"],
   },
   "local-script-check": { kind: "local-script-check", version: 1, prompt: "forbidden", requiredParams: ["argv", "labelText"] },
+  "llm-prompt": {
+    kind: "llm-prompt",
+    version: 1,
+    prompt: "required",
+    requiredParams: ["labelText", "executor"],
+    executors: ["codex-local", "opencode", "claude"],
+  },
   "opencode-prompt": { kind: "opencode-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },
   "plan-codex": {
     kind: "plan-codex",
