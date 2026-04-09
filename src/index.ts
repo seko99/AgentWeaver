@@ -46,12 +46,15 @@ import {
 import { requireJiraTaskFile } from "./jira.js";
 import { validateStructuredArtifacts } from "./structured-artifacts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
+import { runNodeChecks } from "./pipeline/checks.js";
 import { createPipelineContext } from "./pipeline/context.js";
 import { loadAutoFlow } from "./pipeline/auto-flow.js";
 import { loadDeclarativeFlow, type DeclarativeFlowRef } from "./pipeline/declarative-flows.js";
 import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
 import { findCatalogEntry, isBuiltInCommandFlowId, loadInteractiveFlowCatalog, toDeclarativeFlowRef, type FlowCatalogEntry } from "./pipeline/flow-catalog.js";
-import type { FlowExecutionState } from "./pipeline/spec-types.js";
+import type { ExpandedPhaseExecutionState, ExpandedPhaseSpec, ExpandedStepSpec, FlowExecutionState } from "./pipeline/spec-types.js";
+import type { NodeCheckSpec, PipelineContext } from "./pipeline/types.js";
+import { evaluateCondition, resolveValue, type DeclarativeResolverContext } from "./pipeline/value-resolver.js";
 import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
 import { agentweaverHome, defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
 import { runCommand } from "./runtime/process-runner.js";
@@ -510,14 +513,152 @@ type FlowResumeLookup = {
   details?: string;
 };
 
+function buildResolverContext(
+  pipelineContext: PipelineContext,
+  flowParams: Record<string, unknown>,
+  flowConstants: Record<string, unknown>,
+  repeatVars: Record<string, unknown>,
+  executionState: FlowExecutionState,
+): DeclarativeResolverContext {
+  return {
+    flowParams,
+    flowConstants,
+    pipelineContext,
+    repeatVars,
+    executionState,
+  };
+}
+
+function resolveResumeChecks(step: ExpandedStepSpec, context: DeclarativeResolverContext): NodeCheckSpec[] {
+  return (step.expect ?? [])
+    .filter((expectation) => evaluateCondition(expectation.when, context))
+    .flatMap<NodeCheckSpec>((expectation) => {
+      if (expectation.kind === "step-output") {
+        const value = resolveValue(expectation.value, context);
+        if (expectation.equals !== undefined) {
+          const expected = resolveValue(expectation.equals, context);
+          if (value !== expected) {
+            throw new TaskRunnerError(expectation.message);
+          }
+          return [];
+        }
+        if (!value) {
+          throw new TaskRunnerError(expectation.message);
+        }
+        return [];
+      }
+      if (expectation.kind === "require-artifacts") {
+        const value = resolveValue(expectation.paths, context);
+        if (!Array.isArray(value) || value.some((candidate) => typeof candidate !== "string")) {
+          throw new TaskRunnerError("Expectation 'require-artifacts' must resolve to string[]");
+        }
+        return [{ kind: "require-artifacts", paths: value as string[], message: expectation.message }];
+      }
+      if (expectation.kind === "require-file") {
+        const value = resolveValue(expectation.path, context);
+        if (typeof value !== "string") {
+          throw new TaskRunnerError("Expectation 'require-file' must resolve to string");
+        }
+        return [{ kind: "require-file", path: value, message: expectation.message }];
+      }
+      const items = expectation.items.map((item) => {
+        const value = resolveValue(item.path, context);
+        if (typeof value !== "string") {
+          throw new TaskRunnerError("Expectation 'require-structured-artifacts' item path must resolve to string");
+        }
+        return {
+          path: value,
+          schemaId: item.schemaId,
+        };
+      });
+      return [{ kind: "require-structured-artifacts", items, message: expectation.message }];
+    });
+}
+
+function validateDeclarativePhaseResumeState(
+  phase: ExpandedPhaseSpec,
+  phaseState: ExpandedPhaseExecutionState,
+  pipelineContext: PipelineContext,
+  flowParams: Record<string, unknown>,
+  flowConstants: Record<string, unknown>,
+  executionState: FlowExecutionState,
+): void {
+  for (const [stepIndex, step] of phase.steps.entries()) {
+    const stepState = phaseState.steps[stepIndex];
+    if (!stepState || stepState.status !== "done") {
+      continue;
+    }
+    const context = buildResolverContext(pipelineContext, flowParams, flowConstants, step.repeatVars, executionState);
+    const checks = resolveResumeChecks(step, context);
+    try {
+      runNodeChecks(checks);
+    } catch (error) {
+      throw new TaskRunnerError(
+        `Resume is impossible for '${phase.id}:${step.id}' because required artifacts are missing or invalid. Use restart.\n${(error as Error).message}`,
+      );
+    }
+  }
+}
+
+function validateDeclarativeFlowResumeState(
+  flowEntry: FlowCatalogEntry,
+  config: Config,
+  state: FlowRunState,
+  runtime: RuntimeServices = runtimeServices,
+): void {
+  if (flowRequiresTaskScope(flowEntry) && !config.jiraRef) {
+    throw new TaskRunnerError("Resume is impossible because Jira context is missing for this flow state. Use restart.");
+  }
+
+  const pipelineContext = createPipelineContext({
+    issueKey: config.taskKey,
+    jiraRef: config.jiraRef,
+    dryRun: config.dryRun,
+    verbose: config.verbose,
+    runtime,
+    requestUserInput: requestUserInputInTerminal,
+  });
+  const flowParams = defaultDeclarativeFlowParams(config);
+
+  for (const phase of flowEntry.flow.phases) {
+    const phaseState = state.executionState.phases.find((candidate) => candidate.id === phase.id);
+    if (!phaseState) {
+      continue;
+    }
+    validateDeclarativePhaseResumeState(phase, phaseState, pipelineContext, flowParams, flowEntry.flow.constants, state.executionState);
+  }
+}
+
+function scopeWithRestoredJiraContext(scope: ResolvedScope, state: FlowRunState | null): ResolvedScope {
+  if (scope.jiraRef || !state?.jiraRef?.trim()) {
+    return scope;
+  }
+  return attachJiraContext(scope, state.jiraRef);
+}
+
 function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): FlowResumeLookup {
   const directState = loadFlowRunState(currentScope.scopeKey, flowEntry.id);
   if (directState && hasResumableFlowState(directState)) {
-    return {
-      resumeAvailable: true,
-      hasExistingState: true,
-      details: buildFlowResumeDetails(directState),
-    };
+    try {
+      const effectiveScope = scopeWithRestoredJiraContext(currentScope, directState);
+      const baseConfig = buildBaseConfig(flowEntry.id, {
+        ...(effectiveScope.jiraRef ? { jiraRef: effectiveScope.jiraRef } : {}),
+        scopeName: effectiveScope.scopeKey,
+      });
+      const config = buildRuntimeConfig(baseConfig, effectiveScope);
+      validateDeclarativeFlowResumeState(flowEntry, config, directState);
+      return {
+        resumeAvailable: true,
+        hasExistingState: true,
+        details: buildFlowResumeDetails(directState),
+      };
+    } catch (error) {
+      return {
+        resumeAvailable: false,
+        hasExistingState: true,
+        details: `Interrupted run found, but resume is unavailable.\n${(error as Error).message}`,
+      };
+    }
   }
   return {
     resumeAvailable: false,
@@ -855,12 +996,25 @@ async function runDeclarativeFlowByRef(
   };
   let persistedState = launchMode === "resume" ? loadFlowRunState(config.scope.scopeKey, flowId) : null;
   if (persistedState && launchMode === "resume") {
+    validateDeclarativeFlowResumeState(
+      {
+        id: flowId,
+        source: flow.source,
+        fileName: flow.fileName,
+        absolutePath: flow.absolutePath,
+        treePath: [],
+        flow,
+      },
+      config,
+      persistedState,
+      runtime,
+    );
     persistedState = prepareFlowStateForResume(persistedState);
   } else if (launchMode === "restart") {
     resetFlowRunState(config.scope.scopeKey, flowId);
   }
   const executionState = persistedState?.executionState ?? initialExecutionState;
-  const state = persistedState ?? createFlowRunState(config.scope.scopeKey, flowId, executionState);
+  const state = persistedState ?? createFlowRunState(config.scope.scopeKey, flowId, executionState, config.jiraRef);
   state.status = "running";
   state.lastError = null;
   state.currentStep = findCurrentFlowExecutionStep(state);
@@ -1583,6 +1737,10 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           const flowEntry = findCatalogEntry(flowId, flowCatalog);
           if (!flowEntry) {
             throw new TaskRunnerError(`Unknown flow: ${flowId}`);
+          }
+          const resumeState = launchMode === "resume" ? loadFlowRunState(currentScope.scopeKey, flowId) : null;
+          if (resumeState) {
+            currentScope = scopeWithRestoredJiraContext(currentScope, resumeState);
           }
           const previousScopeKey = currentScope.scopeKey;
           const baseConfig = buildBaseConfig(flowId, {
