@@ -52,6 +52,14 @@ import { loadAutoFlow } from "./pipeline/auto-flow.js";
 import { loadDeclarativeFlow, type DeclarativeFlowRef } from "./pipeline/declarative-flows.js";
 import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
 import { findCatalogEntry, isBuiltInCommandFlowId, loadInteractiveFlowCatalog, toDeclarativeFlowRef, type FlowCatalogEntry } from "./pipeline/flow-catalog.js";
+import {
+  ALLOWED_MODELS_BY_EXECUTOR,
+  DEFAULT_LAUNCH_PROFILE,
+  LLM_EXECUTOR_IDS,
+  resolveLaunchProfile,
+  type LaunchProfileSelection,
+  type ResolvedLaunchProfile,
+} from "./pipeline/launch-profile-config.js";
 import type { ExpandedPhaseExecutionState, ExpandedPhaseSpec, ExpandedStepSpec, FlowExecutionState } from "./pipeline/spec-types.js";
 import type { NodeCheckSpec, PipelineContext } from "./pipeline/types.js";
 import { evaluateCondition, resolveValue, type DeclarativeResolverContext } from "./pipeline/value-resolver.js";
@@ -71,6 +79,7 @@ import {
   stripAnsi,
 } from "./tui.js";
 import { requestUserInputInTerminal, type UserInputRequester } from "./user-input.js";
+import type { UserInputFormDefinition } from "./user-input.js";
 import {
   attachJiraContext,
   detectGitBranchName,
@@ -135,6 +144,10 @@ type Config = BaseConfig & {
   jiraBrowseUrl?: string;
   jiraApiUrl?: string;
   jiraTaskFile?: string;
+};
+
+type DeclarativeFlowOverrides = {
+  launchProfile?: ResolvedLaunchProfile;
 };
 
 type AutoStepState = {
@@ -501,10 +514,78 @@ function buildFlowResumeDetails(state: FlowRunState): string {
     `Current step: ${currentStep}`,
     `Updated: ${state.updatedAt}`,
   ];
+  if (state.launchProfile) {
+    lines.push(`Launch profile: ${state.launchProfile.executor} / ${state.launchProfile.model}`);
+  }
   if (state.lastError) {
     lines.push(`Last error: ${state.lastError.message ?? "-"} (exit ${state.lastError.returnCode ?? "-"})`);
   }
   return lines.join("\n");
+}
+
+function launchProfileSelectionForm(): UserInputFormDefinition {
+  return {
+    formId: "flow-launch-profile",
+    title: "Настройки запуска LLM",
+    description: "Выберите executor для запуска flow.",
+    submitLabel: "Continue",
+    fields: [
+      {
+        id: "executor",
+        type: "single-select",
+        label: "Executor",
+        required: true,
+        default: "default",
+        options: [
+          { value: "default", label: "default" },
+          ...LLM_EXECUTOR_IDS.map((id) => ({ value: id, label: id })),
+        ],
+      },
+    ],
+  };
+}
+
+function launchModelSelectionForm(executor: LaunchProfileSelection["executor"]): UserInputFormDefinition {
+  const options = executor === "default"
+    ? [{ value: "default", label: "default" }]
+    : [
+      { value: "default", label: "default" },
+      ...ALLOWED_MODELS_BY_EXECUTOR[executor].map((model) => ({ value: model, label: model })),
+    ];
+  return {
+    formId: "flow-launch-model",
+    title: "Настройки запуска LLM",
+    description: "Выберите модель для запуска flow.",
+    submitLabel: "Start",
+    fields: [
+      {
+        id: "model",
+        type: "single-select",
+        label: "Model",
+        required: true,
+        default: "default",
+        options,
+      },
+    ],
+  };
+}
+
+async function requestInteractiveLaunchProfile(requestUserInput: UserInputRequester): Promise<ResolvedLaunchProfile> {
+  const executorFormResult = await requestUserInput(launchProfileSelectionForm());
+  const rawExecutor = String(executorFormResult.values.executor ?? "default");
+  const executor = rawExecutor === "default" ? "default" : LLM_EXECUTOR_IDS.find((id) => id === rawExecutor);
+  if (!executor) {
+    throw new TaskRunnerError(`Unsupported launch executor '${rawExecutor}'.`);
+  }
+  const modelFormResult = await requestUserInput(launchModelSelectionForm(executor));
+  const rawModel = String(modelFormResult.values.model ?? "default").trim();
+  return resolveLaunchProfile(
+    {
+      executor,
+      model: rawModel.length > 0 ? rawModel : "default",
+    },
+    DEFAULT_LAUNCH_PROFILE,
+  );
 }
 
 type FlowResumeLookup = {
@@ -604,8 +685,19 @@ function validateDeclarativeFlowResumeState(
   flowEntry: FlowCatalogEntry,
   config: Config,
   state: FlowRunState,
+  launchProfile?: ResolvedLaunchProfile,
   runtime: RuntimeServices = runtimeServices,
 ): void {
+  if (state.launchProfile) {
+    if (!launchProfile) {
+      throw new TaskRunnerError("Resume is impossible because launch profile is missing. Use restart.");
+    }
+    if (state.launchProfile.fingerprint !== launchProfile.fingerprint) {
+      throw new TaskRunnerError(
+        `Resume is impossible because launch profile changed (${state.launchProfile.executor}/${state.launchProfile.model} -> ${launchProfile.executor}/${launchProfile.model}). Use restart.`,
+      );
+    }
+  }
   if (flowRequiresTaskScope(flowEntry) && !config.jiraRef) {
     throw new TaskRunnerError("Resume is impossible because Jira context is missing for this flow state. Use restart.");
   }
@@ -618,7 +710,11 @@ function validateDeclarativeFlowResumeState(
     runtime,
     requestUserInput: requestUserInputInTerminal,
   });
-  const flowParams = defaultDeclarativeFlowParams(config);
+  const flowParams = defaultDeclarativeFlowParams(
+    config,
+    false,
+    launchProfile ? { launchProfile } : {},
+  );
 
   for (const phase of flowEntry.flow.phases) {
     const phaseState = state.executionState.phases.find((candidate) => candidate.id === phase.id);
@@ -646,7 +742,7 @@ function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: 
         scopeName: effectiveScope.scopeKey,
       });
       const config = buildRuntimeConfig(baseConfig, effectiveScope);
-      validateDeclarativeFlowResumeState(flowEntry, config, directState);
+      validateDeclarativeFlowResumeState(flowEntry, config, directState, directState.launchProfile);
       return {
         resumeAvailable: true,
         hasExistingState: true,
@@ -973,6 +1069,7 @@ async function runDeclarativeFlowByRef(
   flowRef: DeclarativeFlowRef,
   config: Config,
   flowParams: Record<string, unknown>,
+  overrides: DeclarativeFlowOverrides = {},
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
   setSummary?: (markdown: string) => void,
   launchMode: FlowLaunchMode = "restart",
@@ -1007,6 +1104,7 @@ async function runDeclarativeFlowByRef(
       },
       config,
       persistedState,
+      overrides.launchProfile,
       runtime,
     );
     persistedState = prepareFlowStateForResume(persistedState);
@@ -1014,7 +1112,11 @@ async function runDeclarativeFlowByRef(
     resetFlowRunState(config.scope.scopeKey, flowId);
   }
   const executionState = persistedState?.executionState ?? initialExecutionState;
-  const state = persistedState ?? createFlowRunState(config.scope.scopeKey, flowId, executionState, config.jiraRef);
+  const state = persistedState
+    ?? createFlowRunState(config.scope.scopeKey, flowId, executionState, config.jiraRef, overrides.launchProfile);
+  if (overrides.launchProfile) {
+    state.launchProfile = overrides.launchProfile;
+  }
   state.status = "running";
   state.lastError = null;
   state.currentStep = findCurrentFlowExecutionStep(state);
@@ -1065,6 +1167,7 @@ async function runDeclarativeFlowBySpecFile(
   fileName: string,
   config: Config,
   flowParams: Record<string, unknown>,
+  overrides: DeclarativeFlowOverrides = {},
   requestUserInput: UserInputRequester = requestUserInputInTerminal,
   setSummary?: (markdown: string) => void,
   launchMode: FlowLaunchMode = "restart",
@@ -1075,6 +1178,7 @@ async function runDeclarativeFlowBySpecFile(
     { source: "built-in", fileName },
     config,
     flowParams,
+    overrides,
     requestUserInput,
     setSummary,
     launchMode,
@@ -1082,9 +1186,14 @@ async function runDeclarativeFlowBySpecFile(
   );
 }
 
-function defaultDeclarativeFlowParams(config: Config, forceRefreshSummary = false): Record<string, unknown> {
+function defaultDeclarativeFlowParams(
+  config: Config,
+  forceRefreshSummary = false,
+  overrides: DeclarativeFlowOverrides = {},
+): Record<string, unknown> {
   const iteration = nextReviewIterationForTask(config.taskKey);
   const latestIteration = latestReviewReplyIteration(config.taskKey);
+  const launchProfile = overrides.launchProfile ?? resolveLaunchProfile({ executor: "default", model: "default" }, DEFAULT_LAUNCH_PROFILE);
   return {
     taskKey: config.taskKey,
     jiraRef: config.jiraRef,
@@ -1098,6 +1207,9 @@ function defaultDeclarativeFlowParams(config: Config, forceRefreshSummary = fals
     runGoCoverageScript: config.runGoCoverageScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
+    llmExecutor: launchProfile.executor,
+    llmModel: launchProfile.model,
+    launchProfile,
     iteration,
     latestIteration,
     ...(latestIteration !== null ? { reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration) } : {}),
@@ -1291,7 +1403,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, requestUserInput, setSummary, launchMode, runtime);
+    }, {}, requestUserInput, setSummary, launchMode, runtime);
     return false;
   }
 
@@ -1307,7 +1419,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, requestUserInput, setSummary, launchMode, runtime);
+    }, {}, requestUserInput, setSummary, launchMode, runtime);
     return false;
   }
 
@@ -1321,6 +1433,7 @@ async function executeCommand(
         iteration,
         extraPrompt: config.extraPrompt,
       },
+      {},
       requestUserInput,
       undefined,
       launchMode,
@@ -1342,6 +1455,7 @@ async function executeCommand(
         iteration,
         extraPrompt: config.extraPrompt,
       },
+      {},
       requestUserInput,
       undefined,
       launchMode,
@@ -1371,7 +1485,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput, undefined, launchMode, runtime);
+    }, {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1381,7 +1495,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("mr-description.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput, undefined, launchMode, runtime);
+    }, {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1390,7 +1504,7 @@ async function executeCommand(
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput, undefined, launchMode, runtime);
+    }, {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1407,7 +1521,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("implement.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, requestUserInput, undefined, launchMode);
+    }, {}, requestUserInput, undefined, launchMode);
     return false;
   }
 
@@ -1426,13 +1540,13 @@ async function executeCommand(
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, requestUserInput, undefined, launchMode, runtime);
+      }, {}, requestUserInput, undefined, launchMode, runtime);
     } else {
       await runDeclarativeFlowBySpecFile("review-project.json", config, {
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, requestUserInput, undefined, launchMode, runtime);
+      }, {}, requestUserInput, undefined, launchMode, runtime);
     }
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
@@ -1455,7 +1569,7 @@ async function executeCommand(
       reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
       extraPrompt: config.extraPrompt,
       reviewFixPoints: config.reviewFixPoints,
-    }, requestUserInput, undefined, launchMode, runtime);
+    }, {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1469,6 +1583,7 @@ async function executeCommand(
         runGoLinterScript: config.runGoLinterScript,
         extraPrompt: config.extraPrompt,
       },
+      {},
       requestUserInput,
       undefined,
       launchMode,
@@ -1742,6 +1857,12 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           if (resumeState) {
             currentScope = scopeWithRestoredJiraContext(currentScope, resumeState);
           }
+          const launchProfile = launchMode === "resume"
+            ? resumeState?.launchProfile
+            : await requestInteractiveLaunchProfile((form) => ui.requestUserInput(form));
+          if (!launchProfile) {
+            throw new TaskRunnerError("Resume is impossible because launch profile was not saved. Use restart.");
+          }
           const previousScopeKey = currentScope.scopeKey;
           const baseConfig = buildBaseConfig(flowId, {
             ...(currentScope.jiraRef ? { jiraRef: currentScope.jiraRef } : {}),
@@ -1758,6 +1879,11 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           if (previousScopeKey !== currentScope.scopeKey || currentScope.jiraIssueKey) {
             syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
           }
+          printPanel(
+            "Effective Launch Config",
+            `executor: ${launchProfile.executor}\nmodel: ${launchProfile.model}\nmode: ${launchMode}`,
+            "cyan",
+          );
           if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
             await executeCommand(
               baseConfig,
@@ -1777,7 +1903,8 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             flowId,
             toDeclarativeFlowRef(flowEntry),
             runtimeConfig,
-            defaultDeclarativeFlowParams(runtimeConfig, forceRefresh),
+            defaultDeclarativeFlowParams(runtimeConfig, forceRefresh, { launchProfile }),
+            { launchProfile },
             (form) => ui.requestUserInput(form),
             (markdown) => ui.setSummary(markdown),
             launchMode,

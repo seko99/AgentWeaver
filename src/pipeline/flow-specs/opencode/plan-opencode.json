@@ -130,7 +130,7 @@
               }
             ]
           },
-          "node": "opencode-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "task-summary",
             "vars": {
@@ -186,7 +186,10 @@
               ]
             },
             "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
+              "ref": "params.llmModel"
+            },
+            "executor": {
+              "ref": "params.llmExecutor"
             }
           },
           "expect": [
