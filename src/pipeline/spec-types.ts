@@ -60,6 +60,7 @@ export type ValueSpec =
   | { artifactList: ArtifactListRefSpec }
   | { template: string; vars?: Record<string, ValueSpec> }
   | { appendPrompt: { base?: ValueSpec; suffix: ValueSpec } }
+  | { add: ValueSpec[] }
   | { concat: ValueSpec[] }
   | { list: ValueSpec[] };
 

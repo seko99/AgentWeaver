@@ -70,6 +70,11 @@ function interpolateValueSpec(value: ValueSpec, repeatVars: Record<string, JsonV
       },
     };
   }
+  if ("add" in value) {
+    return {
+      add: value.add.map((candidate) => interpolateValueSpec(candidate, repeatVars)),
+    };
+  }
   if ("concat" in value) {
     return {
       concat: value.concat.map((candidate) => interpolateValueSpec(candidate, repeatVars)),
