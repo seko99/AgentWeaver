@@ -130,6 +130,7 @@ type BaseConfig = {
   reviewFixPoints?: string | null;
   extraPrompt?: string | null;
   autoFromPhase?: string | null;
+  mdLang?: "en" | "ru" | null;
   dryRun: boolean;
   verbose: boolean;
   dockerComposeFile: string;
@@ -159,6 +160,7 @@ type ParsedArgs = {
   verbose: boolean;
   prompt?: string;
   autoFromPhase?: string;
+  mdLang?: "en" | "ru";
   helpPhases: boolean;
 };
 
@@ -216,7 +218,7 @@ function usage(): string {
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver plan [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
+  agentweaver plan [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [<jira-browse-url|jira-issue-key>]
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver implement [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
@@ -241,6 +243,7 @@ Flags:
   --verbose       Show live stdout/stderr of launched commands
   --scope         Explicit workflow scope name for non-Jira runs
   --prompt        Extra prompt text appended to the base prompt
+  --md-lang       Language for markdown output files: en (English) or ru (Russian, default)
 
 Required environment variables:
   JIRA_API_KEY    Jira API token used for Jira-backed flows (Bearer by default, or Basic with Jira Cloud)
@@ -635,6 +638,7 @@ function buildBaseConfig(
     reviewFixPoints?: string | null;
     extraPrompt?: string | null;
     autoFromPhase?: string | null;
+    mdLang?: "en" | "ru" | null;
     dryRun?: boolean;
     verbose?: boolean;
   } = {},
@@ -647,6 +651,7 @@ function buildBaseConfig(
     reviewFixPoints: options.reviewFixPoints ?? null,
     extraPrompt: options.extraPrompt ?? null,
     autoFromPhase: options.autoFromPhase ? validateAutoPhaseId(options.autoFromPhase) : null,
+    mdLang: options.mdLang ?? null,
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
     dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
@@ -752,34 +757,35 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
     forceRefresh: forceRefreshSummary,
+    mdLang: config.mdLang,
   };
 }
 
 const FLOW_DESCRIPTIONS: Record<string, string> = {
-  auto: "Полный пайплайн задачи: планирование, реализация, проверки, ревью, ответы на ревью и повторные итерации до готовности к merge.",
+  auto: "Full task pipeline: planning, implementation, checks, review, review replies, and repeated iterations until ready to merge.",
   "bug-analyze":
-    "Анализирует баг по Jira и создаёт структурированные артефакты: гипотезу причины, дизайн исправления и план работ.",
+    "Analyzes bug from Jira and creates structured artifacts: root cause hypothesis, fix design, and implementation plan.",
   "git-commit":
-    "Собирает git status/diff, генерирует commit message через LLM, позволяет выбрать файлы и подтвердить коммит.",
+    "Collects git status/diff, generates commit message via LLM, allows file selection and commit confirmation.",
   "gitlab-diff-review":
-    "Запрашивает GitLab MR URL через user-input, загружает diff merge request по API и запускает код-ревью с сохранением markdown и structured JSON artifacts.",
+    "Requests GitLab MR URL via user-input, downloads merge request diff via API, and runs code review with markdown and structured JSON artifacts.",
   "gitlab-review":
-    "Запрашивает GitLab MR URL через user-input, загружает комментарии код-ревью по API и сохраняет markdown плюс structured JSON artifact.",
+    "Requests GitLab MR URL via user-input, downloads code review comments via API, and saves markdown plus structured JSON artifact.",
   "bug-fix":
-    "Берёт результаты bug-analyze как source of truth и реализует исправление бага в коде.",
+    "Takes bug-analyze results as source of truth and implements the bug fix in code.",
   "mr-description":
-    "Готовит краткое intent-описание для merge request на основе задачи и текущих изменений.",
-  plan: "Загружает задачу из Jira и создаёт дизайн, план реализации и QA-план в structured JSON и markdown.",
-  "task-describe": "Строит короткое описание задачи либо по Jira, либо по краткому user-input без Jira.",
-  implement: "Реализует задачу по утверждённым design/plan артефактам и при необходимости запускает post-verify сборки.",
+    "Prepares a brief intent description for a merge request based on the task and current changes.",
+  plan: "Loads task from Jira and creates design, implementation plan, and QA plan in structured JSON and markdown.",
+  "task-describe": "Builds a brief task description either from Jira or from quick user-input without Jira.",
+  implement: "Implements the task from approved design/plan artifacts and runs post-verify builds if needed.",
   review:
-    "Запускает код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания.",
+    "Runs code review of current changes, validates structured findings, then prepares a reply to comments.",
   "review-fix":
-    "Исправляет замечания после review-reply, обновляет код и прогоняет обязательные проверки после правок.",
+    "Fixes issues after review-reply, updates code, and runs mandatory checks after modifications.",
   "run-go-tests-loop":
-    "Циклически запускает `./run_go_tests.py` локально, анализирует последнюю ошибку и правит код до успешного прохождения или исчерпания попыток.",
+    "Cycles through `./run_go_tests.py` locally, analyzes the last error, and fixes code until successful or attempts exhausted.",
   "run-go-linter-loop":
-    "Циклически запускает `./run_go_linter.py` локально, исправляет проблемы линтера или генерации и повторяет попытки до успеха.",
+    "Cycles through `./run_go_linter.py` locally, fixes linter or generation issues, and retries until success.",
 };
 
 function flowDescription(id: string): string {
@@ -1002,6 +1008,7 @@ function defaultDeclarativeFlowParams(
     runGoCoverageScript: config.runGoCoverageScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
+    mdLang: config.mdLang,
     llmExecutor: launchProfile.executor,
     llmModel: launchProfile.model,
     launchProfile,
@@ -1412,6 +1419,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   let scopeName: string | undefined;
   let helpPhases = false;
   let jiraRef: string | undefined;
+  let mdLang: "en" | "ru" | undefined;
 
   for (let index = 1; index < argv.length; index += 1) {
     const token = argv[index] ?? "";
@@ -1442,6 +1450,27 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       index += 1;
       continue;
     }
+    if (token === "--md-lang") {
+      const langValue = argv[index + 1];
+      if (langValue === "en" || langValue === "ru") {
+        mdLang = langValue;
+      } else {
+        process.stderr.write("Error: --md-lang accepts only 'en' or 'ru' as values.\n");
+        process.exit(1);
+      }
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--md-lang=")) {
+      const langValue = token.slice("--md-lang=".length);
+      if (langValue === "en" || langValue === "ru") {
+        mdLang = langValue;
+      } else {
+        process.stderr.write("Error: --md-lang accepts only 'en' or 'ru' as values.\n");
+        process.exit(1);
+      }
+      continue;
+    }
     jiraRef = token;
   }
 
@@ -1459,6 +1488,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     ...(scopeName !== undefined ? { scopeName } : {}),
     ...(prompt !== undefined ? { prompt } : {}),
     ...(autoFromPhase !== undefined ? { autoFromPhase } : {}),
+    ...(mdLang !== undefined ? { mdLang } : {}),
   };
 }
 
@@ -1468,6 +1498,7 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
     ...(args.scopeName !== undefined ? { scopeName: args.scopeName } : {}),
     ...(args.prompt !== undefined ? { extraPrompt: args.prompt } : {}),
     ...(args.autoFromPhase !== undefined ? { autoFromPhase: args.autoFromPhase } : {}),
+    ...(args.mdLang !== undefined ? { mdLang: args.mdLang } : {}),
     dryRun: args.dry,
     verbose: args.verbose,
   });

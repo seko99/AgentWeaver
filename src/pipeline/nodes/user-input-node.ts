@@ -51,18 +51,18 @@ function buildReviewFixPromptSuffix(
   }
 
   const selectionSummary = applyAll
-    ? "Выбраны все findings."
-    : `Выбраны findings:\n- ${selectedFindings.join("\n- ")}`;
+    ? "All findings selected."
+    : `Selected findings:\n- ${selectedFindings.join("\n- ")}`;
   const promptSuffix = [
-    "Используй пользовательский выбор ниже как source of truth для scope текущего review-fix.",
-    `Файл выбора: ${params.outputFile}`,
+    "Use the user selection below as source of truth for the current review-fix scope.",
+    `Selection file: ${params.outputFile}`,
     `apply_all: ${applyAll ? "true" : "false"}`,
-    applyAll ? "Исправляй все findings текущей итерации." : `Исправляй только выбранные findings:\n- ${selectedFindings.join("\n- ")}`,
-    extraNotes ? `Дополнительные указания пользователя:\n${extraNotes}` : "",
+    applyAll ? "Fix all findings in the current iteration." : `Fix only selected findings:\n- ${selectedFindings.join("\n- ")}`,
+    extraNotes ? `User additional instructions:\n${extraNotes}` : "",
   ]
     .filter((item) => item.trim().length > 0)
     .join("\n\n");
-  const summaryText = extraNotes ? `${selectionSummary}\n\nЗаметка:\n${extraNotes}` : selectionSummary;
+  const summaryText = extraNotes ? `${selectionSummary}\n\nNote:\n${extraNotes}` : selectionSummary;
   return { promptSuffix, summaryText };
 }
 
@@ -82,11 +82,11 @@ function buildTaskDescribePromptSuffix(
 
   return {
     promptSuffix: [
-      "Используй пользовательское описание задачи как source of truth.",
-      `Файл пользовательского ввода: ${params.outputFile}`,
-      `Описание задачи:\n${taskDescription}`,
+      "Use the user task description as source of truth.",
+      `User input file: ${params.outputFile}`,
+      `Task description:\n${taskDescription}`,
     ].join("\n\n"),
-    summaryText: `Источник задачи: user-input\n\n${taskDescription}`,
+    summaryText: `Task source: user-input\n\n${taskDescription}`,
   };
 }
 
@@ -122,7 +122,7 @@ function buildPromptSuffix(params: UserInputNodeParams, values: UserInputFormVal
   });
   const summaryText = lines.join("\n");
   return {
-    promptSuffix: `Используй пользовательский ввод из файла ${params.outputFile}.\n\n${summaryText}`,
+    promptSuffix: `Use user input from file ${params.outputFile}.\n\n${summaryText}`,
     summaryText,
   };
 }
