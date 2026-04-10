@@ -1,9 +1,4 @@
 import type {
-  ClaudeExecutorConfig,
-  ClaudeExecutorInput,
-  ClaudeExecutorResult,
-} from "../../executors/claude-executor.js";
-import type {
   CodexLocalExecutorConfig,
   CodexLocalExecutorInput,
   CodexLocalExecutorResult,
@@ -35,8 +30,7 @@ export type LlmPromptNodeParams = {
 
 type LlmPromptNodeResult =
   | (CodexLocalExecutorResult & { executor: "codex-local" })
-  | (OpenCodeExecutorResult & { executor: "opencode" })
-  | (ClaudeExecutorResult & { executor: "claude" });
+  | (OpenCodeExecutorResult & { executor: "opencode" });
 
 export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromptNodeResult> = {
   kind: "llm-prompt",
@@ -91,24 +85,7 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
         outputs: (params.requiredArtifacts ?? []).map((path) => ({ kind: "artifact" as const, path, required: true })),
       };
     }
-    const executor = context.executors.get<ClaudeExecutorConfig, ClaudeExecutorInput, ClaudeExecutorResult>("claude");
-    const value = await executor.execute(
-      executorContext,
-      {
-        prompt: params.prompt,
-        ...(params.command ? { command: params.command } : {}),
-        ...(params.model ? { model: params.model } : {}),
-        env: { ...context.env },
-      },
-      executor.defaultConfig,
-    );
-    return {
-      value: {
-        ...value,
-        executor: "claude",
-      },
-      outputs: (params.requiredArtifacts ?? []).map((path) => ({ kind: "artifact" as const, path, required: true })),
-    };
+    throw new TaskRunnerError(`Unsupported llm executor '${params.executor}'.`);
   },
   checks(_context, params) {
     if (!params.requiredArtifacts || params.requiredArtifacts.length === 0) {

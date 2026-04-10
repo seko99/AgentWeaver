@@ -6,8 +6,8 @@
       "id": "review",
       "steps": [
         {
-          "id": "run_claude_review",
-          "node": "claude-prompt",
+          "id": "run_codex_review",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-project",
             "vars": {
@@ -37,12 +37,13 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Claude project review mode (iteration {iteration})",
+              "template": "Running Codex project review mode (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "opus" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -59,7 +60,7 @@
                   }
                 ]
               },
-              "message": "Claude project review did not produce the required review artifact."
+              "message": "Codex project review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -76,14 +77,14 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Claude project review produced invalid structured artifacts."
+              "message": "Codex project review produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
@@ -107,7 +108,8 @@
           "params": {
             "labelText": { "const": "Preparing project review summary" },
             "summaryTitle": { "const": "Project Review Comments" },
-            "model": { "const": "haiku" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
@@ -119,7 +121,7 @@
         },
         {
           "id": "run_codex_review_reply",
-          "node": "codex-local-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-project",
             "vars": {
@@ -162,7 +164,8 @@
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -203,7 +206,7 @@
         {
           "id": "summarize_review_reply",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-summary",
             "vars": {
@@ -227,7 +230,8 @@
           "params": {
             "labelText": { "const": "Preparing project review reply summary" },
             "summaryTitle": { "const": "Project Review Reply" },
-            "model": { "const": "haiku" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",

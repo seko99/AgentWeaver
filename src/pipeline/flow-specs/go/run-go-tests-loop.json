@@ -11,20 +11,14 @@
           "params": {
             "argv": {
               "list": [
-                {
-                  "ref": "params.runGoTestsScript"
-                }
+                { "ref": "params.runGoTestsScript" }
               ]
             },
             "outputFile": {
               "artifact": {
                 "kind": "run-go-tests-result-json-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                },
-                "iteration": {
-                  "const": 1
-                }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
               }
             },
             "labelText": {
@@ -34,20 +28,12 @@
           "expect": [
             {
               "kind": "require-file",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "path": {
                 "artifact": {
                   "kind": "run-go-tests-result-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "message": "run-go-tests-loop did not produce the structured tests result artifact."
@@ -55,12 +41,8 @@
           ],
           "stopFlowIf": {
             "equals": [
-              {
-                "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.ok"
-              },
-              {
-                "const": true
-              }
+              { "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.ok" },
+              { "const": true }
             ]
           }
         },
@@ -68,58 +50,38 @@
           "id": "fix_go_tests",
           "when": {
             "equals": [
-              {
-                "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.ok"
-              },
-              {
-                "const": false
-              }
+              { "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.ok" },
+              { "const": false }
             ]
           },
-          "node": "opencode-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "run-go-tests-loop-fix",
             "vars": {
               "tests_result_json_file": {
                 "artifact": {
                   "kind": "run-go-tests-result-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               }
             },
             "extraPrompt": {
               "appendPrompt": {
-                "base": {
-                  "ref": "params.extraPrompt"
-                },
+                "base": { "ref": "params.extraPrompt" },
                 "suffix": {
                   "template": "Последний результат run_go_tests.py сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
                   "vars": {
                     "result_file": {
                       "artifact": {
                         "kind": "run-go-tests-result-json-file",
-                        "taskKey": {
-                          "ref": "params.taskKey"
-                        },
-                        "iteration": {
-                          "const": 1
-                        }
+                        "taskKey": { "ref": "params.taskKey" },
+                        "iteration": { "const": 1 }
                       }
                     },
-                    "exit_code": {
-                      "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.exitCode"
-                    },
-                    "summary": {
-                      "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.summary"
-                    },
-                    "raw_output": {
-                      "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.details.raw"
-                    }
+                    "exit_code": { "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.exitCode" },
+                    "summary": { "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.summary" },
+                    "raw_output": { "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.details.raw" }
                   }
                 }
               }
@@ -128,11 +90,10 @@
           },
           "params": {
             "labelText": {
-              "const": "Running OpenCode Go tests loop fix (attempt 1)"
+              "const": "Running Codex Go tests loop fix (attempt 1)"
             },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           }
         }
       ]
@@ -148,12 +109,8 @@
           "id": "run_go_tests_try_${attempt}",
           "when": {
             "equals": [
-              {
-                "ref": "steps.run_go_tests_try_${attempt_minus_one}.run_go_tests.outputs.parsed.ok"
-              },
-              {
-                "const": false
-              }
+              { "ref": "steps.run_go_tests_try_${attempt_minus_one}.run_go_tests.outputs.parsed.ok" },
+              { "const": false }
             ]
           },
           "steps": [
@@ -163,20 +120,14 @@
               "params": {
                 "argv": {
                   "list": [
-                    {
-                      "ref": "params.runGoTestsScript"
-                    }
+                    { "ref": "params.runGoTestsScript" }
                   ]
                 },
                 "outputFile": {
                   "artifact": {
                     "kind": "run-go-tests-result-json-file",
-                    "taskKey": {
-                      "ref": "params.taskKey"
-                    },
-                    "iteration": {
-                      "ref": "repeat.attempt"
-                    }
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.attempt" }
                   }
                 },
                 "labelText": {
@@ -186,20 +137,12 @@
               "expect": [
                 {
                   "kind": "require-file",
-                  "when": {
-                    "not": {
-                      "ref": "context.dryRun"
-                    }
-                  },
+                  "when": { "not": { "ref": "context.dryRun" } },
                   "path": {
                     "artifact": {
                       "kind": "run-go-tests-result-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "ref": "repeat.attempt"
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.attempt" }
                     }
                   },
                   "message": "run-go-tests-loop did not produce the structured tests result artifact."
@@ -207,12 +150,8 @@
               ],
               "stopFlowIf": {
                 "equals": [
-                  {
-                    "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.ok"
-                  },
-                  {
-                    "const": true
-                  }
+                  { "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.ok" },
+                  { "const": true }
                 ]
               }
             },
@@ -220,58 +159,38 @@
               "id": "fix_go_tests",
               "when": {
                 "equals": [
-                  {
-                    "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.ok"
-                  },
-                  {
-                    "const": false
-                  }
+                  { "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.ok" },
+                  { "const": false }
                 ]
               },
-              "node": "opencode-prompt",
+              "node": "llm-prompt",
               "prompt": {
                 "templateRef": "run-go-tests-loop-fix",
                 "vars": {
                   "tests_result_json_file": {
                     "artifact": {
                       "kind": "run-go-tests-result-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "ref": "repeat.attempt"
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "repeat.attempt" }
                     }
                   }
                 },
                 "extraPrompt": {
                   "appendPrompt": {
-                    "base": {
-                      "ref": "params.extraPrompt"
-                    },
+                    "base": { "ref": "params.extraPrompt" },
                     "suffix": {
                       "template": "Последний результат run_go_tests.py сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
                       "vars": {
                         "result_file": {
                           "artifact": {
                             "kind": "run-go-tests-result-json-file",
-                            "taskKey": {
-                              "ref": "params.taskKey"
-                            },
-                            "iteration": {
-                              "ref": "repeat.attempt"
-                            }
+                            "taskKey": { "ref": "params.taskKey" },
+                            "iteration": { "ref": "repeat.attempt" }
                           }
                         },
-                        "exit_code": {
-                          "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.exitCode"
-                        },
-                        "summary": {
-                          "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.summary"
-                        },
-                        "raw_output": {
-                          "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.details.raw"
-                        }
+                        "exit_code": { "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.exitCode" },
+                        "summary": { "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.summary" },
+                        "raw_output": { "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.details.raw" }
                       }
                     }
                   }
@@ -280,11 +199,10 @@
               },
               "params": {
                 "labelText": {
-                  "template": "Running OpenCode Go tests loop fix (attempt ${attempt})"
+                  "template": "Running Codex Go tests loop fix (attempt ${attempt})"
                 },
-                "model": {
-                  "const": "minimax-coding-plan/MiniMax-M2.7"
-                }
+                "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
               }
             }
           ]
@@ -298,19 +216,13 @@
           "id": "assert_run_go_tests_success",
           "node": "file-check",
           "params": {
-            "path": {
-              "ref": "params.runGoTestsScript"
-            }
+            "path": { "ref": "params.runGoTestsScript" }
           },
           "expect": [
             {
               "kind": "step-output",
-              "value": {
-                "ref": "steps.run_go_tests_try_5.run_go_tests.outputs.parsed.ok"
-              },
-              "equals": {
-                "const": true
-              },
+              "value": { "ref": "steps.run_go_tests_try_5.run_go_tests.outputs.parsed.ok" },
+              "equals": { "const": true },
               "message": "run-go-tests-loop exhausted all attempts without a successful run_go_tests.py execution."
             }
           ]

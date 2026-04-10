@@ -1,4 +1,4 @@
-export const LLM_EXECUTOR_IDS = ["codex-local", "opencode", "claude"] as const;
+export const LLM_EXECUTOR_IDS = ["codex-local", "opencode"] as const;
 
 export type LlmExecutorId = (typeof LLM_EXECUTOR_IDS)[number];
 
@@ -18,7 +18,6 @@ export type ResolvedLaunchProfile = {
 export const ALLOWED_MODELS_BY_EXECUTOR: Record<LlmExecutorId, readonly string[]> = {
   "codex-local": ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"],
   opencode: ["opencode/minimax-m2.5-free", "minimax-coding-plan/MiniMax-M2.7"],
-  claude: ["opus", "sonnet"],
 };
 
 export const DEFAULT_LAUNCH_PROFILE: Readonly<Pick<ResolvedLaunchProfile, "executor" | "model">> = {

@@ -118,7 +118,7 @@
 - `expect` — что должно быть истинно после выполнения step
 - `after` — какие side effects выполнить после успешного завершения step
 
-Для `codex-local`, `codex-docker` и `claude` модель теперь тоже считается частью `params`.
+Для `codex-local`, `codex-docker` и `opencode` модель теперь тоже считается частью `params`.
 
 Важно:
 
@@ -150,7 +150,6 @@
 - `jira-fetch`
 - `fetch-gitlab-diff`
 - `codex-local-prompt`
-- `claude-prompt`
 - `verify-build`
 
 Runtime находит node через registry:
@@ -239,8 +238,8 @@ Runtime находит node через registry:
 
 - `params` не должны описывать flow-level postconditions
 - если нужно сказать, какие файлы обязаны появиться после шага, для этого есть `expect`
-- для `codex-local`, `codex-docker`, `claude` именно `params.model` теперь определяет модель на уровне flow
-- `claude-prompt` может работать и в summary-режиме, если ему передать `outputFile` и `summaryTitle`
+- для `codex-local`, `codex-docker`, `opencode` именно `params.model` теперь определяет модель на уровне flow
+- summary-steps в built-in flow могут использовать prompt-ноды с `outputFile` и `summaryTitle`
 
 ## Что делает `expect`
 
@@ -297,7 +296,7 @@ Runtime находит node через registry:
         "schemaId": "review-findings/v1"
       }
     ],
-    "message": "Claude review produced invalid structured artifacts."
+    "message": "Codex review produced invalid structured artifacts."
   }
 ]
 ```
@@ -411,7 +410,7 @@ Runtime находит node через registry:
 
 ```json
 {
-  "template": "Running Claude review mode (iteration {iteration})",
+  "template": "Running Codex review mode (iteration {iteration})",
   "vars": {
     "iteration": { "ref": "repeat.iteration" }
   }

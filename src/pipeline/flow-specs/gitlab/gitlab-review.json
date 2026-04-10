@@ -9,15 +9,9 @@
           "id": "collect_merge_request_url",
           "node": "user-input",
           "params": {
-            "formId": {
-              "const": "gitlab-review-input"
-            },
-            "title": {
-              "const": "GitLab Review"
-            },
-            "description": {
-              "const": "Укажи ссылку на GitLab merge request, чтобы загрузить комментарии код-ревью."
-            },
+            "formId": { "const": "gitlab-review-input" },
+            "title": { "const": "GitLab Review" },
+            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить комментарии код-ревью." },
             "fields": {
               "const": [
                 {
@@ -33,9 +27,7 @@
             "outputFile": {
               "artifact": {
                 "kind": "gitlab-review-input-json-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             }
           },
@@ -47,9 +39,7 @@
                   "path": {
                     "artifact": {
                       "kind": "gitlab-review-input-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "user-input/v1"
@@ -63,23 +53,17 @@
           "id": "fetch_gitlab_review",
           "node": "fetch-gitlab-review",
           "params": {
-            "mergeRequestUrl": {
-              "ref": "steps.gitlab_review.collect_merge_request_url.value.values.merge_request_url"
-            },
+            "mergeRequestUrl": { "ref": "steps.gitlab_review.collect_merge_request_url.value.values.merge_request_url" },
             "outputFile": {
               "artifact": {
                 "kind": "gitlab-review-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             },
             "outputJsonFile": {
               "artifact": {
                 "kind": "gitlab-review-json-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             }
           },
@@ -89,9 +73,7 @@
               "path": {
                 "artifact": {
                   "kind": "gitlab-review-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "message": "Fetch GitLab review node did not produce the markdown artifact."
@@ -103,9 +85,7 @@
                   "path": {
                     "artifact": {
                       "kind": "gitlab-review-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "gitlab-review/v1"
@@ -122,31 +102,21 @@
             "gitlabReviewJsonFile": {
               "artifact": {
                 "kind": "gitlab-review-json-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             },
             "reviewFile": {
               "artifact": {
                 "kind": "review-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                },
-                "iteration": {
-                  "ref": "params.iteration"
-                }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
               }
             },
             "reviewJsonFile": {
               "artifact": {
                 "kind": "review-json-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                },
-                "iteration": {
-                  "ref": "params.iteration"
-                }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
               }
             }
           },
@@ -158,12 +128,8 @@
                   {
                     "artifact": {
                       "kind": "review-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "ref": "params.iteration"
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
                     }
                   }
                 ]
@@ -177,12 +143,8 @@
                   "path": {
                     "artifact": {
                       "kind": "review-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "ref": "params.iteration"
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
                     }
                   },
                   "schemaId": "review-findings/v1"
@@ -194,151 +156,101 @@
         },
         {
           "id": "summarize_review",
-          "when": {
-            "not": {
-              "ref": "context.dryRun"
-            }
-          },
-          "node": "opencode-prompt",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
               "review_file": {
                 "artifact": {
                   "kind": "review-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "ref": "params.iteration"
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "review_summary_file": {
                 "artifact": {
                   "kind": "review-summary-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "ref": "params.iteration"
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               }
             },
             "format": "plain"
           },
           "params": {
-            "labelText": {
-              "const": "Preparing imported review summary"
-            },
-            "summaryTitle": {
-              "const": "Imported GitLab Comments"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            },
+            "labelText": { "const": "Preparing imported review summary" },
+            "summaryTitle": { "const": "Imported GitLab Comments" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                },
-                "iteration": {
-                  "ref": "params.iteration"
-                }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
               }
             }
           }
         },
         {
           "id": "run_codex_review_reply",
-          "node": "opencode-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-project",
             "vars": {
               "review_file": {
                 "artifact": {
                   "kind": "review-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "ref": "params.iteration"
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "review_json_file": {
                 "artifact": {
                   "kind": "review-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "ref": "params.iteration"
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "review_reply_file": {
                 "artifact": {
                   "kind": "review-reply-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "ref": "params.iteration"
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "review_reply_json_file": {
                 "artifact": {
                   "kind": "review-reply-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "ref": "params.iteration"
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               }
             },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"
           },
           "params": {
             "labelText": {
-              "template": "Running OpenCode review reply mode for imported GitLab review (iteration {iteration})",
+              "template": "Running Codex review reply mode for imported GitLab review (iteration {iteration})",
               "vars": {
-                "iteration": {
-                  "ref": "params.iteration"
-                }
+                "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
               "kind": "require-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
                     "artifact": {
                       "kind": "review-reply-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "ref": "params.iteration"
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
                     }
                   }
                 ]
@@ -347,22 +259,14 @@
             },
             {
               "kind": "require-structured-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
                     "artifact": {
                       "kind": "review-reply-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "ref": "params.iteration"
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
                     }
                   },
                   "schemaId": "review-reply/v1"
@@ -374,59 +278,38 @@
         },
         {
           "id": "summarize_review_reply",
-          "when": {
-            "not": {
-              "ref": "context.dryRun"
-            }
-          },
-          "node": "opencode-prompt",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-summary",
             "vars": {
               "review_reply_file": {
                 "artifact": {
                   "kind": "review-reply-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "ref": "params.iteration"
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "review_reply_summary_file": {
                 "artifact": {
                   "kind": "review-reply-summary-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "ref": "params.iteration"
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               }
             },
             "format": "plain"
           },
           "params": {
-            "labelText": {
-              "const": "Preparing OpenCode reply summary"
-            },
-            "summaryTitle": {
-              "const": "OpenCode Reply Summary"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            },
+            "labelText": { "const": "Preparing Codex reply summary" },
+            "summaryTitle": { "const": "Codex Reply Summary" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                },
-                "iteration": {
-                  "ref": "params.iteration"
-                }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
               }
             }
           }

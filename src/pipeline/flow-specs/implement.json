@@ -7,7 +7,7 @@
       "steps": [
         {
           "id": "run_codex_implement",
-          "node": "codex-local-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "implement",
             "vars": {
@@ -41,7 +41,8 @@
           },
           "params": {
             "labelText": { "const": "Running Codex implementation mode locally" },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           }
         }
       ]

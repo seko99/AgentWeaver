@@ -107,7 +107,7 @@
         },
         {
           "id": "run_codex_task_describe_from_jira",
-          "node": "codex-local-prompt",
+          "node": "llm-prompt",
           "when": {
             "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"
           },
@@ -138,7 +138,8 @@
           },
           "params": {
             "labelText": { "const": "Running Codex task description mode" },
-            "model": { "const": "gpt-5.4" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {
               "list": [
                 {
@@ -188,7 +189,7 @@
         },
         {
           "id": "run_codex_task_describe_from_input",
-          "node": "codex-local-prompt",
+          "node": "llm-prompt",
           "when": {
             "not": {
               "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"
@@ -226,7 +227,8 @@
           },
           "params": {
             "labelText": { "const": "Running Codex task description mode" },
-            "model": { "const": "gpt-5.4" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {
               "list": [
                 {

@@ -54,7 +54,7 @@
               { "const": false }
             ]
           },
-          "node": "codex-local-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "run-go-linter-loop-fix",
             "vars": {
@@ -92,7 +92,8 @@
             "labelText": {
               "const": "Running Codex Go linter loop fix (attempt 1)"
             },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           }
         }
       ]
@@ -162,7 +163,7 @@
                   { "const": false }
                 ]
               },
-              "node": "codex-local-prompt",
+              "node": "llm-prompt",
               "prompt": {
                 "templateRef": "run-go-linter-loop-fix",
                 "vars": {
@@ -200,7 +201,8 @@
                 "labelText": {
                   "template": "Running Codex Go linter loop fix (attempt ${attempt})"
                 },
-                "model": { "const": "gpt-5.4" }
+                "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
               }
             }
           ]
