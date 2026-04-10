@@ -26,7 +26,7 @@ function fallbackBuildFailureSummary(output: string): string {
     .map((line) => line.trim())
     .filter(Boolean);
   const tail = lines.length > 0 ? lines.slice(-8) : ["No build output captured."];
-  return `Не удалось получить summary через Codex.\n\nПоследние строки лога:\n${tail.join("\n")}`;
+  return `Failed to get summary via Codex.\n\nLast log lines:\n${tail.join("\n")}`;
 }
 
 function codexModel(env: NodeJS.ProcessEnv): string {
@@ -47,14 +47,14 @@ export const buildFailureSummaryNode: PipelineNodeDefinition<BuildFailureSummary
 
     const model = codexModel(context.env);
     const prompt =
-      "Ниже лог упавшей build verification.\n" +
-      "Сделай краткое резюме на русском языке, без воды.\n" +
-      "Нужно обязательно выделить:\n" +
-      "1. Где именно упало.\n" +
-      "2. Главную причину падения.\n" +
-      "3. Что нужно исправить дальше, если это очевидно.\n" +
-      "Ответ дай максимум 5 короткими пунктами.\n\n" +
-      `Лог:\n${truncateText(params.output)}`;
+      "Below is the log from a failing build verification.\n" +
+      "Provide a brief summary in English, no fluff.\n" +
+      "Must highlight:\n" +
+      "1. Where exactly it failed.\n" +
+      "2. The main cause of the failure.\n" +
+      "3. What needs to be fixed next, if obvious.\n" +
+      "Respond with at most 5 short bullet points.\n\n" +
+      `Log:\n${truncateText(params.output)}`;
 
     try {
       const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
