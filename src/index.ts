@@ -263,9 +263,11 @@ Flags:
   --prompt        Extra prompt text appended to the base prompt
 
 Required environment variables:
-  JIRA_API_KEY    Jira API key used in Authorization: Bearer <token> for Jira-backed flows
+  JIRA_API_KEY    Jira API token used for Jira-backed flows (Bearer by default, or Basic with Jira Cloud)
 
 Optional environment variables:
+  JIRA_USERNAME   Required for Jira Cloud Basic auth (usually Atlassian account email)
+  JIRA_AUTH_MODE  Override Jira auth mode: auto | basic | bearer
   JIRA_BASE_URL
   GITLAB_TOKEN
   AGENTWEAVER_HOME

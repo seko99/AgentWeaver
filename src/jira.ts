@@ -7,6 +7,7 @@ import { TaskRunnerError } from "./errors.js";
 const ISSUE_KEY_RE = /^[A-Z][A-Z0-9_]*-[0-9]+$/;
 const TEXT_ATTACHMENT_EXTENSIONS = new Set([".md", ".json", ".txt"]);
 const DOWNLOAD_ONLY_ATTACHMENT_EXTENSIONS = new Set([".doc"]);
+const JIRA_AUTH_MODES = new Set(["auto", "basic", "bearer"]);
 
 type JiraAttachmentRecord = {
   id?: unknown;
@@ -51,6 +52,64 @@ export type JiraFetchArtifacts = {
   planningContextAttachments: number;
 };
 
+type JiraResolvedAuthMode = "basic" | "bearer";
+
+function parseJiraAuthMode(rawMode: string | undefined): "auto" | JiraResolvedAuthMode {
+  const mode = rawMode?.trim().toLowerCase() || "auto";
+  if (!JIRA_AUTH_MODES.has(mode)) {
+    throw new TaskRunnerError("JIRA_AUTH_MODE must be one of: auto, basic, bearer.");
+  }
+  return mode as "auto" | JiraResolvedAuthMode;
+}
+
+export function detectJiraDeployment(url: string): "cloud" | "server" {
+  try {
+    return new URL(url).hostname.toLowerCase().includes("atlassian") ? "cloud" : "server";
+  } catch {
+    return url.toLowerCase().includes("atlassian") ? "cloud" : "server";
+  }
+}
+
+export function resolveJiraAuthMode(url: string): JiraResolvedAuthMode {
+  const authMode = parseJiraAuthMode(process.env.JIRA_AUTH_MODE);
+  if (authMode !== "auto") {
+    return authMode;
+  }
+  return detectJiraDeployment(url) === "cloud" ? "basic" : "bearer";
+}
+
+export function buildJiraAuthHeaders(url: string): Record<string, string> {
+  const jiraApiKey = process.env.JIRA_API_KEY?.trim();
+  if (!jiraApiKey) {
+    throw new TaskRunnerError("JIRA_API_KEY is required for Jira authentication.");
+  }
+
+  const authMode = resolveJiraAuthMode(url);
+  if (authMode === "bearer") {
+    return {
+      Authorization: `Bearer ${jiraApiKey}`,
+    };
+  }
+
+  const jiraUsername = process.env.JIRA_USERNAME?.trim();
+  if (!jiraUsername) {
+    const host = (() => {
+      try {
+        return new URL(url).host;
+      } catch {
+        return "unknown";
+      }
+    })();
+    throw new TaskRunnerError(
+      `JIRA_USERNAME is required for Jira Cloud Basic auth (detected from URL host: ${host}).`,
+    );
+  }
+  const encodedCredentials = Buffer.from(`${jiraUsername}:${jiraApiKey}`).toString("base64");
+  return {
+    Authorization: `Basic ${encodedCredentials}`,
+  };
+}
+
 function sanitizeAttachmentFileName(fileName: string): string {
   const parsed = path.parse(fileName);
   const baseName = parsed.name
@@ -77,14 +136,9 @@ function parseJiraAttachments(issueBody: Buffer): JiraAttachmentRecord[] {
 }
 
 async function fetchAuthorizedBuffer(url: string, accept: string): Promise<Buffer> {
-  const jiraApiKey = process.env.JIRA_API_KEY;
-  if (!jiraApiKey) {
-    throw new TaskRunnerError("JIRA_API_KEY is required for Jira fetch.");
-  }
-
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${jiraApiKey}`,
+      ...buildJiraAuthHeaders(url),
       Accept: accept,
     },
   });

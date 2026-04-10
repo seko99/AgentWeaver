@@ -103,10 +103,12 @@ npx agentweaver --help
 
 Required:
 
-- `JIRA_API_KEY` — Jira API token used to fetch issue JSON
+- `JIRA_API_KEY` — Jira API token used to fetch issue JSON (Bearer by default, or Basic auth when Jira Cloud is detected)
 
 Common optional variables:
 
+- `JIRA_USERNAME` — required for Jira Cloud Basic auth (typically your Atlassian account email)
+- `JIRA_AUTH_MODE` — optional auth override: `auto` (default), `basic`, or `bearer`
 - `JIRA_BASE_URL` — required when you pass only an issue key like `DEMO-123`
 - `GITLAB_TOKEN` — personal access token for `gitlab-review` and `gitlab-diff-review`
 - `AGENTWEAVER_HOME` — path to the AgentWeaver installation directory
@@ -120,6 +122,8 @@ Example `.env`:
 
 ```bash
 JIRA_API_KEY=your-jira-api-token
+JIRA_USERNAME=your.name@company.com
+JIRA_AUTH_MODE=auto
 JIRA_BASE_URL=https://jira.example.com
 AGENTWEAVER_HOME=/absolute/path/to/AgentWeaver
 CODEX_BIN=codex
