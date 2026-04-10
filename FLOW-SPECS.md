@@ -85,7 +85,7 @@
 Именно `phase.id` сейчас становится:
 
 - phase id в `auto --help-phases`
-- id шага в persisted auto state
+- id phase в persisted flow state для `auto`
 - значением для `auto --from <phase>`
 
 Примеры:
@@ -123,8 +123,8 @@
 Важно:
 
 - runtime во время текущего запуска может держать `step.value` и `step.outputs` в памяти, чтобы следующие шаги могли ссылаться на результаты через `ref`
-- persisted auto state сохраняет только компактный execution state: статусы, timestamps, `repeatVars` и `stopFlow`
-- большие agent outputs в auto state больше не сериализуются
+- persisted flow state сохраняет только компактный execution state: статусы, timestamps, `repeatVars` и `stopFlow`
+- большие agent outputs в persisted flow state не сериализуются
 
 Общий шаблон:
 
