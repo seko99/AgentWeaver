@@ -191,10 +191,6 @@ export function gitlabDiffReviewInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `gitlab-diff-review-input-${taskKey}.json`);
 }
 
-export function autoStateFile(taskKey: string): string {
-  return taskArtifactsFile(taskKey, `.agentweaver-state-${taskKey}.json`);
-}
-
 export function flowStateFile(scopeKey: string, flowId: string): string {
   return scopeArtifactsFile(scopeKey, `.agentweaver-flow-state-${encodeURIComponent(flowId)}.json`);
 }
