@@ -1,128 +1,54 @@
 {
-  "kind": "gitlab-review-flow",
+  "kind": "review-project-flow",
   "version": 1,
   "phases": [
     {
-      "id": "gitlab_review",
+      "id": "review",
       "steps": [
         {
-          "id": "collect_merge_request_url",
-          "node": "user-input",
-          "params": {
-            "formId": { "const": "gitlab-review-input" },
-            "title": { "const": "GitLab Review" },
-            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить комментарии код-ревью." },
-            "fields": {
-              "const": [
-                {
-                  "id": "merge_request_url",
-                  "type": "text",
-                  "label": "GitLab MR URL",
-                  "help": "Например: https://gitlab.example.com/group/project/-/merge_requests/123",
-                  "required": true,
-                  "placeholder": "https://gitlab.example.com/group/project/-/merge_requests/123"
-                }
-              ]
-            },
-            "outputFile": {
-              "artifact": {
-                "kind": "gitlab-review-input-json-file",
-                "taskKey": { "ref": "params.taskKey" }
-              }
-            }
-          },
-          "expect": [
-            {
-              "kind": "require-structured-artifacts",
-              "items": [
-                {
-                  "path": {
-                    "artifact": {
-                      "kind": "gitlab-review-input-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
-                    }
-                  },
-                  "schemaId": "user-input/v1"
-                }
-              ],
-              "message": "GitLab review input form produced invalid structured artifacts."
-            }
-          ]
-        },
-        {
-          "id": "fetch_gitlab_review",
-          "node": "fetch-gitlab-review",
-          "params": {
-            "mergeRequestUrl": { "ref": "steps.gitlab_review.collect_merge_request_url.value.values.merge_request_url" },
-            "outputFile": {
-              "artifact": {
-                "kind": "gitlab-review-file",
-                "taskKey": { "ref": "params.taskKey" }
-              }
-            },
-            "outputJsonFile": {
-              "artifact": {
-                "kind": "gitlab-review-json-file",
-                "taskKey": { "ref": "params.taskKey" }
-              }
-            }
-          },
-          "expect": [
-            {
-              "kind": "require-file",
-              "path": {
+          "id": "run_review",
+          "node": "llm-prompt",
+          "prompt": {
+            "templateRef": "review-project",
+            "vars": {
+              "review_file": {
                 "artifact": {
-                  "kind": "gitlab-review-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "kind": "review-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
-              "message": "Fetch GitLab review node did not produce the markdown artifact."
-            },
-            {
-              "kind": "require-structured-artifacts",
-              "items": [
-                {
-                  "path": {
-                    "artifact": {
-                      "kind": "gitlab-review-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
-                    }
-                  },
-                  "schemaId": "gitlab-review/v1"
+              "review_json_file": {
+                "artifact": {
+                  "kind": "review-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
-              ],
-              "message": "Fetch GitLab review node produced invalid structured artifacts."
-            }
-          ]
-        },
-        {
-          "id": "materialize_review_artifacts",
-          "node": "gitlab-review-artifacts",
+              },
+              "ready_to_merge_file": {
+                "artifact": {
+                  "kind": "ready-to-merge-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
           "params": {
-            "gitlabReviewJsonFile": {
-              "artifact": {
-                "kind": "gitlab-review-json-file",
-                "taskKey": { "ref": "params.taskKey" }
-              }
-            },
-            "reviewFile": {
-              "artifact": {
-                "kind": "review-file",
-                "taskKey": { "ref": "params.taskKey" },
+            "labelText": {
+              "template": "Running project review mode (iteration {iteration})",
+              "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "reviewJsonFile": {
-              "artifact": {
-                "kind": "review-json-file",
-                "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "ref": "params.iteration" }
-              }
-            }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
               "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
@@ -134,10 +60,11 @@
                   }
                 ]
               },
-              "message": "GitLab review materialization did not produce the required review artifact."
+              "message": "Project review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
@@ -150,14 +77,14 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "GitLab review materialization produced invalid structured review artifacts."
+              "message": "Project review produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
@@ -179,9 +106,10 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing imported review summary" },
-            "summaryTitle": { "const": "Imported GitLab Comments" },
-            "model": { "const": "haiku" },
+            "labelText": { "const": "Preparing project review summary" },
+            "summaryTitle": { "const": "Project Review Comments" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
@@ -192,8 +120,8 @@
           }
         },
         {
-          "id": "run_codex_review_reply",
-          "node": "codex-local-prompt",
+          "id": "run_review_reply",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-project",
             "vars": {
@@ -231,12 +159,13 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex review reply mode for imported GitLab review (iteration {iteration})",
+              "template": "Running project review reply mode (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -253,7 +182,7 @@
                   }
                 ]
               },
-              "message": "Codex review reply did not produce the required review-reply artifact."
+              "message": "Project review reply did not produce the required review-reply artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -270,14 +199,14 @@
                   "schemaId": "review-reply/v1"
                 }
               ],
-              "message": "Codex review reply produced invalid structured artifacts."
+              "message": "Project review reply produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review_reply",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-summary",
             "vars": {
@@ -299,9 +228,10 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing Codex reply summary" },
-            "summaryTitle": { "const": "Codex Reply Summary" },
-            "model": { "const": "haiku" },
+            "labelText": { "const": "Preparing project review reply summary" },
+            "summaryTitle": { "const": "Project Review Reply" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",

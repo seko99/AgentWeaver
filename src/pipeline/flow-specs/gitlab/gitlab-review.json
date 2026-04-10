@@ -1,77 +1,128 @@
 {
-  "kind": "review-flow",
+  "kind": "gitlab-review-flow",
   "version": 1,
   "phases": [
     {
-      "id": "review",
+      "id": "gitlab_review",
       "steps": [
         {
-          "id": "run_claude_review",
-          "node": "claude-prompt",
-          "prompt": {
-            "templateRef": "review",
-            "vars": {
-              "jira_task_file": {
-                "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
+          "id": "collect_merge_request_url",
+          "node": "user-input",
+          "params": {
+            "formId": { "const": "gitlab-review-input" },
+            "title": { "const": "GitLab Review" },
+            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить комментарии код-ревью." },
+            "fields": {
+              "const": [
+                {
+                  "id": "merge_request_url",
+                  "type": "text",
+                  "label": "GitLab MR URL",
+                  "help": "Например: https://gitlab.example.com/group/project/-/merge_requests/123",
+                  "required": true,
+                  "placeholder": "https://gitlab.example.com/group/project/-/merge_requests/123"
                 }
-              },
-              "design_file": {
-                "artifact": {
-                  "kind": "design-file",
-                  "taskKey": { "ref": "params.taskKey" }
+              ]
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "gitlab-review-input-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "gitlab-review-input-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "user-input/v1"
                 }
-              },
-              "design_json_file": {
-                "artifact": {
-                  "kind": "design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_file": {
-                "artifact": {
-                  "kind": "plan-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_json_file": {
-                "artifact": {
-                  "kind": "plan-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "review_file": {
-                "artifact": {
-                  "kind": "review-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "review_json_file": {
-                "artifact": {
-                  "kind": "review-json-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
+              ],
+              "message": "GitLab review input form produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "fetch_gitlab_review",
+          "node": "fetch-gitlab-review",
+          "params": {
+            "mergeRequestUrl": { "ref": "steps.gitlab_review.collect_merge_request_url.value.values.merge_request_url" },
+            "outputFile": {
+              "artifact": {
+                "kind": "gitlab-review-file",
+                "taskKey": { "ref": "params.taskKey" }
               }
             },
-            "extraPrompt": { "ref": "params.extraPrompt" },
-            "format": "task-prompt"
+            "outputJsonFile": {
+              "artifact": {
+                "kind": "gitlab-review-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
           },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "gitlab-review-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Fetch GitLab review node did not produce the markdown artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "gitlab-review-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "gitlab-review/v1"
+                }
+              ],
+              "message": "Fetch GitLab review node produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "materialize_review_artifacts",
+          "node": "gitlab-review-artifacts",
           "params": {
-            "labelText": {
-              "template": "Running Claude review mode (iteration {iteration})",
-              "vars": {
+            "gitlabReviewJsonFile": {
+              "artifact": {
+                "kind": "gitlab-review-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "reviewFile": {
+              "artifact": {
+                "kind": "review-file",
+                "taskKey": { "ref": "params.taskKey" },
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "opus" }
+            "reviewJsonFile": {
+              "artifact": {
+                "kind": "review-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            }
           },
           "expect": [
             {
               "kind": "require-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
@@ -83,11 +134,10 @@
                   }
                 ]
               },
-              "message": "Claude review did not produce the required review artifact."
+              "message": "GitLab review materialization did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
@@ -100,14 +150,14 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Claude review produced invalid structured artifacts."
+              "message": "GitLab review materialization produced invalid structured review artifacts."
             }
           ]
         },
         {
           "id": "summarize_review",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
@@ -129,9 +179,10 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing Claude review summary" },
-            "summaryTitle": { "const": "Claude Comments" },
-            "model": { "const": "haiku" },
+            "labelText": { "const": "Preparing imported review summary" },
+            "summaryTitle": { "const": "Imported GitLab Comments" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
@@ -142,10 +193,10 @@
           }
         },
         {
-          "id": "run_codex_review_reply",
-          "node": "codex-local-prompt",
+          "id": "run_review_reply",
+          "node": "llm-prompt",
           "prompt": {
-            "templateRef": "review-reply",
+            "templateRef": "review-reply-project",
             "vars": {
               "review_file": {
                 "artifact": {
@@ -159,36 +210,6 @@
                   "kind": "review-json-file",
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "jira_task_file": {
-                "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_file": {
-                "artifact": {
-                  "kind": "design-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_json_file": {
-                "artifact": {
-                  "kind": "design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_file": {
-                "artifact": {
-                  "kind": "plan-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_json_file": {
-                "artifact": {
-                  "kind": "plan-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "review_reply_file": {
@@ -211,12 +232,13 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex review reply mode (iteration {iteration})",
+              "template": "Running review reply mode for imported GitLab review (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -233,7 +255,7 @@
                   }
                 ]
               },
-              "message": "Codex review reply did not produce the required review-reply artifact."
+              "message": "Review reply did not produce the required review-reply artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -250,14 +272,14 @@
                   "schemaId": "review-reply/v1"
                 }
               ],
-              "message": "Codex review reply produced invalid structured artifacts."
+              "message": "Review reply produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review_reply",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-summary",
             "vars": {
@@ -279,9 +301,10 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing Codex reply summary" },
-            "summaryTitle": { "const": "Codex Reply Summary" },
-            "model": { "const": "haiku" },
+            "labelText": { "const": "Preparing reply summary" },
+            "summaryTitle": { "const": "Reply Summary" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",
@@ -289,21 +312,6 @@
                 "iteration": { "ref": "params.iteration" }
               }
             }
-          }
-        },
-        {
-          "id": "check_ready_to_merge",
-          "node": "file-check",
-          "params": {
-            "path": {
-              "artifact": {
-                "kind": "ready-to-merge-file",
-                "taskKey": { "ref": "params.taskKey" }
-              }
-            },
-            "panelTitle": { "const": "Ready To Merge" },
-            "foundMessage": { "const": "Изменения готовы к merge\nФайл ready-to-merge.md создан." },
-            "tone": { "const": "green" }
           }
         }
       ]

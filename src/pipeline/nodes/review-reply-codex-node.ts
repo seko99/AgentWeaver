@@ -36,7 +36,7 @@ export const reviewReplyCodexNode: PipelineNodeDefinition<ReviewReplyCodexNodePa
     printInfo(`Running Codex review reply mode (iteration ${params.iteration})`);
     printPrompt("Codex", prompt);
     const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
-      "codex-local",
+      "codex",
     );
     const value = await executor.execute(
       toExecutorContext(context),

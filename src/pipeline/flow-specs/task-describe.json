@@ -106,8 +106,8 @@
           ]
         },
         {
-          "id": "run_codex_task_describe_from_jira",
-          "node": "codex-local-prompt",
+          "id": "run_task_describe_from_jira",
+          "node": "llm-prompt",
           "when": {
             "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"
           },
@@ -137,8 +137,9 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex task description mode" },
-            "model": { "const": "gpt-5.4" },
+            "labelText": { "const": "Running task description mode" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {
               "list": [
                 {
@@ -187,8 +188,8 @@
           ]
         },
         {
-          "id": "run_codex_task_describe_from_input",
-          "node": "codex-local-prompt",
+          "id": "run_task_describe_from_input",
+          "node": "llm-prompt",
           "when": {
             "not": {
               "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"
@@ -225,8 +226,9 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex task description mode" },
-            "model": { "const": "gpt-5.4" },
+            "labelText": { "const": "Running task description mode" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {
               "list": [
                 {

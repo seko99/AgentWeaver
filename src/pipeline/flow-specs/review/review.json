@@ -1,16 +1,46 @@
 {
-  "kind": "review-project-flow",
+  "kind": "review-flow",
   "version": 1,
   "phases": [
     {
       "id": "review",
       "steps": [
         {
-          "id": "run_claude_review",
-          "node": "claude-prompt",
+          "id": "run_review",
+          "node": "llm-prompt",
           "prompt": {
-            "templateRef": "review-project",
+            "templateRef": "review",
             "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
               "review_file": {
                 "artifact": {
                   "kind": "review-file",
@@ -24,12 +54,6 @@
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.iteration" }
                 }
-              },
-              "ready_to_merge_file": {
-                "artifact": {
-                  "kind": "ready-to-merge-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
               }
             },
             "extraPrompt": { "ref": "params.extraPrompt" },
@@ -37,12 +61,13 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Claude project review mode (iteration {iteration})",
+              "template": "Running review mode (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "opus" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -59,7 +84,7 @@
                   }
                 ]
               },
-              "message": "Claude project review did not produce the required review artifact."
+              "message": "Review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -76,14 +101,14 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Claude project review produced invalid structured artifacts."
+              "message": "Review produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
@@ -105,9 +130,10 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing project review summary" },
-            "summaryTitle": { "const": "Project Review Comments" },
-            "model": { "const": "haiku" },
+            "labelText": { "const": "Preparing review summary" },
+            "summaryTitle": { "const": "Review Comments" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
@@ -118,10 +144,10 @@
           }
         },
         {
-          "id": "run_codex_review_reply",
-          "node": "codex-local-prompt",
+          "id": "run_review_reply",
+          "node": "llm-prompt",
           "prompt": {
-            "templateRef": "review-reply-project",
+            "templateRef": "review-reply",
             "vars": {
               "review_file": {
                 "artifact": {
@@ -135,6 +161,36 @@
                   "kind": "review-json-file",
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_file": {
+                "artifact": {
+                  "kind": "design-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_file": {
+                "artifact": {
+                  "kind": "plan-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "review_reply_file": {
@@ -157,12 +213,13 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex project review reply mode (iteration {iteration})",
+              "template": "Running review reply mode (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -179,7 +236,7 @@
                   }
                 ]
               },
-              "message": "Codex project review reply did not produce the required review-reply artifact."
+              "message": "Review reply did not produce the required review-reply artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -196,14 +253,14 @@
                   "schemaId": "review-reply/v1"
                 }
               ],
-              "message": "Codex project review reply produced invalid structured artifacts."
+              "message": "Review reply produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review_reply",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-summary",
             "vars": {
@@ -225,9 +282,10 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing project review reply summary" },
-            "summaryTitle": { "const": "Project Review Reply" },
-            "model": { "const": "haiku" },
+            "labelText": { "const": "Preparing reply summary" },
+            "summaryTitle": { "const": "Reply Summary" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",
@@ -235,6 +293,21 @@
                 "iteration": { "ref": "params.iteration" }
               }
             }
+          }
+        },
+        {
+          "id": "check_ready_to_merge",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Изменения готовы к merge\nФайл ready-to-merge.md создан." },
+            "tone": { "const": "green" }
           }
         }
       ]
