@@ -11,7 +11,7 @@
           "params": {
             "formId": { "const": "gitlab-diff-review-input" },
             "title": { "const": "GitLab Diff Review" },
-            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить diff и запустить код-ревью через Claude Opus." },
+            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить diff и запустить код-ревью через Codex." },
             "fields": {
               "const": [
                 {
@@ -96,9 +96,9 @@
           ]
         },
         {
-          "id": "run_claude_diff_review",
+          "id": "run_codex_diff_review",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "gitlab-diff-review",
             "vars": {
@@ -140,12 +140,13 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Claude GitLab diff review (iteration {iteration})",
+              "template": "Running Codex GitLab diff review (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "opus" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -162,7 +163,7 @@
                   }
                 ]
               },
-              "message": "Claude diff review did not produce the required review artifact."
+              "message": "Codex diff review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -179,14 +180,14 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Claude diff review produced invalid structured artifacts."
+              "message": "Codex diff review produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
@@ -210,7 +211,8 @@
           "params": {
             "labelText": { "const": "Preparing GitLab diff review summary" },
             "summaryTitle": { "const": "GitLab Diff Review" },
-            "model": { "const": "haiku" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",

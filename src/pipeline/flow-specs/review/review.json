@@ -6,8 +6,8 @@
       "id": "review",
       "steps": [
         {
-          "id": "run_claude_review",
-          "node": "claude-prompt",
+          "id": "run_codex_review",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review",
             "vars": {
@@ -61,12 +61,13 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Claude review mode (iteration {iteration})",
+              "template": "Running Codex review mode (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "opus" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -83,7 +84,7 @@
                   }
                 ]
               },
-              "message": "Claude review did not produce the required review artifact."
+              "message": "Codex review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -100,14 +101,14 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Claude review produced invalid structured artifacts."
+              "message": "Codex review produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
@@ -129,9 +130,10 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing Claude review summary" },
-            "summaryTitle": { "const": "Claude Comments" },
-            "model": { "const": "haiku" },
+            "labelText": { "const": "Preparing Codex review summary" },
+            "summaryTitle": { "const": "Codex Comments" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
@@ -143,7 +145,7 @@
         },
         {
           "id": "run_codex_review_reply",
-          "node": "codex-local-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply",
             "vars": {
@@ -216,7 +218,8 @@
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -257,7 +260,7 @@
         {
           "id": "summarize_review_reply",
           "when": { "not": { "ref": "context.dryRun" } },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-summary",
             "vars": {
@@ -281,7 +284,8 @@
           "params": {
             "labelText": { "const": "Preparing Codex reply summary" },
             "summaryTitle": { "const": "Codex Reply Summary" },
-            "model": { "const": "haiku" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",

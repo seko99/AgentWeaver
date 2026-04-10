@@ -257,7 +257,7 @@ Interactive Mode:
 Flags:
   --version       Show package version
   --force         In interactive mode, regenerate task summary in Jira-backed flows
-  --dry           Fetch Jira task, but print docker/codex/claude commands instead of executing them
+  --dry           Fetch Jira task, but print docker/codex commands instead of executing them
   --verbose       Show live stdout/stderr of launched commands
   --scope         Explicit workflow scope name for non-Jira runs
   --prompt        Extra prompt text appended to the base prompt
@@ -276,8 +276,6 @@ Optional environment variables:
   CODEX_MODEL
   OPENCODE_BIN
   OPENCODE_MODEL
-  CLAUDE_BIN
-  CLAUDE_MODEL
 
 Notes:
   - Jira-backed task flows will ask for Jira task via user-input when it is not passed as an argument. task-describe can also work from a manual task description without Jira.
@@ -944,14 +942,10 @@ function checkPrerequisites(config: Config): void {
   ) {
     resolveCmd("codex", "CODEX_BIN");
   }
-  if (config.command === "review" || config.command === "gitlab-diff-review") {
-    resolveCmd("claude", "CLAUDE_BIN");
-  }
 }
 
 function checkAutoPrerequisites(config: Config): void {
   resolveCmd("codex", "CODEX_BIN");
-  resolveCmd("claude", "CLAUDE_BIN");
 }
 
 function autoFlowParams(config: Config, forceRefreshSummary = false): Record<string, unknown> {
@@ -973,7 +967,7 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   "bug-analyze":
     "Анализирует баг по Jira и создаёт структурированные артефакты: гипотезу причины, дизайн исправления и план работ.",
   "gitlab-diff-review":
-    "Запрашивает GitLab MR URL через user-input, загружает diff merge request по API и запускает код-ревью через Claude Opus с сохранением markdown и structured JSON artifacts.",
+    "Запрашивает GitLab MR URL через user-input, загружает diff merge request по API и запускает код-ревью через Codex с сохранением markdown и structured JSON artifacts.",
   "gitlab-review":
     "Запрашивает GitLab MR URL через user-input, загружает комментарии код-ревью по API и сохраняет markdown плюс structured JSON artifact.",
   "bug-fix":
@@ -984,7 +978,7 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   "task-describe": "Строит короткое описание задачи либо по Jira, либо по краткому user-input без Jira.",
   implement: "Реализует задачу по утверждённым design/plan артефактам и при необходимости запускает post-verify сборки.",
   review:
-    "Запускает Claude-код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания через Codex.",
+    "Запускает Codex-код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания через Codex.",
   "review-fix":
     "Исправляет замечания после review-reply, обновляет код и прогоняет обязательные проверки после правок.",
   "run-go-tests-loop":
@@ -1175,11 +1169,15 @@ async function runDeclarativeFlowBySpecFile(
   launchMode: FlowLaunchMode = "restart",
   runtime: RuntimeServices = runtimeServices,
 ): Promise<void> {
+  const mergedFlowParams = {
+    ...defaultDeclarativeFlowParams(config, false, overrides),
+    ...flowParams,
+  };
   await runDeclarativeFlowByRef(
     config.command,
     { source: "built-in", fileName },
     config,
-    flowParams,
+    mergedFlowParams,
     overrides,
     requestUserInput,
     setSummary,
@@ -1416,7 +1414,7 @@ async function executeCommand(
       process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
       process.stdout.write(`Saving Jira issue JSON to: ${config.jiraTaskFile}\n`);
     }
-    await runDeclarativeFlowBySpecFile("bug-analyze.json", config, {
+    await runDeclarativeFlowBySpecFile("bugz/bug-analyze.json", config, {
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
@@ -1428,7 +1426,7 @@ async function executeCommand(
   if (config.command === "gitlab-review") {
     const iteration = nextReviewIterationForTask(config.taskKey);
     await runDeclarativeFlowBySpecFile(
-      "gitlab-review.json",
+      "gitlab/gitlab-review.json",
       config,
       {
         taskKey: config.taskKey,
@@ -1450,7 +1448,7 @@ async function executeCommand(
   if (config.command === "gitlab-diff-review") {
     const iteration = nextReviewIterationForTask(config.taskKey);
     await runDeclarativeFlowBySpecFile(
-      "gitlab-diff-review.json",
+      "gitlab/gitlab-diff-review.json",
       config,
       {
         taskKey: config.taskKey,
@@ -1484,7 +1482,7 @@ async function executeCommand(
       ],
       "Bug-fix mode requires valid structured artifacts from the bug analysis phase.",
     );
-    await runDeclarativeFlowBySpecFile("bug-fix.json", config, {
+    await runDeclarativeFlowBySpecFile("bugz/bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
     }, {}, requestUserInput, undefined, launchMode, runtime);
@@ -1494,7 +1492,7 @@ async function executeCommand(
   if (config.command === "mr-description") {
     requireJiraConfig(config);
     requireJiraTaskFile(config.jiraTaskFile);
-    await runDeclarativeFlowBySpecFile("mr-description.json", config, {
+    await runDeclarativeFlowBySpecFile("gitlab/mr-description.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
     }, {}, requestUserInput, undefined, launchMode, runtime);
@@ -1538,13 +1536,13 @@ async function executeCommand(
         ],
         "Review mode requires valid structured plan artifacts from the planning phase.",
       );
-      await runDeclarativeFlowBySpecFile("review.json", config, {
+      await runDeclarativeFlowBySpecFile("review/review.json", config, {
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
       }, {}, requestUserInput, undefined, launchMode, runtime);
     } else {
-      await runDeclarativeFlowBySpecFile("review-project.json", config, {
+      await runDeclarativeFlowBySpecFile("review/review-project.json", config, {
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
@@ -1565,7 +1563,7 @@ async function executeCommand(
       ],
       "Review-fix mode requires valid structured review artifacts.",
     );
-    await runDeclarativeFlowBySpecFile("review-fix.json", config, {
+    await runDeclarativeFlowBySpecFile("review/review-fix.json", config, {
       taskKey: config.taskKey,
       latestIteration,
       reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
@@ -1577,7 +1575,7 @@ async function executeCommand(
 
   if (config.command === "run-go-tests-loop" || config.command === "run-go-linter-loop") {
     await runDeclarativeFlowBySpecFile(
-      config.command === "run-go-tests-loop" ? "run-go-tests-loop.json" : "run-go-linter-loop.json",
+      config.command === "run-go-tests-loop" ? "go/run-go-tests-loop.json" : "go/run-go-linter-loop.json",
       config,
       {
         taskKey: config.taskKey,

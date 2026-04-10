@@ -7,63 +7,48 @@
       "steps": [
         {
           "id": "run_codex_mr_description",
-          "node": "opencode-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "mr-description",
             "vars": {
               "jira_task_file": {
                 "artifact": {
                   "kind": "jira-task-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "mr_description_file": {
                 "artifact": {
                   "kind": "mr-description-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "mr_description_json_file": {
                 "artifact": {
                   "kind": "mr-description-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               }
             },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"
           },
           "params": {
-            "labelText": {
-              "const": "Running OpenCode MR description mode"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            },
+            "labelText": { "const": "Running Codex MR description mode" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {
               "list": [
                 {
                   "artifact": {
                     "kind": "mr-description-file",
-                    "taskKey": {
-                      "ref": "params.taskKey"
-                    }
+                    "taskKey": { "ref": "params.taskKey" }
                   }
                 },
                 {
                   "artifact": {
                     "kind": "mr-description-json-file",
-                    "taskKey": {
-                      "ref": "params.taskKey"
-                    }
+                    "taskKey": { "ref": "params.taskKey" }
                   }
                 }
               ]
@@ -72,36 +57,24 @@
           "expect": [
             {
               "kind": "require-file",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "path": {
                 "artifact": {
                   "kind": "mr-description-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "message": "MR description mode did not produce the MR description artifact."
             },
             {
               "kind": "require-structured-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
                     "artifact": {
                       "kind": "mr-description-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "mr-description/v1"

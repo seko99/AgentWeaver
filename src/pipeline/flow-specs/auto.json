@@ -12,31 +12,23 @@
           "id": "fetch_jira",
           "node": "jira-fetch",
           "params": {
-            "jiraApiUrl": {
-              "ref": "params.jiraApiUrl"
-            },
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
             "outputFile": {
               "artifact": {
                 "kind": "jira-task-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             },
             "attachmentsManifestFile": {
               "artifact": {
                 "kind": "jira-attachments-manifest-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             },
             "attachmentsContextFile": {
               "artifact": {
                 "kind": "jira-attachments-context-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             }
           },
@@ -46,9 +38,7 @@
               "path": {
                 "artifact": {
                   "kind": "jira-task-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "message": "Jira fetch node did not produce the Jira task file."
@@ -58,9 +48,7 @@
               "path": {
                 "artifact": {
                   "kind": "jira-attachments-manifest-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "message": "Jira fetch node did not produce the Jira attachments manifest file."
@@ -70,9 +58,7 @@
               "path": {
                 "artifact": {
                   "kind": "jira-attachments-context-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "message": "Jira fetch node did not produce the Jira attachments context file."
@@ -83,18 +69,12 @@
           "id": "load_existing_task_summary",
           "when": {
             "all": [
-              {
-                "not": {
-                  "ref": "params.forceRefresh"
-                }
-              },
+              { "not": { "ref": "params.forceRefresh" } },
               {
                 "exists": {
                   "artifact": {
                     "kind": "task-summary-file",
-                    "taskKey": {
-                      "ref": "params.taskKey"
-                    }
+                    "taskKey": { "ref": "params.taskKey" }
                   }
                 }
               }
@@ -105,9 +85,7 @@
             "path": {
               "artifact": {
                 "kind": "task-summary-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             }
           }
@@ -116,64 +94,50 @@
           "id": "generate_task_summary",
           "when": {
             "any": [
-              {
-                "ref": "params.forceRefresh"
-              },
+              { "ref": "params.forceRefresh" },
               {
                 "not": {
                   "exists": {
                     "artifact": {
                       "kind": "task-summary-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   }
                 }
               }
             ]
           },
-          "node": "opencode-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "task-summary",
             "vars": {
               "jira_task_file": {
                 "artifact": {
                   "kind": "jira-task-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "task_summary_file": {
                 "artifact": {
                   "kind": "task-summary-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "task_summary_json_file": {
                 "artifact": {
                   "kind": "task-summary-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               }
             },
             "format": "plain"
           },
           "params": {
-            "labelText": {
-              "const": "Preparing task summary"
-            },
+            "labelText": { "const": "Preparing task summary" },
             "outputFile": {
               "artifact": {
                 "kind": "task-summary-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             },
             "requiredArtifacts": {
@@ -181,76 +145,55 @@
                 {
                   "artifact": {
                     "kind": "task-summary-json-file",
-                    "taskKey": {
-                      "ref": "params.taskKey"
-                    }
+                    "taskKey": { "ref": "params.taskKey" }
                   }
                 }
               ]
             },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
               "kind": "require-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
                     "artifact": {
                       "kind": "task-summary-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   }
                 ]
               },
-              "message": "Claude summary did not produce the task summary artifact."
+              "message": "Codex summary did not produce the task summary artifact."
             },
             {
               "kind": "require-structured-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
                     "artifact": {
                       "kind": "task-summary-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "task-summary/v1"
                 }
               ],
-              "message": "Claude summary produced invalid structured artifacts."
+              "message": "Codex summary produced invalid structured artifacts."
             }
           ],
           "after": [
             {
               "kind": "set-summary-from-file",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "path": {
                 "artifact": {
                   "kind": "task-summary-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               }
             }
@@ -258,63 +201,48 @@
         },
         {
           "id": "generate_planning_questions",
-          "node": "opencode-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "plan-questions",
             "vars": {
               "jira_task_file": {
                 "artifact": {
                   "kind": "jira-task-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "jira_attachments_manifest_file": {
                 "artifact": {
                   "kind": "jira-attachments-manifest-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "jira_attachments_context_file": {
                 "artifact": {
                   "kind": "jira-attachments-context-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "planning_questions_json_file": {
                 "artifact": {
                   "kind": "planning-questions-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               }
             },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"
           },
           "params": {
-            "labelText": {
-              "const": "Generating planning questions"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            },
+            "labelText": { "const": "Generating planning questions" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {
               "list": [
                 {
                   "artifact": {
                     "kind": "planning-questions-json-file",
-                    "taskKey": {
-                      "ref": "params.taskKey"
-                    }
+                    "taskKey": { "ref": "params.taskKey" }
                   }
                 }
               ]
@@ -323,19 +251,13 @@
           "expect": [
             {
               "kind": "require-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
                     "artifact": {
                       "kind": "planning-questions-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   }
                 ]
@@ -344,19 +266,13 @@
             },
             {
               "kind": "require-structured-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
                     "artifact": {
                       "kind": "planning-questions-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "planning-questions/v1"
@@ -373,17 +289,11 @@
             "planningQuestionsJsonFile": {
               "artifact": {
                 "kind": "planning-questions-json-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             },
-            "formId": {
-              "const": "planning-questions"
-            },
-            "title": {
-              "const": "Planning Questions"
-            },
+            "formId": { "const": "planning-questions" },
+            "title": { "const": "Planning Questions" },
             "description": {
               "const": "Ответьте на вопросы модели, если они нужны для точного design/plan. Если вопросов нет, шаг завершится автоматически."
             }
@@ -393,27 +303,15 @@
           "id": "collect_planning_answers",
           "node": "user-input",
           "params": {
-            "formId": {
-              "ref": "steps.plan.build_planning_questions_form.value.formId"
-            },
-            "title": {
-              "ref": "steps.plan.build_planning_questions_form.value.title"
-            },
-            "description": {
-              "ref": "steps.plan.build_planning_questions_form.value.description"
-            },
-            "submitLabel": {
-              "const": "Continue planning"
-            },
-            "fields": {
-              "ref": "steps.plan.build_planning_questions_form.value.fields"
-            },
+            "formId": { "ref": "steps.plan.build_planning_questions_form.value.formId" },
+            "title": { "ref": "steps.plan.build_planning_questions_form.value.title" },
+            "description": { "ref": "steps.plan.build_planning_questions_form.value.description" },
+            "submitLabel": { "const": "Continue planning" },
+            "fields": { "ref": "steps.plan.build_planning_questions_form.value.fields" },
             "outputFile": {
               "artifact": {
                 "kind": "planning-answers-json-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             }
           },
@@ -425,9 +323,7 @@
                   "path": {
                     "artifact": {
                       "kind": "planning-answers-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "user-input/v1"
@@ -438,137 +334,100 @@
           ]
         },
         {
-          "id": "run_plan",
-          "node": "opencode-prompt",
+          "id": "run_codex_plan",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "plan",
             "vars": {
               "jira_task_file": {
                 "artifact": {
                   "kind": "jira-task-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "jira_attachments_manifest_file": {
                 "artifact": {
                   "kind": "jira-attachments-manifest-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "jira_attachments_context_file": {
                 "artifact": {
                   "kind": "jira-attachments-context-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "design_file": {
                 "artifact": {
                   "kind": "design-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "design_json_file": {
                 "artifact": {
                   "kind": "design-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "plan_json_file": {
                 "artifact": {
                   "kind": "plan-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "qa_file": {
                 "artifact": {
                   "kind": "qa-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "qa_json_file": {
                 "artifact": {
                   "kind": "qa-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               }
             },
             "extraPrompt": {
               "appendPrompt": {
-                "base": {
-                  "ref": "params.extraPrompt"
-                },
-                "suffix": {
-                  "ref": "steps.plan.collect_planning_answers.value.promptSuffix"
-                }
+                "base": { "ref": "params.extraPrompt" },
+                "suffix": { "ref": "steps.plan.collect_planning_answers.value.promptSuffix" }
               }
             },
             "format": "task-prompt"
           },
           "params": {
-            "labelText": {
-              "const": "Running OpenCode planning mode"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "labelText": { "const": "Running Codex planning mode" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
               "kind": "require-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "artifactList": {
                   "kind": "plan-artifacts",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "message": "Plan mode did not produce the required artifacts."
             },
             {
               "kind": "require-structured-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
                     "artifact": {
                       "kind": "design-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "implementation-design/v1"
@@ -577,9 +436,7 @@
                   "path": {
                     "artifact": {
                       "kind": "plan-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "implementation-plan/v1"
@@ -588,9 +445,7 @@
                   "path": {
                     "artifact": {
                       "kind": "qa-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      }
+                      "taskKey": { "ref": "params.taskKey" }
                     }
                   },
                   "schemaId": "qa-plan/v1"
@@ -606,56 +461,43 @@
       "id": "implement",
       "steps": [
         {
-          "id": "run_implement",
-          "node": "opencode-prompt",
+          "id": "run_codex_implement",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "implement",
             "vars": {
               "design_file": {
                 "artifact": {
                   "kind": "design-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "design_json_file": {
                 "artifact": {
                   "kind": "design-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "plan_json_file": {
                 "artifact": {
                   "kind": "plan-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               }
             },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"
           },
           "params": {
-            "labelText": {
-              "const": "Running OpenCode implementation mode locally"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "labelText": { "const": "Running Codex implementation mode locally" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           }
         }
       ]
@@ -667,21 +509,13 @@
           "id": "run_go_linter_loop",
           "node": "flow-run",
           "params": {
-            "fileName": {
-              "const": "run-go-linter-loop-opencode.json"
-            },
-            "labelText": {
-              "const": "Running run-go-linter-loop after implement"
-            },
-            "taskKey": {
-              "ref": "params.taskKey"
-            },
-            "runGoLinterScript": {
-              "ref": "params.runGoLinterScript"
-            },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            }
+            "fileName": { "const": "run-go-linter-loop.json" },
+            "labelText": { "const": "Running run-go-linter-loop after implement" },
+            "taskKey": { "ref": "params.taskKey" },
+            "runGoLinterScript": { "ref": "params.runGoLinterScript" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" }
           }
         }
       ]
@@ -693,21 +527,13 @@
           "id": "run_go_tests_loop",
           "node": "flow-run",
           "params": {
-            "fileName": {
-              "const": "run-go-tests-loop-opencode.json"
-            },
-            "labelText": {
-              "const": "Running run-go-tests-loop after implement"
-            },
-            "taskKey": {
-              "ref": "params.taskKey"
-            },
-            "runGoTestsScript": {
-              "ref": "params.runGoTestsScript"
-            },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            }
+            "fileName": { "const": "run-go-tests-loop.json" },
+            "labelText": { "const": "Running run-go-tests-loop after implement" },
+            "taskKey": { "ref": "params.taskKey" },
+            "runGoTestsScript": { "ref": "params.runGoTestsScript" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" }
           }
         }
       ]
@@ -719,354 +545,245 @@
           "exists": {
             "artifact": {
               "kind": "ready-to-merge-file",
-              "taskKey": {
-                "ref": "params.taskKey"
-              }
+              "taskKey": { "ref": "params.taskKey" }
             }
           }
         }
       },
       "steps": [
         {
-          "id": "run_review",
-          "node": "opencode-prompt",
+          "id": "run_codex_review",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review",
             "vars": {
               "jira_task_file": {
                 "artifact": {
                   "kind": "jira-task-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "design_file": {
                 "artifact": {
                   "kind": "design-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "design_json_file": {
                 "artifact": {
                   "kind": "design-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "plan_json_file": {
                 "artifact": {
                   "kind": "plan-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "review_file": {
                 "artifact": {
                   "kind": "review-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "review_json_file": {
                 "artifact": {
                   "kind": "review-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               }
             },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"
           },
           "params": {
-            "labelText": {
-              "const": "Running OpenCode review mode"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "labelText": { "const": "Running Codex review mode" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
               "kind": "require-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
                     "artifact": {
                       "kind": "review-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "const": 1
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "const": 1 }
                     }
                   }
                 ]
               },
-              "message": "Review did not produce the required review artifact."
+              "message": "Codex review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
                     "artifact": {
                       "kind": "review-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "const": 1
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "const": 1 }
                     }
                   },
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Claude review produced invalid structured artifacts."
+              "message": "Codex review produced invalid structured artifacts."
             }
           ]
         },
         {
           "id": "summarize_review",
-          "when": {
-            "not": {
-              "ref": "context.dryRun"
-            }
-          },
-          "node": "opencode-prompt",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-summary",
             "vars": {
               "review_file": {
                 "artifact": {
                   "kind": "review-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "review_summary_file": {
                 "artifact": {
                   "kind": "review-summary-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               }
             },
             "format": "plain"
           },
           "params": {
-            "labelText": {
-              "const": "Preparing OpenCode review summary"
-            },
+            "labelText": { "const": "Preparing Codex review summary" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                },
-                "iteration": {
-                  "const": 1
-                }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
               }
             },
-            "summaryTitle": {
-              "const": "OpenCode Comments"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "summaryTitle": { "const": "Codex Comments" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           }
         },
         {
-          "id": "run_review_reply",
-          "node": "opencode-prompt",
+          "id": "run_codex_review_reply",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply",
             "vars": {
               "review_file": {
                 "artifact": {
                   "kind": "review-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "review_json_file": {
                 "artifact": {
                   "kind": "review-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "jira_task_file": {
                 "artifact": {
                   "kind": "jira-task-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "design_file": {
                 "artifact": {
                   "kind": "design-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "design_json_file": {
                 "artifact": {
                   "kind": "design-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "plan_json_file": {
                 "artifact": {
                   "kind": "plan-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  }
+                  "taskKey": { "ref": "params.taskKey" }
                 }
               },
               "review_reply_file": {
                 "artifact": {
                   "kind": "review-reply-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "review_reply_json_file": {
                 "artifact": {
                   "kind": "review-reply-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               }
             },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"
           },
           "params": {
-            "labelText": {
-              "const": "Running OpenCode review reply mode"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "labelText": { "const": "Running Codex review reply mode" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
               "kind": "require-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
                     "artifact": {
                       "kind": "review-reply-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "const": 1
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "const": 1 }
                     }
                   }
                 ]
               },
-              "message": "Review reply did not produce the required review-reply artifact."
+              "message": "Codex review reply did not produce the required review-reply artifact."
             },
             {
               "kind": "require-structured-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
                     "artifact": {
                       "kind": "review-reply-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "const": 1
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "const": 1 }
                     }
                   },
                   "schemaId": "review-reply/v1"
@@ -1078,61 +795,40 @@
         },
         {
           "id": "summarize_review_reply",
-          "when": {
-            "not": {
-              "ref": "context.dryRun"
-            }
-          },
-          "node": "opencode-prompt",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-summary",
             "vars": {
               "review_reply_file": {
                 "artifact": {
                   "kind": "review-reply-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "review_reply_summary_file": {
                 "artifact": {
                   "kind": "review-reply-summary-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               }
             },
             "format": "plain"
           },
           "params": {
-            "labelText": {
-              "const": "Preparing OpenCode reply summary"
-            },
+            "labelText": { "const": "Preparing Codex reply summary" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                },
-                "iteration": {
-                  "const": 1
-                }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
               }
             },
-            "summaryTitle": {
-              "const": "OpenCode Reply Summary"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "summaryTitle": { "const": "Codex Reply Summary" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           }
         },
         {
@@ -1145,20 +841,12 @@
             "path": {
               "artifact": {
                 "kind": "ready-to-merge-file",
-                "taskKey": {
-                  "ref": "params.taskKey"
-                }
+                "taskKey": { "ref": "params.taskKey" }
               }
             },
-            "panelTitle": {
-              "const": "Ready To Merge"
-            },
-            "foundMessage": {
-              "const": "Изменения готовы к merge\nФайл ready-to-merge.md создан."
-            },
-            "tone": {
-              "const": "green"
-            }
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Изменения готовы к merge\nФайл ready-to-merge.md создан." },
+            "tone": { "const": "green" }
           }
         }
       ]
@@ -1172,98 +860,65 @@
       },
       "steps": [
         {
-          "id": "run_review_fix",
-          "node": "opencode-prompt",
+          "id": "run_codex_review_fix",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-fix",
             "vars": {
               "review_reply_file": {
                 "artifact": {
                   "kind": "review-reply-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "review_reply_json_file": {
                 "artifact": {
                   "kind": "review-reply-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
-              "items": {
-                "ref": "params.reviewFixPoints"
-              },
+              "items": { "ref": "params.reviewFixPoints" },
               "review_fix_file": {
                 "artifact": {
                   "kind": "review-fix-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               },
               "review_fix_json_file": {
                 "artifact": {
                   "kind": "review-fix-json-file",
-                  "taskKey": {
-                    "ref": "params.taskKey"
-                  },
-                  "iteration": {
-                    "const": 1
-                  }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "const": 1 }
                 }
               }
             },
             "extraPrompt": {
               "appendPrompt": {
-                "base": {
-                  "ref": "params.extraPrompt"
-                },
-                "suffix": {
-                  "ref": "flow.autoReviewFixExtraPrompt"
-                }
+                "base": { "ref": "params.extraPrompt" },
+                "suffix": { "ref": "flow.autoReviewFixExtraPrompt" }
               }
             },
             "format": "task-prompt"
           },
           "params": {
-            "labelText": {
-              "const": "Running OpenCode review-fix mode locally"
-            },
-            "model": {
-              "const": "minimax-coding-plan/MiniMax-M2.7"
-            }
+            "labelText": { "const": "Running Codex review-fix mode locally" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
               "kind": "require-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
                     "artifact": {
                       "kind": "review-fix-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "const": 1
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "const": 1 }
                     }
                   }
                 ]
@@ -1272,22 +927,14 @@
             },
             {
               "kind": "require-structured-artifacts",
-              "when": {
-                "not": {
-                  "ref": "context.dryRun"
-                }
-              },
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
                     "artifact": {
                       "kind": "review-fix-json-file",
-                      "taskKey": {
-                        "ref": "params.taskKey"
-                      },
-                      "iteration": {
-                        "const": 1
-                      }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "const": 1 }
                     }
                   },
                   "schemaId": "review-fix-report/v1"
@@ -1311,21 +958,13 @@
           "id": "run_go_linter_loop",
           "node": "flow-run",
           "params": {
-            "fileName": {
-              "const": "run-go-linter-loop-opencode.json"
-            },
-            "labelText": {
-              "const": "Running run-go-linter-loop after review-fix"
-            },
-            "taskKey": {
-              "ref": "params.taskKey"
-            },
-            "runGoLinterScript": {
-              "ref": "params.runGoLinterScript"
-            },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            }
+            "fileName": { "const": "run-go-linter-loop.json" },
+            "labelText": { "const": "Running run-go-linter-loop after review-fix" },
+            "taskKey": { "ref": "params.taskKey" },
+            "runGoLinterScript": { "ref": "params.runGoLinterScript" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" }
           }
         }
       ]
@@ -1342,21 +981,13 @@
           "id": "run_go_tests_loop",
           "node": "flow-run",
           "params": {
-            "fileName": {
-              "const": "run-go-tests-loop-opencode.json"
-            },
-            "labelText": {
-              "const": "Running run-go-tests-loop after review-fix"
-            },
-            "taskKey": {
-              "ref": "params.taskKey"
-            },
-            "runGoTestsScript": {
-              "ref": "params.runGoTestsScript"
-            },
-            "extraPrompt": {
-              "ref": "params.extraPrompt"
-            }
+            "fileName": { "const": "run-go-tests-loop.json" },
+            "labelText": { "const": "Running run-go-tests-loop after review-fix" },
+            "taskKey": { "ref": "params.taskKey" },
+            "runGoTestsScript": { "ref": "params.runGoTestsScript" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" }
           }
         }
       ]

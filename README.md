@@ -2,7 +2,7 @@
 
 `AgentWeaver` is a TypeScript/Node.js CLI for harness engineering around coding agents.
 
-It brings Jira context, GitLab review artifacts, agent-driven steps via Codex and Claude, an interactive terminal UI, and fully automated workflows into one controlled execution harness.
+It brings Jira context, GitLab review artifacts, agent-driven steps via Codex and OpenCode, an interactive terminal UI, and fully automated workflows into one controlled execution harness.
 
 A typical flow looks like:
 
@@ -41,7 +41,7 @@ In short, `AgentWeaver` is for cases where you do not want a one-off LLM script,
 The CLI is built around an `executor + node + declarative flow` architecture that fits harness engineering well.
 
 - `src/index.ts` remains the CLI entrypoint and top-level orchestration layer
-- `src/executors/` contains first-class executors for external actions such as Jira, GitLab, local Codex, Docker-based build verification, Claude, and process execution
+- `src/executors/` contains first-class executors for external actions such as Jira, GitLab, local Codex, OpenCode, Docker-based build verification, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
 - `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-diff-review`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
 - project-local flows can be added under `.agentweaver/.flows/*.json`; they are discovered from the current workspace at runtime
@@ -76,7 +76,7 @@ This keeps command handlers focused on selecting flows and passing parameters in
 - npm
 - Docker with `docker compose` or `docker-compose`
 - `codex` CLI for `bug-analyze`, `bug-fix`, `mr-description`, `plan`, and other Codex-driven steps
-- `claude` CLI for review and summary steps
+- `codex` CLI for built-in review and summary steps
 
 ## Installation
 
@@ -114,9 +114,9 @@ Common optional variables:
 - `AGENTWEAVER_HOME` — path to the AgentWeaver installation directory
 - `DOCKER_COMPOSE_BIN` — override compose command, for example `docker compose`
 - `CODEX_BIN` — override `codex` executable path
-- `CLAUDE_BIN` — override `claude` executable path
 - `CODEX_MODEL` — fallback model for Codex executors when the flow spec does not set `params.model`
-- `CLAUDE_MODEL` — fallback Claude model when the flow spec does not set `params.model`
+- `OPENCODE_BIN` — override `opencode` executable path
+- `OPENCODE_MODEL` — fallback model for OpenCode executors when the flow spec does not set `params.model`
 
 Example `.env`:
 
@@ -127,9 +127,9 @@ JIRA_AUTH_MODE=auto
 JIRA_BASE_URL=https://jira.example.com
 AGENTWEAVER_HOME=/absolute/path/to/AgentWeaver
 CODEX_BIN=codex
-CLAUDE_BIN=claude
 CODEX_MODEL=gpt-5.4
-CLAUDE_MODEL=opus
+OPENCODE_BIN=opencode
+OPENCODE_MODEL=minimax-coding-plan/MiniMax-M2.7
 GOPRIVATE=gitlab.example.org/*
 GONOSUMDB=gitlab.example.org/*
 GONOPROXY=gitlab.example.org/*
@@ -209,7 +209,7 @@ Notes:
 - scope-flexible commands such as `gitlab-diff-review`, `gitlab-review`, `review`, `review-fix`, `run-go-tests-loop`, and `run-go-linter-loop` use the current git branch by default when a Jira task is omitted
 - `gitlab-review` and `gitlab-diff-review` ask for a GitLab merge request URL via interactive `user-input`
 - `--scope <name>` lets you override the default workflow scope name
-- the interactive `Activity` pane intentionally shows structured events, prompts, summaries, and short statuses instead of raw Codex/Claude logs by default
+- the interactive `Activity` pane intentionally shows structured events, prompts, summaries, and short statuses instead of raw executor logs by default
 
 For fully automated flows, the main entrypoint looks like:
 
@@ -251,7 +251,7 @@ Activity pane behavior:
 
 - each external launch is separated with a framed block that shows the current `node`, `executor`, and `model` when available
 - prompts and summaries are rendered as plain text for readability
-- live raw Codex/Claude output is not shown there in normal mode
+- live raw executor output is not shown there in normal mode
 
 ## Docker Runtime
 

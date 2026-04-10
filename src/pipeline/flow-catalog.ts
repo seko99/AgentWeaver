@@ -32,9 +32,35 @@ export const BUILT_IN_COMMAND_FLOW_IDS = [
   "run-go-linter-loop",
 ] as const;
 
+const BUILT_IN_COMMAND_FLOW_FILES: Record<(typeof BUILT_IN_COMMAND_FLOW_IDS)[number], string> = {
+  auto: "auto.json",
+  "bug-analyze": "bugz/bug-analyze.json",
+  "bug-fix": "bugz/bug-fix.json",
+  "gitlab-diff-review": "gitlab/gitlab-diff-review.json",
+  "gitlab-review": "gitlab/gitlab-review.json",
+  "mr-description": "gitlab/mr-description.json",
+  plan: "plan.json",
+  "task-describe": "task-describe.json",
+  implement: "implement.json",
+  review: "review/review.json",
+  "review-fix": "review/review-fix.json",
+  "run-go-tests-loop": "go/run-go-tests-loop.json",
+  "run-go-linter-loop": "go/run-go-linter-loop.json",
+};
+
+function builtInCommandIdForFile(fileName: string): (typeof BUILT_IN_COMMAND_FLOW_IDS)[number] | null {
+  for (const [flowId, candidate] of Object.entries(BUILT_IN_COMMAND_FLOW_FILES)) {
+    if (candidate === fileName) {
+      return flowId as (typeof BUILT_IN_COMMAND_FLOW_IDS)[number];
+    }
+  }
+  return null;
+}
+
 function loadBuiltInCatalogEntry(fileName: string): FlowCatalogEntry {
+  const commandId = builtInCommandIdForFile(fileName);
   const relativePath = fileName.replace(/\.json$/i, "").split(/[\\/]+/).filter((segment) => segment.length > 0);
-  const id = relativePath.join("/");
+  const id = commandId ?? relativePath.join("/");
   const flow = id === "auto" ? loadAutoFlow() : loadDeclarativeFlow({ source: "built-in", fileName });
   return {
     id,

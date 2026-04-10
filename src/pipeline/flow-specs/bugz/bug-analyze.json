@@ -88,7 +88,7 @@
               }
             ]
           },
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "task-summary",
             "vars": {
@@ -131,7 +131,8 @@
                 }
               ]
             },
-            "model": { "const": "haiku" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
@@ -147,7 +148,7 @@
                   }
                 ]
               },
-              "message": "Claude summary did not produce the task summary artifact."
+              "message": "Codex summary did not produce the task summary artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -163,7 +164,7 @@
                   "schemaId": "task-summary/v1"
                 }
               ],
-              "message": "Claude summary produced invalid structured artifacts."
+              "message": "Codex summary produced invalid structured artifacts."
             }
           ],
           "after": [
@@ -181,7 +182,7 @@
         },
         {
           "id": "run_codex_bug_analyze",
-          "node": "codex-local-prompt",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "bug-analyze",
             "vars": {
@@ -233,7 +234,8 @@
           },
           "params": {
             "labelText": { "const": "Running Codex bug analysis mode" },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
