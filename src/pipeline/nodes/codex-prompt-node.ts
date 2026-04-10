@@ -9,7 +9,7 @@ import { printInfo, printPrompt, printSummary } from "../../tui.js";
 import type { PipelineNodeDefinition } from "../types.js";
 import { toExecutorContext } from "../types.js";
 
-export type CodexLocalPromptNodeParams = {
+export type CodexPromptNodeParams = {
   prompt: string;
   labelText: string;
   model?: string;
@@ -19,14 +19,14 @@ export type CodexLocalPromptNodeParams = {
   summaryTitle?: string;
 };
 
-export const codexLocalPromptNode: PipelineNodeDefinition<CodexLocalPromptNodeParams, CodexLocalExecutorResult> = {
-  kind: "codex-local-prompt",
+export const codexPromptNode: PipelineNodeDefinition<CodexPromptNodeParams, CodexLocalExecutorResult> = {
+  kind: "codex-prompt",
   version: 1,
   async run(context, params) {
     printInfo(params.labelText);
     printPrompt("Codex", params.prompt);
     const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
-      "codex-local",
+      "codex",
     );
     const value = await executor.execute(
       toExecutorContext(context),
@@ -58,7 +58,7 @@ export const codexLocalPromptNode: PipelineNodeDefinition<CodexLocalPromptNodePa
         kind: "require-artifacts",
         paths: requiredPaths,
         message: params.missingArtifactsMessage
-          ?? (params.outputFile ? `Codex local node did not produce ${params.outputFile}.` : "Codex local node did not produce required artifacts."),
+          ?? (params.outputFile ? `Codex node did not produce ${params.outputFile}.` : "Codex node did not produce required artifacts."),
       },
     ];
   },

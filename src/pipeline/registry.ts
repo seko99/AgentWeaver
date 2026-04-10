@@ -15,7 +15,7 @@ export type ExecutorId =
   | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
   | "jira-fetch"
-  | "codex-local"
+  | "codex"
   | "codex-docker"
   | "opencode"
   | "verify-build";
@@ -36,7 +36,7 @@ const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   "fetch-gitlab-diff": fetchGitLabDiffExecutor as unknown as AnyExecutorDefinition,
   "fetch-gitlab-review": fetchGitLabReviewExecutor as unknown as AnyExecutorDefinition,
   "jira-fetch": jiraFetchExecutor as unknown as AnyExecutorDefinition,
-  "codex-local": codexLocalExecutor as unknown as AnyExecutorDefinition,
+  codex: codexLocalExecutor as unknown as AnyExecutorDefinition,
   "codex-docker": codexDockerExecutor as unknown as AnyExecutorDefinition,
   opencode: opencodeExecutor as unknown as AnyExecutorDefinition,
   "verify-build": verifyBuildExecutor as unknown as AnyExecutorDefinition,

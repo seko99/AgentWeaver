@@ -118,7 +118,7 @@
 - `expect` — что должно быть истинно после выполнения step
 - `after` — какие side effects выполнить после успешного завершения step
 
-Для `codex-local`, `codex-docker` и `opencode` модель теперь тоже считается частью `params`.
+Для `codex`, `codex-docker` и `opencode` модель теперь тоже считается частью `params`.
 
 Важно:
 
@@ -131,7 +131,7 @@
 ```json
 {
   "id": "run_codex_plan",
-  "node": "codex-local-prompt",
+  "node": "codex-prompt",
   "prompt": { "...": "..." },
   "params": { "...": "..." },
   "expect": [ { "...": "..." } ],
@@ -149,7 +149,7 @@
 
 - `jira-fetch`
 - `fetch-gitlab-diff`
-- `codex-local-prompt`
+- `codex-prompt`
 - `verify-build`
 
 Runtime находит node через registry:
@@ -219,7 +219,7 @@ Runtime находит node через registry:
 - `jiraApiUrl`
 - `outputFile`
 
-Для `codex-local-prompt`:
+Для `codex-prompt`:
 
 - `labelText`
 - `model`
@@ -238,7 +238,7 @@ Runtime находит node через registry:
 
 - `params` не должны описывать flow-level postconditions
 - если нужно сказать, какие файлы обязаны появиться после шага, для этого есть `expect`
-- для `codex-local`, `codex-docker`, `opencode` именно `params.model` теперь определяет модель на уровне flow
+- для `codex`, `codex-docker`, `opencode` именно `params.model` теперь определяет модель на уровне flow
 - summary-steps в built-in flow могут использовать prompt-ноды с `outputFile` и `summaryTitle`
 
 ## Что делает `expect`
@@ -452,7 +452,7 @@ Runtime находит node через registry:
     },
     {
       "id": "run_codex_plan",
-      "node": "codex-local-prompt",
+      "node": "codex-prompt",
       "prompt": {
         "templateRef": "plan",
         "vars": {
@@ -596,13 +596,13 @@ Runtime находит node через registry:
 ```json
 {
   "id": "run_codex_plan",
-  "node": "codex-local-prompt"
+  "node": "codex-prompt"
 }
 ```
 
 Этот step говорит:
 
-- взять generic node `codex-local-prompt`
+- взять generic node `codex-prompt`
 - собрать для него prompt
 - передать runtime params
 - после выполнения проверить expected outputs

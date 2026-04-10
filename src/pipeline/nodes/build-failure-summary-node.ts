@@ -58,7 +58,7 @@ export const buildFailureSummaryNode: PipelineNodeDefinition<BuildFailureSummary
 
     try {
       const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
-        "codex-local",
+        "codex",
       );
       const result = await executor.execute(
         toExecutorContext(context),

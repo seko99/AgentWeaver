@@ -33,7 +33,7 @@ export const codexLocalExecutor: ExecutorDefinition<
   CodexLocalExecutorInput,
   CodexLocalExecutorResult
 > = {
-  kind: "codex-local",
+  kind: "codex",
   version: 1,
   defaultConfig: codexLocalExecutorDefaultConfig,
   async execute(context: ExecutorContext, input: CodexLocalExecutorInput, config: CodexLocalExecutorConfig) {

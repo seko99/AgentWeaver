@@ -11,7 +11,7 @@
           "params": {
             "formId": { "const": "gitlab-diff-review-input" },
             "title": { "const": "GitLab Diff Review" },
-            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить diff и запустить код-ревью через Codex." },
+            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить diff и запустить код-ревью." },
             "fields": {
               "const": [
                 {
@@ -96,7 +96,7 @@
           ]
         },
         {
-          "id": "run_codex_diff_review",
+          "id": "run_diff_review",
           "when": { "not": { "ref": "context.dryRun" } },
           "node": "llm-prompt",
           "prompt": {
@@ -140,7 +140,7 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex GitLab diff review (iteration {iteration})",
+              "template": "Running GitLab diff review (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
@@ -163,7 +163,7 @@
                   }
                 ]
               },
-              "message": "Codex diff review did not produce the required review artifact."
+              "message": "Diff review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -180,7 +180,7 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Codex diff review produced invalid structured artifacts."
+              "message": "Diff review produced invalid structured artifacts."
             }
           ]
         },

@@ -1,6 +1,6 @@
 import { buildFailureSummaryNode } from "./nodes/build-failure-summary-node.js";
+import { codexPromptNode } from "./nodes/codex-prompt-node.js";
 import { codexDockerPromptNode } from "./nodes/codex-docker-prompt-node.js";
-import { codexLocalPromptNode } from "./nodes/codex-local-prompt-node.js";
 import { commandCheckNode } from "./nodes/command-check-node.js";
 import { fetchGitLabDiffNode } from "./nodes/fetch-gitlab-diff-node.js";
 import { fetchGitLabReviewNode } from "./nodes/fetch-gitlab-review-node.js";
@@ -25,8 +25,8 @@ import type { PipelineNodeDefinition } from "./types.js";
 
 export type NodeKind =
   | "build-failure-summary"
+  | "codex-prompt"
   | "codex-docker-prompt"
-  | "codex-local-prompt"
   | "command-check"
   | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
@@ -67,8 +67,8 @@ export type NodeContractMetadata = {
 
 const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "build-failure-summary": buildFailureSummaryNode as unknown as AnyNodeDefinition,
+  "codex-prompt": codexPromptNode as unknown as AnyNodeDefinition,
   "codex-docker-prompt": codexDockerPromptNode as unknown as AnyNodeDefinition,
-  "codex-local-prompt": codexLocalPromptNode as unknown as AnyNodeDefinition,
   "command-check": commandCheckNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-diff": fetchGitLabDiffNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-review": fetchGitLabReviewNode as unknown as AnyNodeDefinition,
@@ -96,7 +96,14 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["output"],
-    executors: ["codex-local"],
+    executors: ["codex"],
+  },
+  "codex-prompt": {
+    kind: "codex-prompt",
+    version: 1,
+    prompt: "required",
+    requiredParams: ["labelText"],
+    executors: ["codex"],
   },
   "codex-docker-prompt": {
     kind: "codex-docker-prompt",
@@ -104,13 +111,6 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "required",
     requiredParams: ["dockerComposeFile", "labelText"],
     executors: ["codex-docker"],
-  },
-  "codex-local-prompt": {
-    kind: "codex-local-prompt",
-    version: 1,
-    prompt: "required",
-    requiredParams: ["labelText"],
-    executors: ["codex-local"],
   },
   "command-check": {
     kind: "command-check",
@@ -172,7 +172,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "required",
     requiredParams: ["labelText", "executor"],
-    executors: ["codex-local", "opencode"],
+    executors: ["codex", "opencode"],
   },
   "opencode-prompt": { kind: "opencode-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },
   "plan-codex": {
@@ -180,7 +180,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["prompt", "requiredArtifacts"],
-    executors: ["codex-local"],
+    executors: ["codex"],
   },
   "planning-questions-form": {
     kind: "planning-questions-form",
@@ -199,7 +199,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["jiraTaskFile", "taskKey", "iteration", "codexCmd"],
-    executors: ["codex-local"],
+    executors: ["codex"],
   },
   "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden", requiredParams: ["path"] },
   "user-input": {
