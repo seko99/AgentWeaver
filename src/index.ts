@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -9,7 +9,6 @@ import type { RuntimeServices } from "./executors/types.js";
 import {
   REVIEW_FILE_RE,
   REVIEW_REPLY_FILE_RE,
-  autoStateFile,
   bugAnalyzeArtifacts,
   bugAnalyzeJsonFile,
   bugFixDesignJsonFile,
@@ -30,6 +29,7 @@ import {
   reviewFixSelectionJsonFile,
   reviewJsonFile,
   scopeWorkspaceDir,
+  flowStateFile,
   taskSummaryFile,
 } from "./artifacts.js";
 import { FlowInterruptedError, TaskRunnerError } from "./errors.js";
@@ -39,6 +39,7 @@ import {
   loadFlowRunState,
   prepareFlowStateForResume,
   resetFlowRunState,
+  rewindFlowRunStateToPhase,
   saveFlowRunState,
   stripExecutionStatePayload,
   type FlowRunState,
@@ -48,9 +49,8 @@ import { validateStructuredArtifacts } from "./structured-artifacts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { runNodeChecks } from "./pipeline/checks.js";
 import { createPipelineContext } from "./pipeline/context.js";
-import { loadAutoFlow } from "./pipeline/auto-flow.js";
 import { loadDeclarativeFlow, type DeclarativeFlowRef } from "./pipeline/declarative-flows.js";
-import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
+import { runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
 import { findCatalogEntry, isBuiltInCommandFlowId, loadInteractiveFlowCatalog, toDeclarativeFlowRef, type FlowCatalogEntry } from "./pipeline/flow-catalog.js";
 import {
   ALLOWED_MODELS_BY_EXECUTOR,
@@ -109,7 +109,6 @@ const COMMANDS = [
 
 type CommandName = (typeof COMMANDS)[number];
 
-const AUTO_STATE_SCHEMA_VERSION = 3;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(MODULE_DIR, "..");
 function createRuntimeServices(signal?: AbortSignal): RuntimeServices {
@@ -149,28 +148,6 @@ type Config = BaseConfig & {
 
 type DeclarativeFlowOverrides = {
   launchProfile?: ResolvedLaunchProfile;
-};
-
-type AutoStepState = {
-  id: string;
-  status: "pending" | "running" | "failed" | "done" | "skipped";
-  startedAt?: string | null;
-  finishedAt?: string | null;
-  returnCode?: number | null;
-  note?: string | null;
-};
-
-type AutoPipelineState = {
-  schemaVersion: number;
-  issueKey: string;
-  jiraRef: string;
-  status: string;
-  currentStep?: string | null;
-  maxReviewIterations: number;
-  updatedAt: string;
-  lastError?: { step?: string; returnCode?: number; message?: string } | null;
-  steps: AutoStepState[];
-  executionState: FlowExecutionState;
 };
 
 type ParsedArgs = {
@@ -293,23 +270,12 @@ function packageVersion(): string {
   return raw.version;
 }
 
-function nowIso8601(): string {
-  return new Date().toISOString();
-}
-
 function normalizeAutoPhaseId(phaseId: string): string {
   return phaseId.trim().toLowerCase().replaceAll("-", "_");
 }
 
-function buildAutoSteps(): AutoStepState[] {
-  return loadAutoFlow().phases.map((phase) => ({
-    id: phase.id,
-    status: "pending",
-  }));
-}
-
 function autoPhaseIds(): string[] {
-  return buildAutoSteps().map((step) => step.id);
+  return loadDeclarativeFlow({ source: "built-in", fileName: "auto.json" }).phases.map((phase) => phase.id);
 }
 
 function validateAutoPhaseId(phaseId: string): string {
@@ -320,192 +286,6 @@ function validateAutoPhaseId(phaseId: string): string {
     );
   }
   return normalized;
-}
-
-function createAutoPipelineState(config: Config): AutoPipelineState {
-  const autoFlow = loadAutoFlow();
-  const maxReviewIterations = autoFlow.phases.filter((phase) => /^review_\d+$/.test(phase.id)).length;
-  return {
-    schemaVersion: AUTO_STATE_SCHEMA_VERSION,
-    issueKey: config.taskKey,
-    jiraRef: config.jiraRef,
-    status: "pending",
-    currentStep: null,
-    maxReviewIterations,
-    updatedAt: nowIso8601(),
-    steps: buildAutoSteps(),
-    executionState: {
-      flowKind: autoFlow.kind,
-      flowVersion: autoFlow.version,
-      terminated: false,
-      phases: [],
-    },
-  };
-}
-
-function loadAutoPipelineState(config: Config): AutoPipelineState | null {
-  const filePath = autoStateFile(config.taskKey);
-  if (!existsSync(filePath)) {
-    return null;
-  }
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(filePath, "utf8"));
-  } catch (error) {
-    throw new TaskRunnerError(`Failed to parse auto state file ${filePath}: ${(error as Error).message}`);
-  }
-
-  if (!raw || typeof raw !== "object") {
-    throw new TaskRunnerError(`Invalid auto state file format: ${filePath}`);
-  }
-
-  const state = raw as AutoPipelineState;
-  if (state.schemaVersion !== AUTO_STATE_SCHEMA_VERSION) {
-    throw new TaskRunnerError(`Unsupported auto state schema in ${filePath}: ${state.schemaVersion}`);
-  }
-  if (!state.executionState) {
-    const autoFlow = loadAutoFlow();
-    state.executionState = {
-      flowKind: autoFlow.kind,
-      flowVersion: autoFlow.version,
-      terminated: false,
-      phases: [],
-    };
-  }
-  syncAutoStepsFromExecutionState(state);
-  return state;
-}
-
-function saveAutoPipelineState(state: AutoPipelineState): void {
-  state.updatedAt = nowIso8601();
-  ensureScopeWorkspaceDir(state.issueKey);
-  writeFileSync(
-    autoStateFile(state.issueKey),
-    `${JSON.stringify(
-      {
-        ...state,
-        executionState: stripExecutionStatePayload(state.executionState),
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-}
-
-function syncAndSaveAutoPipelineState(state: AutoPipelineState): void {
-  syncAutoStepsFromExecutionState(state);
-  saveAutoPipelineState(state);
-}
-
-function resetAutoPipelineState(config: Config): boolean {
-  const filePath = autoStateFile(config.taskKey);
-  if (!existsSync(filePath)) {
-    return false;
-  }
-  rmSync(filePath);
-  return true;
-}
-
-function nextAutoStep(state: AutoPipelineState): AutoStepState | null {
-  return state.steps.find((step) => ["running", "failed", "pending"].includes(step.status)) ?? null;
-}
-
-function findCurrentExecutionStep(state: AutoPipelineState): string | null {
-  for (const phase of state.executionState.phases) {
-    const runningStep = phase.steps.find((step) => step.status === "running");
-    if (runningStep) {
-      return `${phase.id}:${runningStep.id}`;
-    }
-  }
-  return null;
-}
-
-function deriveAutoPipelineStatus(state: AutoPipelineState): string {
-  if (state.lastError || state.steps.some((candidate) => candidate.status === "failed")) {
-    return "blocked";
-  }
-  if (state.executionState.terminated) {
-    return "completed";
-  }
-  if (state.steps.some((candidate) => candidate.status === "running")) {
-    return "running";
-  }
-  if (state.steps.some((candidate) => candidate.status === "pending")) {
-    return "pending";
-  }
-  if (state.steps.some((candidate) => candidate.status === "skipped")) {
-    return "completed";
-  }
-  if (state.steps.every((candidate) => candidate.status === "done")) {
-    return "completed";
-  }
-  return state.status;
-}
-
-function printAutoState(state: AutoPipelineState): void {
-  const currentStep = findCurrentExecutionStep(state) ?? state.currentStep ?? "-";
-  const lines = [
-    `Issue: ${state.issueKey}`,
-    `Status: ${deriveAutoPipelineStatus(state)}`,
-    `Current step: ${currentStep}`,
-    `Updated: ${state.updatedAt}`,
-  ];
-  if (state.lastError) {
-    lines.push(
-      `Last error: ${state.lastError.step ?? "-"} (exit ${state.lastError.returnCode ?? "-"}, ${state.lastError.message ?? "-"})`,
-    );
-  }
-  lines.push("");
-  for (const step of state.steps) {
-    lines.push(`[${step.status}] ${step.id}${step.note ? ` (${step.note})` : ""}`);
-    const phaseState = state.executionState.phases.find((candidate) => candidate.id === step.id);
-    for (const childStep of phaseState?.steps ?? []) {
-      lines.push(`  - [${childStep.status}] ${childStep.id}`);
-    }
-  }
-  if (state.executionState.terminated) {
-    lines.push("", `Execution terminated: ${state.executionState.terminationReason ?? "yes"}`);
-  }
-  printPanel("Auto Status", lines.join("\n"), "cyan");
-}
-
-function syncAutoStepsFromExecutionState(state: AutoPipelineState): void {
-  for (const step of state.steps) {
-    const phaseState = state.executionState.phases.find((candidate) => candidate.id === step.id);
-    if (!phaseState) {
-      continue;
-    }
-    step.status = phaseState.status;
-    step.startedAt = phaseState.startedAt ?? null;
-    step.finishedAt = phaseState.finishedAt ?? null;
-    step.note = null;
-    if (phaseState.status === "skipped") {
-      step.note = "condition not met";
-      step.returnCode ??= 0;
-    } else if (phaseState.status === "done") {
-      step.returnCode ??= 0;
-      if (state.executionState.terminated && state.executionState.terminationReason?.startsWith(`Stopped by ${step.id}:`)) {
-        step.note = "stop condition met";
-      }
-    }
-  }
-  state.currentStep = findCurrentExecutionStep(state);
-  state.status = deriveAutoPipelineStatus(state);
-}
-
-function buildAutoResumeDetails(state: AutoPipelineState): string {
-  const currentStep = findCurrentExecutionStep(state) ?? state.currentStep ?? "-";
-  const lines = [
-    "Interrupted auto run found.",
-    `Current step: ${currentStep}`,
-    `Updated: ${state.updatedAt}`,
-  ];
-  if (state.lastError) {
-    lines.push(`Last error: ${state.lastError.message ?? "-"} (exit ${state.lastError.returnCode ?? "-"})`);
-  }
-  return lines.join("\n");
 }
 
 function buildFlowResumeDetails(state: FlowRunState): string {
@@ -972,23 +752,6 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
   };
 }
 
-function autoFlowParamsWithLaunchProfile(
-  config: Config,
-  launchProfile?: ResolvedLaunchProfile,
-  forceRefreshSummary = false,
-): Record<string, unknown> {
-  return {
-    ...autoFlowParams(config, forceRefreshSummary),
-    ...(launchProfile
-      ? {
-          llmExecutor: launchProfile.executor,
-          llmModel: launchProfile.model,
-          launchProfile,
-        }
-      : {}),
-  };
-}
-
 const FLOW_DESCRIPTIONS: Record<string, string> = {
   auto: "Полный пайплайн задачи: планирование, реализация, проверки, ревью, ответы на ревью и повторные итерации до готовности к merge.",
   "bug-analyze":
@@ -1270,97 +1033,6 @@ function flowRequiresTaskScope(entry: FlowCatalogEntry): boolean {
   return valueReferencesTaskScopeParams(entry.flow.phases);
 }
 
-async function runAutoPhaseViaSpec(
-  config: Config,
-  phaseId: string,
-  executionState: FlowExecutionState,
-  state?: AutoPipelineState,
-  setSummary?: (markdown: string) => void,
-  forceRefreshSummary = false,
-  launchProfile?: ResolvedLaunchProfile,
-  runtime: RuntimeServices = runtimeServices,
-): Promise<"done" | "skipped"> {
-  const context = createPipelineContext({
-    issueKey: config.taskKey,
-    jiraRef: config.jiraRef,
-    dryRun: config.dryRun,
-    verbose: config.verbose,
-    runtime,
-    ...(setSummary ? { setSummary } : {}),
-    requestUserInput: requestUserInputInTerminal,
-  });
-  const autoFlow = loadAutoFlow();
-  const phase = findPhaseById(autoFlow.phases, phaseId);
-  publishFlowState("auto", executionState);
-  try {
-    const result = await runExpandedPhase(
-      phase,
-      context,
-      autoFlowParamsWithLaunchProfile(config, launchProfile, forceRefreshSummary),
-      autoFlow.constants,
-      {
-        executionState,
-        flowKind: autoFlow.kind,
-        flowVersion: autoFlow.version,
-        onStateChange: async (state) => {
-          publishFlowState("auto", state);
-        },
-        onStepStart: async (_phase, step) => {
-          if (!state) {
-            return;
-          }
-          state.currentStep = `${phaseId}:${step.id}`;
-          saveAutoPipelineState(state);
-        },
-      },
-    );
-    if (state) {
-      state.executionState = result.executionState;
-      syncAndSaveAutoPipelineState(state);
-    }
-    return result.status === "skipped" ? "skipped" : "done";
-  } catch (error) {
-    if (!config.dryRun) {
-      const output = String((error as { output?: string }).output ?? "");
-      if (output.trim()) {
-        printError("Build verification failed");
-        printSummary("Build Failure Summary", await summarizeBuildFailure(output));
-      }
-    }
-    throw error;
-  }
-}
-
-function rewindAutoPipelineState(state: AutoPipelineState, phaseId: string): void {
-  const targetPhaseId = validateAutoPhaseId(phaseId);
-  let phaseSeen = false;
-  for (const step of state.steps) {
-    if (step.id === targetPhaseId) {
-      phaseSeen = true;
-    }
-    if (phaseSeen) {
-      step.status = "pending";
-      step.startedAt = null;
-      step.finishedAt = null;
-      step.returnCode = null;
-      step.note = null;
-    } else {
-      step.status = "done";
-      step.returnCode = 0;
-      step.finishedAt ??= nowIso8601();
-    }
-  }
-  state.status = "pending";
-  state.currentStep = null;
-  state.lastError = null;
-  const targetIndex = state.executionState.phases.findIndex((phase) => phase.id === targetPhaseId);
-  if (targetIndex >= 0) {
-    state.executionState.phases = state.executionState.phases.slice(0, targetIndex);
-  }
-  state.executionState.terminated = false;
-  delete state.executionState.terminationReason;
-}
-
 async function summarizeBuildFailure(output: string): Promise<string> {
   return summarizeBuildFailureViaPipeline(
     createPipelineContext({
@@ -1394,24 +1066,85 @@ async function executeCommand(
 ): Promise<boolean> {
   const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
   if (config.command === "auto") {
-    if (launchMode === "restart") {
-      resetAutoPipelineState(config);
+    requireJiraConfig(config);
+    checkAutoPrerequisites(config);
+    process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
+    process.env.JIRA_API_URL = config.jiraApiUrl;
+    process.env.JIRA_TASK_FILE = config.jiraTaskFile;
+
+    let effectiveLaunchMode = launchMode;
+    let effectiveLaunchProfile = launchProfile;
+    if (config.autoFromPhase) {
+      const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto.json" });
+      const persistedState = loadFlowRunState(config.scope.scopeKey, "auto");
+      if (!persistedState) {
+        throw new TaskRunnerError(
+          `Cannot restart auto from phase '${config.autoFromPhase}' because persisted flow state was not found.`,
+        );
+      }
+      rewindFlowRunStateToPhase(persistedState, flow.phases, config.autoFromPhase);
+      saveFlowRunState(persistedState);
+      effectiveLaunchMode = "resume";
+      effectiveLaunchProfile ??= persistedState.launchProfile;
+      printPanel("Auto Resume", `Auto pipeline will continue from phase: ${config.autoFromPhase}`, "yellow");
     }
-    await runAutoPipeline(config, setSummary, forceRefreshSummary, launchProfile, runtime);
+
+    await runDeclarativeFlowBySpecFile(
+      "auto.json",
+      config,
+      autoFlowParams(config, forceRefreshSummary),
+      effectiveLaunchProfile ? { launchProfile: effectiveLaunchProfile } : {},
+      requestUserInput,
+      setSummary,
+      effectiveLaunchMode,
+      runtime,
+    );
     return false;
   }
   if (config.command === "auto-status") {
-    const state = loadAutoPipelineState(config);
+    const state = loadFlowRunState(config.scope.scopeKey, "auto");
     if (!state) {
-      printPanel("Auto Status", `No auto state file found for ${config.taskKey}.`, "yellow");
+      printPanel("Auto Status", `No flow state file found for ${config.taskKey}.`, "yellow");
       return false;
     }
-    printAutoState(state);
+    const currentStep = findCurrentFlowExecutionStep(state) ?? state.currentStep ?? "-";
+    const phaseOrder = loadDeclarativeFlow({ source: "built-in", fileName: "auto.json" }).phases;
+    const lines = [
+      `Issue: ${config.taskKey}`,
+      `Status: ${state.status}`,
+      `Current step: ${currentStep}`,
+      `Updated: ${state.updatedAt}`,
+    ];
+    if (state.launchProfile) {
+      lines.push(`Launch profile: ${state.launchProfile.executor} / ${state.launchProfile.model}`);
+    }
+    if (state.lastError) {
+      lines.push(
+        `Last error: ${state.lastError.step ?? "-"} (exit ${state.lastError.returnCode ?? "-"}, ${state.lastError.message ?? "-"})`,
+      );
+    }
+    lines.push("");
+    for (const phase of phaseOrder) {
+      const phaseState = state.executionState.phases.find((candidate) => candidate.id === phase.id);
+      lines.push(`[${phaseState?.status ?? "pending"}] ${phase.id}`);
+      for (const step of phase.steps) {
+        const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
+        lines.push(`  - [${stepState?.status ?? "pending"}] ${step.id}`);
+      }
+    }
+    if (state.executionState.terminated) {
+      lines.push("", `Execution terminated: ${state.executionState.terminationReason ?? "yes"}`);
+    }
+    printPanel("Auto Status", lines.join("\n"), "cyan");
     return false;
   }
   if (config.command === "auto-reset") {
-    const removed = resetAutoPipelineState(config);
-    printPanel("Auto Reset", removed ? `State file ${autoStateFile(config.taskKey)} removed.` : "No auto state file found.", "yellow");
+    const removed = resetFlowRunState(config.scope.scopeKey, "auto");
+    printPanel(
+      "Auto Reset",
+      removed ? `State file ${flowStateFile(config.scope.scopeKey, "auto")} removed.` : "No flow state file found.",
+      "yellow",
+    );
     return false;
   }
 
@@ -1630,123 +1363,6 @@ async function executeCommand(
   throw new TaskRunnerError(`Unsupported command: ${config.command}`);
 }
 
-async function runAutoPipelineDryRun(
-  config: Config,
-  setSummary?: (markdown: string) => void,
-  forceRefreshSummary = false,
-  runtime: RuntimeServices = runtimeServices,
-): Promise<void> {
-  checkAutoPrerequisites(config);
-  printInfo("Dry-run auto pipeline from declarative spec");
-  const autoFlow = loadAutoFlow();
-  const executionState: FlowExecutionState = {
-    flowKind: autoFlow.kind,
-    flowVersion: autoFlow.version,
-    terminated: false,
-    phases: [],
-  };
-  publishFlowState("auto", executionState);
-  for (const phase of autoFlow.phases) {
-    printInfo(`Dry-run auto phase: ${phase.id}`);
-    await runAutoPhaseViaSpec(config, phase.id, executionState, undefined, setSummary, forceRefreshSummary, undefined, runtime);
-    if (executionState.terminated) {
-      break;
-    }
-  }
-}
-
-async function runAutoPipeline(
-  config: Config,
-  setSummary?: (markdown: string) => void,
-  forceRefreshSummary = false,
-  launchProfile?: ResolvedLaunchProfile,
-  runtime: RuntimeServices = runtimeServices,
-): Promise<void> {
-  requireJiraConfig(config);
-  if (config.dryRun) {
-    await runAutoPipelineDryRun(config, setSummary, forceRefreshSummary, runtime);
-    return;
-  }
-
-  checkAutoPrerequisites(config);
-  process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
-  process.env.JIRA_API_URL = config.jiraApiUrl;
-  process.env.JIRA_TASK_FILE = config.jiraTaskFile;
-  let state = loadAutoPipelineState(config) ?? createAutoPipelineState(config);
-  if (config.autoFromPhase) {
-    rewindAutoPipelineState(state, config.autoFromPhase);
-    printPanel("Auto Resume", `Auto pipeline will continue from phase: ${config.autoFromPhase}`, "yellow");
-    saveAutoPipelineState(state);
-  } else if (!existsSync(autoStateFile(config.taskKey))) {
-    saveAutoPipelineState(state);
-  }
-
-  printInfo("Running auto pipeline with persisted state");
-  while (true) {
-    const step = nextAutoStep(state);
-    if (!step) {
-      syncAndSaveAutoPipelineState(state);
-      if (state.status === "completed") {
-        printPanel("Auto", "Auto pipeline finished", "green");
-      } else {
-        printInfo(`Auto pipeline finished with status: ${state.status}`);
-      }
-      return;
-    }
-
-    state.status = "running";
-    state.currentStep = step.id;
-    step.status = "running";
-    step.startedAt = nowIso8601();
-    step.finishedAt = null;
-    step.returnCode = null;
-    step.note = null;
-    state.lastError = null;
-    saveAutoPipelineState(state);
-
-    try {
-      printInfo(`Running auto step: ${step.id}`);
-      const status = await runAutoPhaseViaSpec(
-        config,
-        step.id,
-        state.executionState,
-        state,
-        setSummary,
-        forceRefreshSummary,
-        launchProfile,
-        runtime,
-      );
-      step.status = status;
-      step.finishedAt = nowIso8601();
-      step.returnCode = 0;
-      if (status === "skipped") {
-        step.note = "condition not met";
-      }
-      syncAndSaveAutoPipelineState(state);
-    } catch (error) {
-      const returnCode = Number((error as { returnCode?: number }).returnCode ?? 1);
-      step.status = "failed";
-      step.finishedAt = nowIso8601();
-      step.returnCode = returnCode;
-      state.status = "blocked";
-      state.currentStep = step.id;
-      state.lastError = {
-        step: step.id,
-        returnCode,
-        message: "command failed",
-      };
-      saveAutoPipelineState(state);
-      throw error;
-    }
-
-    if (state.executionState.terminated) {
-      syncAndSaveAutoPipelineState(state);
-      printPanel("Auto", "Auto pipeline finished", "green");
-      return;
-    }
-  }
-}
-
 function parseCliArgs(argv: string[]): ParsedArgs {
   if (argv.includes("--version") || argv.includes("-v")) {
     process.stdout.write(`${packageVersion()}\n`);
@@ -1855,28 +1471,6 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
         const flowEntry = findCatalogEntry(flowId, flowCatalog);
         if (!flowEntry) {
           throw new TaskRunnerError(`Unknown flow: ${flowId}`);
-        }
-        if (flowId === "auto") {
-          if (!currentScope.jiraRef) {
-            return { resumeAvailable: false, hasExistingState: false };
-          }
-          const baseConfig = buildBaseConfig("auto", {
-            jiraRef: currentScope.jiraRef,
-            scopeName: currentScope.scopeKey,
-          });
-          const state = loadAutoPipelineState(buildRuntimeConfig(baseConfig, currentScope));
-          if (!state) {
-            return { resumeAvailable: false, hasExistingState: false };
-          }
-          const status = deriveAutoPipelineStatus(state);
-          if (status === "completed") {
-            return { resumeAvailable: false, hasExistingState: true };
-          }
-          return {
-            resumeAvailable: true,
-            hasExistingState: true,
-            details: buildAutoResumeDetails(state),
-          };
         }
         const resumeLookup = lookupInteractiveFlowResume(flowEntry, currentScope);
         return resumeLookup;

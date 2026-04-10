@@ -3,7 +3,12 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { ensureScopeWorkspaceDir, flowStateFile } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
 import type { ResolvedLaunchProfile } from "./pipeline/launch-profile-config.js";
-import type { ExpandedPhaseExecutionState, ExpandedStepExecutionState, FlowExecutionState } from "./pipeline/spec-types.js";
+import type {
+  ExpandedPhaseExecutionState,
+  ExpandedPhaseSpec,
+  ExpandedStepExecutionState,
+  FlowExecutionState,
+} from "./pipeline/spec-types.js";
 
 const FLOW_STATE_SCHEMA_VERSION = 1;
 
@@ -165,6 +170,62 @@ function normalizePhaseState(phase: ExpandedPhaseExecutionState): ExpandedPhaseE
     status: "pending",
     steps: normalizedSteps,
   };
+}
+
+function createPendingPhaseState(phase: ExpandedPhaseSpec): ExpandedPhaseExecutionState {
+  return {
+    id: phase.id,
+    status: "pending",
+    repeatVars: { ...phase.repeatVars },
+    steps: phase.steps.map((step) => ({
+      id: step.id,
+      status: "pending" as const,
+    })),
+  };
+}
+
+export function rewindFlowRunStateToPhase(
+  state: FlowRunState,
+  orderedPhases: ExpandedPhaseSpec[],
+  targetPhaseId: string,
+): FlowRunState {
+  const targetIndex = orderedPhases.findIndex((phase) => phase.id === targetPhaseId);
+  if (targetIndex < 0) {
+    throw new TaskRunnerError(`Unknown flow phase '${targetPhaseId}'.`);
+  }
+
+  const existingPhaseStates = new Map(state.executionState.phases.map((phase) => [phase.id, phase]));
+  const rewoundPhases: ExpandedPhaseExecutionState[] = [];
+
+  for (const [index, phase] of orderedPhases.entries()) {
+    if (index < targetIndex) {
+      const existingPhaseState = existingPhaseStates.get(phase.id);
+      if (!existingPhaseState) {
+        throw new TaskRunnerError(
+          `Cannot restart from phase '${targetPhaseId}' because earlier phase '${phase.id}' has no persisted execution state.`,
+        );
+      }
+      if (existingPhaseState.status !== "done" && existingPhaseState.status !== "skipped") {
+        throw new TaskRunnerError(
+          `Cannot restart from phase '${targetPhaseId}' because earlier phase '${phase.id}' is not completed in persisted state.`,
+        );
+      }
+      rewoundPhases.push(existingPhaseState);
+      continue;
+    }
+    rewoundPhases.push(createPendingPhaseState(phase));
+  }
+
+  state.status = "pending";
+  state.currentStep = null;
+  state.lastError = null;
+  state.executionState = {
+    ...state.executionState,
+    terminated: false,
+    phases: rewoundPhases,
+  };
+  delete state.executionState.terminationReason;
+  return state;
 }
 
 export function prepareFlowStateForResume(state: FlowRunState): FlowRunState {
