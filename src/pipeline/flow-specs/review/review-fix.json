@@ -51,8 +51,8 @@
           ]
         },
         {
-          "id": "run_codex_review_fix",
-          "node": "codex-local-prompt",
+          "id": "run_review_fix",
+          "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-fix",
             "vars": {
@@ -96,12 +96,13 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex review-fix mode locally (iteration {iteration})",
+              "template": "Running review-fix mode locally (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.latestIteration" }
               }
             },
-            "model": { "const": "gpt-5.4" }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {

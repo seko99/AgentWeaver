@@ -1,4 +1,8 @@
-import type { ProcessExecutorConfig, ProcessExecutorInput, ProcessExecutorResult } from "../../executors/process-executor.js";
+import type {
+  CodexLocalExecutorConfig,
+  CodexLocalExecutorInput,
+  CodexLocalExecutorResult,
+} from "../../executors/codex-local-executor.js";
 import type { PipelineNodeDefinition } from "../types.js";
 import { toExecutorContext } from "../types.js";
 
@@ -10,7 +14,7 @@ export type BuildFailureSummaryNodeResult = {
   summaryText: string;
 };
 
-const DEFAULT_CLAUDE_MODEL = "haiku";
+const DEFAULT_CODEX_MODEL = "gpt-5.4-mini";
 
 function truncateText(text: string, maxChars = 12000): string {
   return text.length <= maxChars ? text.trim() : text.trim().slice(-maxChars);
@@ -22,11 +26,11 @@ function fallbackBuildFailureSummary(output: string): string {
     .map((line) => line.trim())
     .filter(Boolean);
   const tail = lines.length > 0 ? lines.slice(-8) : ["No build output captured."];
-  return `Не удалось получить summary через Claude.\n\nПоследние строки лога:\n${tail.join("\n")}`;
+  return `Не удалось получить summary через Codex.\n\nПоследние строки лога:\n${tail.join("\n")}`;
 }
 
-function claudeModel(env: NodeJS.ProcessEnv): string {
-  return env.CLAUDE_MODEL?.trim() || env.CLAUDE_SUMMARY_MODEL?.trim() || env.CLAUDE_REVIEW_MODEL?.trim() || DEFAULT_CLAUDE_MODEL;
+function codexModel(env: NodeJS.ProcessEnv): string {
+  return env.CODEX_MODEL?.trim() || DEFAULT_CODEX_MODEL;
 }
 
 export const buildFailureSummaryNode: PipelineNodeDefinition<BuildFailureSummaryNodeParams, BuildFailureSummaryNodeResult> = {
@@ -41,18 +45,7 @@ export const buildFailureSummaryNode: PipelineNodeDefinition<BuildFailureSummary
       };
     }
 
-    let claudeCmd: string;
-    try {
-      claudeCmd = context.runtime.resolveCmd("claude", "CLAUDE_BIN");
-    } catch {
-      return {
-        value: {
-          summaryText: fallbackBuildFailureSummary(params.output),
-        },
-      };
-    }
-
-    const model = claudeModel(context.env);
+    const model = codexModel(context.env);
     const prompt =
       "Ниже лог упавшей build verification.\n" +
       "Сделай краткое резюме на русском языке, без воды.\n" +
@@ -64,15 +57,15 @@ export const buildFailureSummaryNode: PipelineNodeDefinition<BuildFailureSummary
       `Лог:\n${truncateText(params.output)}`;
 
     try {
-      const executor = context.executors.get<ProcessExecutorConfig, ProcessExecutorInput, ProcessExecutorResult>("process");
+      const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
+        "codex",
+      );
       const result = await executor.execute(
         toExecutorContext(context),
         {
-          argv: [claudeCmd, "--model", model, "-p", prompt],
+          prompt,
+          model,
           env: { ...context.env },
-          dryRun: false,
-          verbose: false,
-          label: `claude:${model}`,
         },
         executor.defaultConfig,
       );

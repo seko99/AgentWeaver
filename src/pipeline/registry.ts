@@ -1,5 +1,4 @@
 import { commandCheckExecutor } from "../executors/command-check-executor.js";
-import { claudeExecutor } from "../executors/claude-executor.js";
 import { codexDockerExecutor } from "../executors/codex-docker-executor.js";
 import { codexLocalExecutor } from "../executors/codex-local-executor.js";
 import { fetchGitLabDiffExecutor } from "../executors/fetch-gitlab-diff-executor.js";
@@ -16,10 +15,9 @@ export type ExecutorId =
   | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
   | "jira-fetch"
-  | "codex-local"
+  | "codex"
   | "codex-docker"
   | "opencode"
-  | "claude"
   | "verify-build";
 
 export type ExecutorRegistry = {
@@ -38,10 +36,9 @@ const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   "fetch-gitlab-diff": fetchGitLabDiffExecutor as unknown as AnyExecutorDefinition,
   "fetch-gitlab-review": fetchGitLabReviewExecutor as unknown as AnyExecutorDefinition,
   "jira-fetch": jiraFetchExecutor as unknown as AnyExecutorDefinition,
-  "codex-local": codexLocalExecutor as unknown as AnyExecutorDefinition,
+  codex: codexLocalExecutor as unknown as AnyExecutorDefinition,
   "codex-docker": codexDockerExecutor as unknown as AnyExecutorDefinition,
   opencode: opencodeExecutor as unknown as AnyExecutorDefinition,
-  claude: claudeExecutor as unknown as AnyExecutorDefinition,
   "verify-build": verifyBuildExecutor as unknown as AnyExecutorDefinition,
 };
 
