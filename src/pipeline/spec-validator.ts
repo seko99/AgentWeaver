@@ -78,6 +78,10 @@ function validateValueSpec(value: ValueSpec, path: string): void {
     validateValueSpec(value.appendPrompt.suffix, `${path}.appendPrompt.suffix`);
     return;
   }
+  if ("add" in value) {
+    value.add.forEach((candidate, index) => validateValueSpec(candidate, `${path}.add[${index}]`));
+    return;
+  }
   if ("concat" in value) {
     value.concat.forEach((candidate, index) => validateValueSpec(candidate, `${path}.concat[${index}]`));
     return;

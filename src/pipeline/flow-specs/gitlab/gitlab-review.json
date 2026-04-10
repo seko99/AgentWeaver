@@ -57,13 +57,15 @@
             "outputFile": {
               "artifact": {
                 "kind": "gitlab-review-file",
-                "taskKey": { "ref": "params.taskKey" }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.gitlabReviewIteration" }
               }
             },
             "outputJsonFile": {
               "artifact": {
                 "kind": "gitlab-review-json-file",
-                "taskKey": { "ref": "params.taskKey" }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.gitlabReviewIteration" }
               }
             }
           },
@@ -73,7 +75,8 @@
               "path": {
                 "artifact": {
                   "kind": "gitlab-review-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.gitlabReviewIteration" }
                 }
               },
               "message": "Fetch GitLab review node did not produce the markdown artifact."
@@ -85,7 +88,8 @@
                   "path": {
                     "artifact": {
                       "kind": "gitlab-review-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.gitlabReviewIteration" }
                     }
                   },
                   "schemaId": "gitlab-review/v1"
@@ -102,7 +106,8 @@
             "gitlabReviewJsonFile": {
               "artifact": {
                 "kind": "gitlab-review-json-file",
-                "taskKey": { "ref": "params.taskKey" }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.gitlabReviewIteration" }
               }
             },
             "reviewFile": {
