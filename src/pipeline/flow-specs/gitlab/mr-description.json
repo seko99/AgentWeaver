@@ -20,13 +20,15 @@
               "mr_description_file": {
                 "artifact": {
                   "kind": "mr-description-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "mr_description_json_file": {
                 "artifact": {
                   "kind": "mr-description-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               }
             },
@@ -42,13 +44,15 @@
                 {
                   "artifact": {
                     "kind": "mr-description-file",
-                    "taskKey": { "ref": "params.taskKey" }
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
                   }
                 },
                 {
                   "artifact": {
                     "kind": "mr-description-json-file",
-                    "taskKey": { "ref": "params.taskKey" }
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
                   }
                 }
               ]
@@ -61,7 +65,8 @@
               "path": {
                 "artifact": {
                   "kind": "mr-description-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "message": "MR description mode did not produce the MR description artifact."
@@ -74,7 +79,8 @@
                   "path": {
                     "artifact": {
                       "kind": "mr-description-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
                     }
                   },
                   "schemaId": "mr-description/v1"

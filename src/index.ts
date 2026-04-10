@@ -19,6 +19,7 @@ import {
   ensureScopeWorkspaceDir,
   gitlabReviewFile,
   gitlabReviewJsonFile,
+  nextArtifactIteration,
   planJsonFile,
   planArtifacts,
   qaJsonFile,
@@ -205,6 +206,10 @@ function formatProcessFailure(error: ProcessFailureLike): string {
     return baseMessage;
   }
   return `${baseMessage}\nПричина:\n${preview}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function usage(): string {
@@ -1014,6 +1019,10 @@ function defaultDeclarativeFlowParams(
     launchProfile,
     iteration,
     latestIteration,
+    taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
+    designIteration: nextArtifactIteration(config.taskKey, "design"),
+    planIteration: nextArtifactIteration(config.taskKey, "plan"),
+    qaIteration: nextArtifactIteration(config.taskKey, "qa"),
     ...(latestIteration !== null ? { reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration) } : {}),
     forceRefresh: forceRefreshSummary,
   };
@@ -1181,6 +1190,10 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("plan.json", config, {
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
+      taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
+      designIteration: nextArtifactIteration(config.taskKey, "design"),
+      planIteration: nextArtifactIteration(config.taskKey, "plan"),
+      qaIteration: nextArtifactIteration(config.taskKey, "qa"),
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
     }, launchProfile ? { launchProfile } : {}, requestUserInput, setSummary, launchMode, runtime);
@@ -1197,6 +1210,10 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("bugz/bug-analyze.json", config, {
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
+      taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
+      bugAnalyzeIteration: nextArtifactIteration(config.taskKey, "bug-analyze"),
+      bugFixDesignIteration: nextArtifactIteration(config.taskKey, "bug-fix-design"),
+      bugFixPlanIteration: nextArtifactIteration(config.taskKey, "bug-fix-plan"),
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
     }, launchProfile ? { launchProfile } : {}, requestUserInput, setSummary, launchMode, runtime);
@@ -1205,12 +1222,14 @@ async function executeCommand(
 
   if (config.command === "gitlab-review") {
     const iteration = nextReviewIterationForTask(config.taskKey);
+    const gitlabReviewIteration = nextArtifactIteration(config.taskKey, "gitlab-review");
     await runDeclarativeFlowBySpecFile(
       "gitlab/gitlab-review.json",
       config,
       {
         taskKey: config.taskKey,
         iteration,
+        gitlabReviewIteration,
         extraPrompt: config.extraPrompt,
       },
       launchProfile ? { launchProfile } : {},
@@ -1227,12 +1246,14 @@ async function executeCommand(
 
   if (config.command === "gitlab-diff-review") {
     const iteration = nextReviewIterationForTask(config.taskKey);
+    const gitlabDiffIteration = nextArtifactIteration(config.taskKey, "gitlab-diff");
     await runDeclarativeFlowBySpecFile(
       "gitlab/gitlab-diff-review.json",
       config,
       {
         taskKey: config.taskKey,
         iteration,
+        gitlabDiffIteration,
         extraPrompt: config.extraPrompt,
       },
       launchProfile ? { launchProfile } : {},
@@ -1274,15 +1295,18 @@ async function executeCommand(
     requireJiraTaskFile(config.jiraTaskFile);
     await runDeclarativeFlowBySpecFile("gitlab/mr-description.json", config, {
       taskKey: config.taskKey,
+      iteration: nextArtifactIteration(config.taskKey, "mr-description"),
       extraPrompt: config.extraPrompt,
     }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
   if (config.command === "task-describe") {
+    const iteration = nextArtifactIteration(config.taskKey, "jira-description");
     await runDeclarativeFlowBySpecFile("task-describe.json", config, {
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
+      iteration,
       extraPrompt: config.extraPrompt,
     }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     return false;
@@ -1361,6 +1385,8 @@ async function executeCommand(
         taskKey: config.taskKey,
         runGoTestsScript: config.runGoTestsScript,
         runGoLinterScript: config.runGoLinterScript,
+        runGoTestsIteration: nextArtifactIteration(config.taskKey, "run-go-tests-result", "json"),
+        runGoLinterIteration: nextArtifactIteration(config.taskKey, "run-go-linter-result", "json"),
         extraPrompt: config.extraPrompt,
       },
       launchProfile ? { launchProfile } : {},
