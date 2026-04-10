@@ -133,59 +133,59 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
   const iteration = spec.iteration === undefined ? undefined : Number(resolveValue(spec.iteration, context));
   switch (spec.kind) {
     case "bug-analyze-file":
-      return bugAnalyzeFile(taskKey);
+      return bugAnalyzeFile(taskKey, iteration);
     case "bug-analyze-json-file":
-      return bugAnalyzeJsonFile(taskKey);
+      return bugAnalyzeJsonFile(taskKey, iteration);
     case "bug-fix-design-file":
-      return bugFixDesignFile(taskKey);
+      return bugFixDesignFile(taskKey, iteration);
     case "bug-fix-design-json-file":
-      return bugFixDesignJsonFile(taskKey);
+      return bugFixDesignJsonFile(taskKey, iteration);
     case "bug-fix-plan-file":
-      return bugFixPlanFile(taskKey);
+      return bugFixPlanFile(taskKey, iteration);
     case "bug-fix-plan-json-file":
-      return bugFixPlanJsonFile(taskKey);
+      return bugFixPlanJsonFile(taskKey, iteration);
     case "design-file":
-      return designFile(taskKey);
+      return designFile(taskKey, iteration);
     case "design-json-file":
-      return designJsonFile(taskKey);
+      return designJsonFile(taskKey, iteration);
     case "gitlab-diff-file":
-      return gitlabDiffFile(taskKey);
+      return gitlabDiffFile(taskKey, iteration);
     case "gitlab-diff-json-file":
-      return gitlabDiffJsonFile(taskKey);
+      return gitlabDiffJsonFile(taskKey, iteration);
     case "gitlab-diff-review-input-json-file":
       return gitlabDiffReviewInputJsonFile(taskKey);
     case "gitlab-review-file":
-      return gitlabReviewFile(taskKey);
+      return gitlabReviewFile(taskKey, iteration);
     case "gitlab-review-input-json-file":
       return gitlabReviewInputJsonFile(taskKey);
     case "gitlab-review-json-file":
-      return gitlabReviewJsonFile(taskKey);
+      return gitlabReviewJsonFile(taskKey, iteration);
     case "jira-attachments-context-file":
       return jiraAttachmentsContextFile(taskKey);
     case "jira-attachments-manifest-file":
       return jiraAttachmentsManifestFile(taskKey);
     case "jira-description-file":
-      return jiraDescriptionFile(taskKey);
+      return jiraDescriptionFile(taskKey, iteration);
     case "jira-description-json-file":
-      return jiraDescriptionJsonFile(taskKey);
+      return jiraDescriptionJsonFile(taskKey, iteration);
     case "jira-task-file":
       return jiraTaskFile(taskKey);
     case "mr-description-file":
-      return mrDescriptionFile(taskKey);
+      return mrDescriptionFile(taskKey, iteration);
     case "mr-description-json-file":
-      return mrDescriptionJsonFile(taskKey);
+      return mrDescriptionJsonFile(taskKey, iteration);
     case "planning-answers-json-file":
       return planningAnswersJsonFile(taskKey);
     case "planning-questions-json-file":
       return planningQuestionsJsonFile(taskKey);
     case "plan-file":
-      return planFile(taskKey);
+      return planFile(taskKey, iteration);
     case "plan-json-file":
-      return planJsonFile(taskKey);
+      return planJsonFile(taskKey, iteration);
     case "qa-file":
-      return qaFile(taskKey);
+      return qaFile(taskKey, iteration);
     case "qa-json-file":
-      return qaJsonFile(taskKey);
+      return qaJsonFile(taskKey, iteration);
     case "ready-to-merge-file":
       return readyToMergeFile(taskKey);
     case "review-file":
@@ -239,9 +239,9 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       }
       return artifactFile("review-summary", taskKey, iteration);
     case "task-summary-file":
-      return taskSummaryFile(taskKey);
+      return taskSummaryFile(taskKey, iteration);
     case "task-summary-json-file":
-      return taskSummaryJsonFile(taskKey);
+      return taskSummaryJsonFile(taskKey, iteration);
     case "task-describe-input-json-file":
       return taskDescribeInputJsonFile(taskKey);
     case "git-status-json-file":
@@ -296,6 +296,9 @@ export function resolveValue(value: ValueSpec, context: ResolverContext): unknow
       return baseText;
     }
     return `${baseText}\n${suffixText}`;
+  }
+  if ("add" in value) {
+    return value.add.reduce((sum, candidate) => sum + Number(resolveValue(candidate, context)), 0);
   }
   if ("concat" in value) {
     return value.concat

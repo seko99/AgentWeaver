@@ -18,7 +18,7 @@
               "artifact": {
                 "kind": "run-go-linter-result-json-file",
                 "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "const": 1 }
+                "iteration": { "ref": "params.runGoLinterIteration" }
               }
             },
             "labelText": {
@@ -33,7 +33,7 @@
                 "artifact": {
                   "kind": "run-go-linter-result-json-file",
                   "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "const": 1 }
+                  "iteration": { "ref": "params.runGoLinterIteration" }
                 }
               },
               "message": "run-go-linter-loop did not produce the structured linter result artifact."
@@ -62,7 +62,7 @@
                 "artifact": {
                   "kind": "run-go-linter-result-json-file",
                   "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "const": 1 }
+                  "iteration": { "ref": "params.runGoLinterIteration" }
                 }
               }
             },
@@ -76,7 +76,7 @@
                       "artifact": {
                         "kind": "run-go-linter-result-json-file",
                         "taskKey": { "ref": "params.taskKey" },
-                        "iteration": { "const": 1 }
+                        "iteration": { "ref": "params.runGoLinterIteration" }
                       }
                     },
                     "exit_code": { "ref": "steps.run_go_linter_try_1.run_go_linter.outputs.parsed.exitCode" },
@@ -127,7 +127,13 @@
                   "artifact": {
                     "kind": "run-go-linter-result-json-file",
                     "taskKey": { "ref": "params.taskKey" },
-                    "iteration": { "ref": "repeat.attempt" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.runGoLinterIteration" },
+                        { "const": -1 },
+                        { "ref": "repeat.attempt" }
+                      ]
+                    }
                   }
                 },
                 "labelText": {
@@ -142,7 +148,13 @@
                     "artifact": {
                       "kind": "run-go-linter-result-json-file",
                       "taskKey": { "ref": "params.taskKey" },
-                      "iteration": { "ref": "repeat.attempt" }
+                      "iteration": {
+                        "add": [
+                          { "ref": "params.runGoLinterIteration" },
+                          { "const": -1 },
+                          { "ref": "repeat.attempt" }
+                        ]
+                      }
                     }
                   },
                   "message": "run-go-linter-loop did not produce the structured linter result artifact."
@@ -171,7 +183,13 @@
                     "artifact": {
                       "kind": "run-go-linter-result-json-file",
                       "taskKey": { "ref": "params.taskKey" },
-                      "iteration": { "ref": "repeat.attempt" }
+                      "iteration": {
+                        "add": [
+                          { "ref": "params.runGoLinterIteration" },
+                          { "const": -1 },
+                          { "ref": "repeat.attempt" }
+                        ]
+                      }
                     }
                   }
                 },
@@ -185,7 +203,13 @@
                           "artifact": {
                             "kind": "run-go-linter-result-json-file",
                             "taskKey": { "ref": "params.taskKey" },
-                            "iteration": { "ref": "repeat.attempt" }
+                            "iteration": {
+                              "add": [
+                                { "ref": "params.runGoLinterIteration" },
+                                { "const": -1 },
+                                { "ref": "repeat.attempt" }
+                              ]
+                            }
                           }
                         },
                         "exit_code": { "ref": "steps.run_go_linter_try_${attempt}.run_go_linter.outputs.parsed.exitCode" },

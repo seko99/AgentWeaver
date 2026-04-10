@@ -18,7 +18,7 @@
               "artifact": {
                 "kind": "run-go-tests-result-json-file",
                 "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "const": 1 }
+                "iteration": { "ref": "params.runGoTestsIteration" }
               }
             },
             "labelText": {
@@ -33,7 +33,7 @@
                 "artifact": {
                   "kind": "run-go-tests-result-json-file",
                   "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "const": 1 }
+                  "iteration": { "ref": "params.runGoTestsIteration" }
                 }
               },
               "message": "run-go-tests-loop did not produce the structured tests result artifact."
@@ -62,7 +62,7 @@
                 "artifact": {
                   "kind": "run-go-tests-result-json-file",
                   "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "const": 1 }
+                  "iteration": { "ref": "params.runGoTestsIteration" }
                 }
               }
             },
@@ -76,7 +76,7 @@
                       "artifact": {
                         "kind": "run-go-tests-result-json-file",
                         "taskKey": { "ref": "params.taskKey" },
-                        "iteration": { "const": 1 }
+                        "iteration": { "ref": "params.runGoTestsIteration" }
                       }
                     },
                     "exit_code": { "ref": "steps.run_go_tests_try_1.run_go_tests.outputs.parsed.exitCode" },
@@ -127,7 +127,13 @@
                   "artifact": {
                     "kind": "run-go-tests-result-json-file",
                     "taskKey": { "ref": "params.taskKey" },
-                    "iteration": { "ref": "repeat.attempt" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.runGoTestsIteration" },
+                        { "const": -1 },
+                        { "ref": "repeat.attempt" }
+                      ]
+                    }
                   }
                 },
                 "labelText": {
@@ -142,7 +148,13 @@
                     "artifact": {
                       "kind": "run-go-tests-result-json-file",
                       "taskKey": { "ref": "params.taskKey" },
-                      "iteration": { "ref": "repeat.attempt" }
+                      "iteration": {
+                        "add": [
+                          { "ref": "params.runGoTestsIteration" },
+                          { "const": -1 },
+                          { "ref": "repeat.attempt" }
+                        ]
+                      }
                     }
                   },
                   "message": "run-go-tests-loop did not produce the structured tests result artifact."
@@ -171,7 +183,13 @@
                     "artifact": {
                       "kind": "run-go-tests-result-json-file",
                       "taskKey": { "ref": "params.taskKey" },
-                      "iteration": { "ref": "repeat.attempt" }
+                      "iteration": {
+                        "add": [
+                          { "ref": "params.runGoTestsIteration" },
+                          { "const": -1 },
+                          { "ref": "repeat.attempt" }
+                        ]
+                      }
                     }
                   }
                 },
@@ -185,7 +203,13 @@
                           "artifact": {
                             "kind": "run-go-tests-result-json-file",
                             "taskKey": { "ref": "params.taskKey" },
-                            "iteration": { "ref": "repeat.attempt" }
+                            "iteration": {
+                              "add": [
+                                { "ref": "params.runGoTestsIteration" },
+                                { "const": -1 },
+                                { "ref": "repeat.attempt" }
+                              ]
+                            }
                           }
                         },
                         "exit_code": { "ref": "steps.run_go_tests_try_${attempt}.run_go_tests.outputs.parsed.exitCode" },

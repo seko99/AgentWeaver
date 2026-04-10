@@ -42,7 +42,7 @@
               }
             },
             "allowedIssueTypes": {
-              "const": ["Bug", "Ошибка"]
+              "const": ["Bug", "Ошибка", "Баг"]
             }
           }
         },
@@ -101,13 +101,15 @@
               "task_summary_file": {
                 "artifact": {
                   "kind": "task-summary-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.taskSummaryIteration" }
                 }
               },
               "task_summary_json_file": {
                 "artifact": {
                   "kind": "task-summary-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.taskSummaryIteration" }
                 }
               }
             },
@@ -118,7 +120,8 @@
             "outputFile": {
               "artifact": {
                 "kind": "task-summary-file",
-                "taskKey": { "ref": "params.taskKey" }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.taskSummaryIteration" }
               }
             },
             "requiredArtifacts": {
@@ -126,7 +129,8 @@
                 {
                   "artifact": {
                     "kind": "task-summary-json-file",
-                    "taskKey": { "ref": "params.taskKey" }
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.taskSummaryIteration" }
                   }
                 }
               ]
@@ -143,7 +147,8 @@
                   {
                     "artifact": {
                       "kind": "task-summary-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.taskSummaryIteration" }
                     }
                   }
                 ]
@@ -158,7 +163,8 @@
                   "path": {
                     "artifact": {
                       "kind": "task-summary-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.taskSummaryIteration" }
                     }
                   },
                   "schemaId": "task-summary/v1"
@@ -174,7 +180,8 @@
               "path": {
                 "artifact": {
                   "kind": "task-summary-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.taskSummaryIteration" }
                 }
               }
             }
@@ -195,37 +202,43 @@
               "bug_analyze_file": {
                 "artifact": {
                   "kind": "bug-analyze-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.bugAnalyzeIteration" }
                 }
               },
               "bug_analyze_json_file": {
                 "artifact": {
                   "kind": "bug-analyze-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.bugAnalyzeIteration" }
                 }
               },
               "bug_fix_design_file": {
                 "artifact": {
                   "kind": "bug-fix-design-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.bugFixDesignIteration" }
                 }
               },
               "bug_fix_design_json_file": {
                 "artifact": {
                   "kind": "bug-fix-design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.bugFixDesignIteration" }
                 }
               },
               "bug_fix_plan_file": {
                 "artifact": {
                   "kind": "bug-fix-plan-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.bugFixPlanIteration" }
                 }
               },
               "bug_fix_plan_json_file": {
                 "artifact": {
                   "kind": "bug-fix-plan-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.bugFixPlanIteration" }
                 }
               }
             },
@@ -257,7 +270,8 @@
                   "path": {
                     "artifact": {
                       "kind": "bug-analyze-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.bugAnalyzeIteration" }
                     }
                   },
                   "schemaId": "bug-analysis/v1"
@@ -266,7 +280,8 @@
                   "path": {
                     "artifact": {
                       "kind": "bug-fix-design-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.bugFixDesignIteration" }
                     }
                   },
                   "schemaId": "bug-fix-design/v1"
@@ -275,7 +290,8 @@
                   "path": {
                     "artifact": {
                       "kind": "bug-fix-plan-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.bugFixPlanIteration" }
                     }
                   },
                   "schemaId": "bug-fix-plan/v1"

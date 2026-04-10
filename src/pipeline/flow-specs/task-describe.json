@@ -123,13 +123,15 @@
               "jira_description_file": {
                 "artifact": {
                   "kind": "jira-description-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "jira_description_json_file": {
                 "artifact": {
                   "kind": "jira-description-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               }
             },
@@ -145,13 +147,15 @@
                 {
                   "artifact": {
                     "kind": "jira-description-file",
-                    "taskKey": { "ref": "params.taskKey" }
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
                   }
                 },
                 {
                   "artifact": {
                     "kind": "jira-description-json-file",
-                    "taskKey": { "ref": "params.taskKey" }
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
                   }
                 }
               ]
@@ -164,7 +168,8 @@
               "path": {
                 "artifact": {
                   "kind": "jira-description-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "message": "Task describe mode did not produce the Jira description artifact."
@@ -177,7 +182,8 @@
                   "path": {
                     "artifact": {
                       "kind": "jira-description-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
                     }
                   },
                   "schemaId": "jira-description/v1"
@@ -207,13 +213,15 @@
               "jira_description_file": {
                 "artifact": {
                   "kind": "jira-description-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "jira_description_json_file": {
                 "artifact": {
                   "kind": "jira-description-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               }
             },
@@ -234,13 +242,15 @@
                 {
                   "artifact": {
                     "kind": "jira-description-file",
-                    "taskKey": { "ref": "params.taskKey" }
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
                   }
                 },
                 {
                   "artifact": {
                     "kind": "jira-description-json-file",
-                    "taskKey": { "ref": "params.taskKey" }
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
                   }
                 }
               ]
@@ -253,7 +263,8 @@
               "path": {
                 "artifact": {
                   "kind": "jira-description-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
                 }
               },
               "message": "Task describe mode did not produce the Jira description artifact."
@@ -266,7 +277,8 @@
                   "path": {
                     "artifact": {
                       "kind": "jira-description-json-file",
-                      "taskKey": { "ref": "params.taskKey" }
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
                     }
                   },
                   "schemaId": "jira-description/v1"

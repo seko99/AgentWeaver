@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -63,20 +63,70 @@ export function artifactJsonFile(prefix: string, taskKey: string, iteration: num
   return taskArtifactsFile(taskKey, `${prefix}-${taskKey}-${iteration}.json`);
 }
 
-export function designFile(taskKey: string): string {
-  return artifactFile("design", taskKey, 1);
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function designJsonFile(taskKey: string): string {
-  return artifactJsonFile("design", taskKey, 1);
+function latestVersionedArtifactIteration(
+  taskKey: string,
+  prefix: string,
+  extension: "md" | "json",
+  directory: string,
+): number | null {
+  if (!existsSync(directory)) {
+    return null;
+  }
+  const re = new RegExp(`^${escapeRegExp(prefix)}-${escapeRegExp(taskKey)}-(\\d+)\\.${extension}$`);
+  let maxIteration: number | null = null;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const match = re.exec(entry.name);
+    if (!match) {
+      continue;
+    }
+    const currentIteration = Number.parseInt(match[1] ?? "0", 10);
+    maxIteration = maxIteration === null ? currentIteration : Math.max(maxIteration, currentIteration);
+  }
+  return maxIteration;
 }
 
-export function planFile(taskKey: string): string {
-  return artifactFile("plan", taskKey, 1);
+export function latestArtifactIteration(taskKey: string, prefix: string, extension: "md" | "json" = "md"): number | null {
+  return latestVersionedArtifactIteration(
+    taskKey,
+    prefix,
+    extension,
+    extension === "md" ? taskWorkspaceDir(taskKey) : taskArtifactsDir(taskKey),
+  );
 }
 
-export function planJsonFile(taskKey: string): string {
-  return artifactJsonFile("plan", taskKey, 1);
+export function nextArtifactIteration(taskKey: string, prefix: string, extension: "md" | "json" = "md"): number {
+  return (latestArtifactIteration(taskKey, prefix, extension) ?? 0) + 1;
+}
+
+function versionedMarkdownArtifactFile(taskKey: string, prefix: string, iteration?: number): string {
+  return artifactFile(prefix, taskKey, iteration ?? (latestArtifactIteration(taskKey, prefix, "md") ?? 1));
+}
+
+function versionedJsonArtifactFile(taskKey: string, prefix: string, iteration?: number): string {
+  return artifactJsonFile(prefix, taskKey, iteration ?? (latestArtifactIteration(taskKey, prefix, "json") ?? 1));
+}
+
+export function designFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "design", iteration);
+}
+
+export function designJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "design", iteration);
+}
+
+export function planFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "plan", iteration);
+}
+
+export function planJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "plan", iteration);
 }
 
 export function planningQuestionsJsonFile(taskKey: string): string {
@@ -87,44 +137,44 @@ export function planningAnswersJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `planning-answers-${taskKey}.json`);
 }
 
-export function bugAnalyzeFile(taskKey: string): string {
-  return taskWorkspaceFile(taskKey, `bug-analyze-${taskKey}.md`);
+export function bugAnalyzeFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "bug-analyze", iteration);
 }
 
-export function bugAnalyzeJsonFile(taskKey: string): string {
-  return taskArtifactsFile(taskKey, `bug-analyze-${taskKey}.json`);
+export function bugAnalyzeJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "bug-analyze", iteration);
 }
 
-export function bugFixDesignFile(taskKey: string): string {
-  return taskWorkspaceFile(taskKey, `bug-fix-design-${taskKey}.md`);
+export function bugFixDesignFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "bug-fix-design", iteration);
 }
 
-export function bugFixDesignJsonFile(taskKey: string): string {
-  return taskArtifactsFile(taskKey, `bug-fix-design-${taskKey}.json`);
+export function bugFixDesignJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "bug-fix-design", iteration);
 }
 
-export function bugFixPlanFile(taskKey: string): string {
-  return taskWorkspaceFile(taskKey, `bug-fix-plan-${taskKey}.md`);
+export function bugFixPlanFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "bug-fix-plan", iteration);
 }
 
-export function bugFixPlanJsonFile(taskKey: string): string {
-  return taskArtifactsFile(taskKey, `bug-fix-plan-${taskKey}.json`);
+export function bugFixPlanJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "bug-fix-plan", iteration);
 }
 
-export function qaFile(taskKey: string): string {
-  return artifactFile("qa", taskKey, 1);
+export function qaFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "qa", iteration);
 }
 
-export function qaJsonFile(taskKey: string): string {
-  return artifactJsonFile("qa", taskKey, 1);
+export function qaJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "qa", iteration);
 }
 
-export function taskSummaryFile(taskKey: string): string {
-  return artifactFile("task", taskKey, 1);
+export function taskSummaryFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "task", iteration);
 }
 
-export function taskSummaryJsonFile(taskKey: string): string {
-  return artifactJsonFile("task", taskKey, 1);
+export function taskSummaryJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "task", iteration);
 }
 
 export function readyToMergeFile(taskKey: string): string {
@@ -147,12 +197,12 @@ export function jiraAttachmentsContextFile(taskKey: string): string {
   return taskWorkspaceFile(taskKey, `jira-attachments-context-${taskKey}.txt`);
 }
 
-export function jiraDescriptionFile(taskKey: string): string {
-  return taskWorkspaceFile(taskKey, `jira-${taskKey}-description.md`);
+export function jiraDescriptionFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "jira-description", iteration);
 }
 
-export function jiraDescriptionJsonFile(taskKey: string): string {
-  return taskArtifactsFile(taskKey, `jira-${taskKey}-description.json`);
+export function jiraDescriptionJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "jira-description", iteration);
 }
 
 export function taskDescribeInputJsonFile(taskKey: string): string {
@@ -175,32 +225,32 @@ export function gitCommitInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `git-commit-input-${taskKey}.json`);
 }
 
-export function mrDescriptionFile(taskKey: string): string {
-  return taskWorkspaceFile(taskKey, `mr-description-${taskKey}.md`);
+export function mrDescriptionFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "mr-description", iteration);
 }
 
-export function mrDescriptionJsonFile(taskKey: string): string {
-  return taskArtifactsFile(taskKey, `mr-description-${taskKey}.json`);
+export function mrDescriptionJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "mr-description", iteration);
 }
 
-export function gitlabReviewFile(taskKey: string): string {
-  return taskWorkspaceFile(taskKey, `gitlab-review-${taskKey}.md`);
+export function gitlabReviewFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "gitlab-review", iteration);
 }
 
-export function gitlabReviewJsonFile(taskKey: string): string {
-  return taskArtifactsFile(taskKey, `gitlab-review-${taskKey}.json`);
+export function gitlabReviewJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "gitlab-review", iteration);
 }
 
 export function gitlabReviewInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `gitlab-review-input-${taskKey}.json`);
 }
 
-export function gitlabDiffFile(taskKey: string): string {
-  return taskWorkspaceFile(taskKey, `gitlab-diff-${taskKey}.md`);
+export function gitlabDiffFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "gitlab-diff", iteration);
 }
 
-export function gitlabDiffJsonFile(taskKey: string): string {
-  return taskArtifactsFile(taskKey, `gitlab-diff-${taskKey}.json`);
+export function gitlabDiffJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "gitlab-diff", iteration);
 }
 
 export function gitlabDiffReviewInputJsonFile(taskKey: string): string {
