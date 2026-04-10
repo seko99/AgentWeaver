@@ -92,6 +92,7 @@ import {
 const COMMANDS = [
   "bug-analyze",
   "bug-fix",
+  "git-commit",
   "gitlab-diff-review",
   "gitlab-review",
   "mr-description",
@@ -209,6 +210,7 @@ function usage(): string {
   agentweaver
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
+  agentweaver git-commit [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver gitlab-diff-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -668,6 +670,7 @@ function commandRequiresTask(command: string): boolean {
 
 function commandSupportsProjectScope(command: string): boolean {
   return (
+    command === "git-commit" ||
     command === "gitlab-diff-review" ||
     command === "gitlab-review" ||
     command === "task-describe" ||
@@ -756,6 +759,8 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   auto: "Полный пайплайн задачи: планирование, реализация, проверки, ревью, ответы на ревью и повторные итерации до готовности к merge.",
   "bug-analyze":
     "Анализирует баг по Jira и создаёт структурированные артефакты: гипотезу причины, дизайн исправления и план работ.",
+  "git-commit":
+    "Собирает git status/diff, генерирует commit message через LLM, позволяет выбрать файлы и подтвердить коммит.",
   "gitlab-diff-review":
     "Запрашивает GitLab MR URL через user-input, загружает diff merge request по API и запускает код-ревью с сохранением markdown и structured JSON artifacts.",
   "gitlab-review":
@@ -1349,6 +1354,23 @@ async function executeCommand(
         taskKey: config.taskKey,
         runGoTestsScript: config.runGoTestsScript,
         runGoLinterScript: config.runGoLinterScript,
+        extraPrompt: config.extraPrompt,
+      },
+      launchProfile ? { launchProfile } : {},
+      requestUserInput,
+      undefined,
+      launchMode,
+      runtime,
+    );
+    return false;
+  }
+
+  if (config.command === "git-commit") {
+    await runDeclarativeFlowBySpecFile(
+      "git-commit.json",
+      config,
+      {
+        taskKey: config.taskKey,
         extraPrompt: config.extraPrompt,
       },
       launchProfile ? { launchProfile } : {},

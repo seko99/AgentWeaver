@@ -3,6 +3,7 @@ import { codexDockerExecutor } from "../executors/codex-docker-executor.js";
 import { codexLocalExecutor } from "../executors/codex-local-executor.js";
 import { fetchGitLabDiffExecutor } from "../executors/fetch-gitlab-diff-executor.js";
 import { fetchGitLabReviewExecutor } from "../executors/fetch-gitlab-review-executor.js";
+import { gitCommitExecutor } from "../executors/git-commit-executor.js";
 import { jiraFetchExecutor } from "../executors/jira-fetch-executor.js";
 import { opencodeExecutor } from "../executors/opencode-executor.js";
 import { processExecutor } from "../executors/process-executor.js";
@@ -14,6 +15,7 @@ export type ExecutorId =
   | "command-check"
   | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
+  | "git-commit"
   | "jira-fetch"
   | "codex"
   | "codex-docker"
@@ -35,6 +37,7 @@ const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   "command-check": commandCheckExecutor as unknown as AnyExecutorDefinition,
   "fetch-gitlab-diff": fetchGitLabDiffExecutor as unknown as AnyExecutorDefinition,
   "fetch-gitlab-review": fetchGitLabReviewExecutor as unknown as AnyExecutorDefinition,
+  "git-commit": gitCommitExecutor as unknown as AnyExecutorDefinition,
   "jira-fetch": jiraFetchExecutor as unknown as AnyExecutorDefinition,
   codex: codexLocalExecutor as unknown as AnyExecutorDefinition,
   "codex-docker": codexDockerExecutor as unknown as AnyExecutorDefinition,

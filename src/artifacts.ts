@@ -159,6 +159,22 @@ export function taskDescribeInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `task-describe-input-${taskKey}.json`);
 }
 
+export function gitStatusJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `git-status-${taskKey}.json`);
+}
+
+export function gitDiffFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `git-diff-${taskKey}.txt`);
+}
+
+export function gitCommitMessageJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `git-commit-message-${taskKey}.json`);
+}
+
+export function gitCommitInputJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `git-commit-input-${taskKey}.json`);
+}
+
 export function mrDescriptionFile(taskKey: string): string {
   return taskWorkspaceFile(taskKey, `mr-description-${taskKey}.md`);
 }

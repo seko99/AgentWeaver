@@ -17,7 +17,7 @@ export type ResolvedLaunchProfile = {
 
 export const ALLOWED_MODELS_BY_EXECUTOR: Record<LlmExecutorId, readonly string[]> = {
   codex: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"],
-  opencode: ["opencode/minimax-m2.5-free", "minimax-coding-plan/MiniMax-M2.7"],
+  opencode: ["opencode/minimax-m2.5-free", "minimax-coding-plan/MiniMax-M2.7", "zhipuai-coding-plan/glm-5.1", "zhipuai-coding-plan/glm-4.7"],
 };
 
 export const DEFAULT_EXECUTOR: LlmExecutorId = "opencode";

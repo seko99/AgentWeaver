@@ -141,6 +141,20 @@ export const RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
 export const RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE =
   "Используй структурированный результат последнего запуска run_go_linter.py из {linter_result_json_file} как source of truth. " +
   "Проанализируй последнюю ошибку линтера или генерации, исправь код и подготовь изменения так, чтобы следующий прогон run_go_linter.py прошёл успешно.";
+export const COMMIT_MESSAGE_PROMPT_TEMPLATE =
+  "Сгенерируй commit message для текущих изменений. " +
+  "Контекст задачи (Jira): {jira_task_file}. " +
+  "Текущие изменения (git diff): {git_diff_file}. " +
+  "Список changed files: {git_status_json_file}. " +
+  "Правила: " +
+  "1) Subject line ≤72 символа. " +
+  "2) Используй conventional commits format: type(scope): description. " +
+  "3) Type: feat/fix/refactor/docs/test/chore. " +
+  "4) Scope — если уместно, иначе без scope. " +
+  "5) Упомяни ключ задачи (issue key) в subject или body. " +
+  "6) Optional body с деталями изменений — каждый пункт с '- ' prefix. " +
+  "7) Язык commit message: английский. " +
+  "8) Запиши JSON в {commit_message_json_file}: {\"subject\": \"...\", \"body\": \"...\"}. Body может быть пустой строкой если не нужен.";
 export const AUTO_REVIEW_FIX_EXTRA_PROMPT = "Исправлять только блокеры, критикалы и важные";
 
 export function formatTemplate(template: string, values: Record<string, string>): string {
