@@ -1,0 +1,168 @@
+{
+  "kind": "git-commit-flow",
+  "version": 1,
+  "phases": [
+    {
+      "id": "collect_status",
+      "steps": [
+        {
+          "id": "get_git_status",
+          "node": "git-status",
+          "params": {
+            "outputFile": {
+              "artifact": {
+                "kind": "git-status-json-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "diffOutputFile": {
+              "artifact": {
+                "kind": "git-diff-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "labelText": {
+              "const": "Collecting git status"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "generate_message",
+      "steps": [
+        {
+          "id": "generate_commit_message",
+          "node": "llm-prompt",
+          "prompt": {
+            "templateRef": "commit-message",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "git_diff_file": {
+                "artifact": {
+                  "kind": "git-diff-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "git_status_json_file": {
+                "artifact": {
+                  "kind": "git-status-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              },
+              "commit_message_json_file": {
+                "artifact": {
+                  "kind": "git-commit-message-json-file",
+                  "taskKey": {
+                    "ref": "params.taskKey"
+                  }
+                }
+              }
+            },
+            "extraPrompt": {
+              "ref": "params.extraPrompt"
+            },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "const": "Generating commit message"
+            },
+            "model": {
+              "ref": "params.llmModel"
+            },
+            "executor": {
+              "ref": "params.llmExecutor"
+            },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "git-commit-message-json-file",
+                    "taskKey": {
+                      "ref": "params.taskKey"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "confirm_and_commit",
+      "steps": [
+        {
+          "id": "collect_commit_input",
+          "node": "git-commit-form",
+          "params": {
+            "gitStatusJsonFile": {
+              "artifact": {
+                "kind": "git-status-json-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "commitMessageFile": {
+              "artifact": {
+                "kind": "git-commit-message-json-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            },
+            "formId": {
+              "const": "git-commit"
+            },
+            "title": {
+              "const": "Git Commit"
+            },
+            "description": {
+              "const": "Выберите файлы для коммита и отредактируйте commit message."
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "git-commit-input-json-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "execute_commit",
+          "node": "git-commit",
+          "params": {
+            "message": {
+              "ref": "steps.confirm_and_commit.collect_commit_input.value.values.commit_message"
+            },
+            "files": {
+              "ref": "steps.confirm_and_commit.collect_commit_input.value.values.selected_files"
+            },
+            "labelText": {
+              "const": "Committing changes"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
