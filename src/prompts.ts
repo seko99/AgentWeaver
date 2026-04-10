@@ -3,159 +3,159 @@ import {
   type StructuredArtifactSchemaId,
 } from "./structured-artifact-schema-registry.js";
 
-export const BASE_PROMPT_HEADER = "Основная задача:";
-export const EXTRA_PROMPT_HEADER = "Дополнительные указания:";
+export const BASE_PROMPT_HEADER = "Primary task:";
+export const EXTRA_PROMPT_HEADER = "Additional instructions:";
 
 function strictSchemaInstruction(outputFileVar: string, schemaId: StructuredArtifactSchemaId): string {
   return (
-    `Формат артефакта ${outputFileVar} обязан полностью соответствовать schema ${schemaId} из registry. ` +
-    "Не пропускай required fields, не переименовывай поля, не меняй типы, не заменяй массив объектом или строкой и не оставляй обязательные строки пустыми. " +
-    "Итоговый JSON должен пройти валидацию по этой схеме без ручных исправлений. " +
+    `The artifact format for ${outputFileVar} must fully conform to schema ${schemaId} from the registry. ` +
+    "Do not skip required fields, do not rename fields, do not change types, do not replace arrays with objects or strings, and do not leave required strings empty. " +
+    "The final JSON must pass validation against this schema without manual corrections. " +
     `Canonical schema:\n${renderStructuredArtifactSchema(schemaId)}\n`
   );
 }
 
 export const PLAN_PROMPT_TEMPLATE =
-  "Посмотри и проанализируй задачу в {jira_task_file}. " +
-  "Обязательно проанализируй дополнительные материалы из Jira attachments manifest {jira_attachments_manifest_file} и текстовый контекст {jira_attachments_context_file}; если attachment содержит более детальную постановку, ограничения, список файлов, migration strategy или инварианты, считай attachment source of truth для planning наравне с Jira issue. " +
-  "Сначала создай структурированные JSON-артефакты, они являются source of truth для следующих flow. " +
-  "Человекочитаемые markdown-файлы сделай как подробное производное представление этих JSON-артефактов для пользователя, а не как краткое summary. " +
-  "Markdown не должен влиять на структуру JSON: сначала определи корректные JSON-типы, затем строй markdown как производное представление. " +
-  "Не схлопывай конкретику из задачи и attachment: сохраняй явные файлы, методы, API, инварианты, migration steps, DB-ограничения, business rules и acceptance criteria. " +
-  "Разработай системный дизайн решения и запиши JSON в {design_json_file}, затем markdown в {design_file}. " +
+  "Review and analyze the task in {jira_task_file}. " +
+  "Be sure to analyze additional materials from Jira attachments manifest {jira_attachments_manifest_file} and text context {jira_attachments_context_file}; if an attachment contains more detailed requirements, constraints, file lists, migration strategy, or invariants, treat the attachment as source of truth for planning alongside the Jira issue. " +
+  "First create structured JSON artifacts - they are the source of truth for subsequent flows. " +
+  "Create human-readable markdown files as detailed derivative representations of these JSON artifacts for the user, not as brief summaries. " +
+  "Markdown should not influence JSON structure: first determine the correct JSON types, then build markdown as a derivative representation. " +
+  "Do not collapse specifics from the task and attachments: preserve explicit files, methods, APIs, invariants, migration steps, DB constraints, business rules, and acceptance criteria. " +
+  "Develop a system design for the solution and write JSON to {design_json_file}, then markdown to {design_file}. " +
   strictSchemaInstruction("{design_json_file}", "implementation-design/v1") +
-  "Разработай подробный план реализации и запиши JSON в {plan_json_file}, затем markdown в {plan_file}. " +
+  "Develop a detailed implementation plan and write JSON to {plan_json_file}, then markdown to {plan_file}. " +
   strictSchemaInstruction("{plan_json_file}", "implementation-plan/v1") +
-  "Разработай план тестирования для QA и запиши JSON в {qa_json_file}, затем markdown в {qa_file}. " +
+  "Develop a QA test plan and write JSON to {qa_json_file}, then markdown to {qa_file}. " +
   strictSchemaInstruction("{qa_json_file}", "qa-plan/v1") +
-  "Markdown для design и plan оформи развёрнуто, с отдельными секциями Summary, Current State, Target State, Affected Code, Decisions, Migration/DB Changes, Risks, Implementation Steps, Tests, Rollout. " +
-  "JSON-файлы должны быть валидными и содержать только JSON без markdown-обёртки. ";
+  "Format markdown for design and plan comprehensively, with separate sections for Summary, Current State, Target State, Affected Code, Decisions, Migration/DB Changes, Risks, Implementation Steps, Tests, Rollout. " +
+  "JSON files must be valid and contain only JSON without markdown wrapping. ";
 
 export const PLAN_QUESTIONS_PROMPT_TEMPLATE =
-  "Посмотри и проанализируй задачу в {jira_task_file}. " +
-  "Обязательно проанализируй дополнительные материалы из Jira attachments manifest {jira_attachments_manifest_file} и текстовый контекст {jira_attachments_context_file}; если attachment содержит более детальную постановку, ограничения, список файлов, migration strategy или инварианты, считай attachment source of truth для planning наравне с Jira issue. " +
-  "Перед финальным planning определи, нужны ли уточнения от пользователя. " +
+  "Review and analyze the task in {jira_task_file}. " +
+  "Be sure to analyze additional materials from Jira attachments manifest {jira_attachments_manifest_file} and text context {jira_attachments_context_file}; if an attachment contains more detailed requirements, constraints, file lists, migration strategy, or invariants, treat the attachment as source of truth for planning alongside the Jira issue. " +
+  "Before final planning, determine if any clarifications are needed from the user. " +
   strictSchemaInstruction("{planning_questions_json_file}", "planning-questions/v1") +
-  "Задавай только вопросы, без ответа на которые design/plan могут оказаться неверными или слишком предположительными. " +
-  "Не задавай очевидные, декоративные или дублирующие вопросы. " +
-  "Обычно достаточно 1-5 вопросов. " +
-  "JSON-файл должен быть валидным и содержать только JSON без markdown-обёртки. ";
+  "Ask only questions without which the design/plan could be incorrect or too speculative. " +
+  "Do not ask obvious, decorative, or duplicate questions. " +
+  "Usually 1-5 questions are sufficient. " +
+  "The JSON file must be valid and contain only JSON without markdown wrapping. ";
 
 export const BUG_ANALYZE_PROMPT_TEMPLATE =
-  "Посмотри и проанализируй баг в {jira_task_file}. " +
-  "Сначала создай структурированные JSON-артефакты, они являются source of truth для следующих flow. " +
-  "Человекочитаемые markdown-файлы сделай как краткое производное представление этих JSON-артефактов для пользователя. " +
-  "Запиши структурированный анализ бага в {bug_analyze_json_file}, затем краткую markdown-версию в {bug_analyze_file}. " +
-  "Запиши структурированный дизайн исправления в {bug_fix_design_json_file}, затем краткую markdown-версию в {bug_fix_design_file}. " +
-  "Запиши структурированный план реализации в {bug_fix_plan_json_file}, затем краткую markdown-версию в {bug_fix_plan_file}. " +
-  "JSON-файлы должны быть валидными и содержать только JSON без markdown-обёртки. " +
+  "Review and analyze the bug in {jira_task_file}. " +
+  "First create structured JSON artifacts - they are the source of truth for subsequent flows. " +
+  "Create human-readable markdown files as brief derivative representations of these JSON artifacts for the user. " +
+  "Write structured bug analysis to {bug_analyze_json_file}, then a brief markdown version to {bug_analyze_file}. " +
+  "Write structured fix design to {bug_fix_design_json_file}, then a brief markdown version to {bug_fix_design_file}. " +
+  "Write structured implementation plan to {bug_fix_plan_json_file}, then a brief markdown version to {bug_fix_plan_file}. " +
+  "JSON files must be valid and contain only JSON without markdown wrapping. " +
   strictSchemaInstruction("{bug_analyze_json_file}", "bug-analysis/v1") +
   strictSchemaInstruction("{bug_fix_design_json_file}", "bug-fix-design/v1") +
   strictSchemaInstruction("{bug_fix_plan_json_file}", "bug-fix-plan/v1");
 
 export const BUG_FIX_PROMPT_TEMPLATE =
-  "Используй только структурированные артефакты как source of truth. " +
-  "Проанализируй баг по {bug_analyze_json_file}. " +
-  "Используй дизайн исправления из {bug_fix_design_json_file}. " +
-  "Используй план реализации из {bug_fix_plan_json_file}. " +
-  "Markdown-артефакты предназначены только для чтения человеком и не должны определять реализацию. " +
-  "После этого приступай к реализации исправления в коде. ";
+  "Use only structured artifacts as source of truth. " +
+  "Analyze the bug from {bug_analyze_json_file}. " +
+  "Use the fix design from {bug_fix_design_json_file}. " +
+  "Use the implementation plan from {bug_fix_plan_json_file}. " +
+  "Markdown artifacts are intended only for human reading and should not define the implementation. " +
+  "After that, proceed to implement the fix in code. ";
 
 export const MR_DESCRIPTION_PROMPT_TEMPLATE =
-  "Посмотри задачу в {jira_task_file} и текущие изменения в репозитории. " +
-  "Подготовь очень краткое intent-описание для merge request без подробностей реализации, списков файлов и технических деталей. " +
-  `Сначала запиши source-of-truth JSON в {mr_description_json_file}. ${strictSchemaInstruction("{mr_description_json_file}", "mr-description/v1")}Затем производную markdown-версию в {mr_description_file}. `;
+  "Review the task in {jira_task_file} and the current changes in the repository. " +
+  "Prepare a very brief intent description for the merge request without implementation details, file lists, or technical details. " +
+  `First write the source-of-truth JSON to {mr_description_json_file}. ${strictSchemaInstruction("{mr_description_json_file}", "mr-description/v1")}Then write the derivative markdown version to {mr_description_file}. `;
 
 export const IMPLEMENT_PROMPT_TEMPLATE =
-  "Используй только структурированные артефакты как source of truth. " +
-  "Проанализируй системный дизайн {design_json_file}, план реализации {plan_json_file} и приступай к реализации по плану. " +
-  "Markdown-артефакты предназначены только для чтения человеком и не должны определять реализацию. ";
+  "Use only structured artifacts as source of truth. " +
+  "Analyze the system design {design_json_file}, implementation plan {plan_json_file}, and proceed with implementation according to the plan. " +
+  "Markdown artifacts are intended only for human reading and should not define the implementation. ";
 
 export const REVIEW_PROMPT_TEMPLATE =
-  "Проведи код-ревью текущих изменений. " +
-  "Используй только структурированные артефакты как source of truth: задачу в {jira_task_file}, дизайн в {design_json_file} и план в {plan_json_file}. " +
-  `Сначала запиши структурированный результат в {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
-  "Затем запиши производную markdown-версию в {review_file}. " +
-  "Если ready_to_merge=true и нет блокеров, препятствующих merge - создай файл ready-to-merge.md.";
+  "Conduct a code review of the current changes. " +
+  "Use only structured artifacts as source of truth: the task in {jira_task_file}, design in {design_json_file}, and plan in {plan_json_file}. " +
+  `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
+  "Then write the derivative markdown version to {review_file}. " +
+  "If ready_to_merge=true and there are no blockers preventing merge - create the ready-to-merge.md file.";
 
 export const REVIEW_PROJECT_PROMPT_TEMPLATE =
-  "Проведи код-ревью текущих изменений в проекте без Jira-контекста. " +
-  "Оцени качество изменений по текущему коду, тестам, рискам регрессий и общему инженерному качеству. " +
-  `Сначала запиши структурированный результат в {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
-  "Затем запиши производную markdown-версию в {review_file}. " +
-  "Если ready_to_merge=true и нет блокеров, создай файл {ready_to_merge_file}.";
+  "Conduct a code review of current changes in the project without Jira context. " +
+  "Evaluate the quality of changes based on current code, tests, regression risks, and overall engineering quality. " +
+  `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
+  "Then write the derivative markdown version to {review_file}. " +
+  "If ready_to_merge=true and there are no blockers, create the {ready_to_merge_file} file.";
 
 export const GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE =
-  "Проведи код-ревью diff merge request из GitLab. " +
-  "Используй structured diff artifact {gitlab_diff_json_file} как source of truth, а markdown {gitlab_diff_file} только как удобное представление для чтения человеком. " +
-  "Оцени только изменения из diff: корректность, риски регрессий, отсутствие тестов, опасные edge cases, нарушения контрактов и поддерживаемость. " +
-  `Сначала запиши структурированный результат в {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
-  "Затем запиши производную markdown-версию в {review_file}. " +
-  "Если ready_to_merge=true и нет блокеров, создай файл {ready_to_merge_file}.";
+  "Conduct a code review of the GitLab merge request diff. " +
+  "Use the structured diff artifact {gitlab_diff_json_file} as source of truth, and markdown {gitlab_diff_file} only as a convenient human-readable representation. " +
+  "Evaluate only the changes from the diff: correctness, regression risks, missing tests, dangerous edge cases, contract violations, and maintainability. " +
+  `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
+  "Then write the derivative markdown version to {review_file}. " +
+  "If ready_to_merge=true and there are no blockers, create the {ready_to_merge_file} file.";
 
 export const REVIEW_REPLY_PROMPT_TEMPLATE =
-  "Твой коллега провёл код-ревью и записал структурированный результат в {review_json_file}. " +
-  "Используй только структурированные артефакты как source of truth: задачу в {jira_task_file}, дизайн в {design_json_file}, план в {plan_json_file} и review в {review_json_file}. " +
-  `Сначала запиши структурированный ответ в {review_reply_json_file}. ${strictSchemaInstruction("{review_reply_json_file}", "review-reply/v1")}` +
-  "Затем запиши производную markdown-версию в {review_reply_file}.";
+  "Your colleague conducted a code review and wrote the structured result to {review_json_file}. " +
+  "Use only structured artifacts as source of truth: the task in {jira_task_file}, design in {design_json_file}, plan in {plan_json_file}, and review in {review_json_file}. " +
+  `First write the structured reply to {review_reply_json_file}. ${strictSchemaInstruction("{review_reply_json_file}", "review-reply/v1")}` +
+  "Then write the derivative markdown version to {review_reply_file}.";
 
 export const REVIEW_REPLY_PROJECT_PROMPT_TEMPLATE =
-  "Твой коллега провёл код-ревью и записал структурированный результат в {review_json_file}. " +
-  "Используй review в {review_json_file} как source of truth, разберись в замечаниях и подготовь структурированный ответ. " +
-  `Сначала запиши структурированный ответ в {review_reply_json_file}. ${strictSchemaInstruction("{review_reply_json_file}", "review-reply/v1")}` +
-  "Затем запиши производную markdown-версию в {review_reply_file}.";
+  "Your colleague conducted a code review and wrote the structured result to {review_json_file}. " +
+  "Use the review in {review_json_file} as source of truth, understand the comments, and prepare a structured reply. " +
+  `First write the structured reply to {review_reply_json_file}. ${strictSchemaInstruction("{review_reply_json_file}", "review-reply/v1")}` +
+  "Then write the derivative markdown version to {review_reply_file}.";
 
 export const REVIEW_SUMMARY_PROMPT_TEMPLATE =
-  "Посмотри в {review_file}. " +
-  "Сделай краткий список комментариев без подробностей, 3-7 пунктов. " +
-  "Запиши результат в {review_summary_file}.";
+  "Look at {review_file}. " +
+  "Create a brief list of comments without details, 3-7 items. " +
+  "Write the result to {review_summary_file}.";
 
 export const REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE =
-  "Посмотри в {review_reply_file}. " +
-  "Сделай краткий список ответов и итоговых действий без подробностей, 3-7 пунктов. " +
-  "Запиши результат в {review_reply_summary_file}.";
+  "Look at {review_reply_file}. " +
+  "Create a brief list of replies and resulting actions without details, 3-7 items. " +
+  "Write the result to {review_reply_summary_file}.";
 
 export const REVIEW_FIX_PROMPT_TEMPLATE =
-  "Используй только структурированные артефакты как source of truth. " +
-  "Проанализируй комментарии в {review_reply_json_file}. " +
-  "Исправь то, что содержится в дополнительных указаниях, а если таковых нет - исправь все пункты. " +
-  "По окончании обязательно прогони вне песочницы линтер, все тесты, сгенерируй make swagger. " +
-  "Исправь ошибки линтера и тестов, если будут. " +
-  `По завершении сначала запиши структурированный отчёт в {review_fix_json_file}. ${strictSchemaInstruction("{review_fix_json_file}", "review-fix-report/v1")}Затем производную markdown-версию в {review_fix_file}.`;
+  "Use only structured artifacts as source of truth. " +
+  "Analyze the comments in {review_reply_json_file}. " +
+  "Fix what is contained in the additional instructions, and if there are none - fix all items. " +
+  "After completion, be sure to run the linter outside the sandbox, all tests, generate make swagger. " +
+  "Fix any linter and test errors if they occur. " +
+  `Upon completion, first write the structured report to {review_fix_json_file}. ${strictSchemaInstruction("{review_fix_json_file}", "review-fix-report/v1")}Then write the derivative markdown version to {review_fix_file}.`;
 
 export const TASK_SUMMARY_PROMPT_TEMPLATE =
-  "Посмотри в {jira_task_file}. " +
-  "Сделай краткое резюме задачи, на 1-2 абзаца. " +
-  `Сначала запиши source-of-truth JSON в {task_summary_json_file}. ${strictSchemaInstruction("{task_summary_json_file}", "task-summary/v1")}Затем markdown-версию в {task_summary_file}.`;
+  "Look at {jira_task_file}. " +
+  "Create a brief summary of the task, 1-2 paragraphs. " +
+  `First write the source-of-truth JSON to {task_summary_json_file}. ${strictSchemaInstruction("{task_summary_json_file}", "task-summary/v1")}Then write the markdown version to {task_summary_file}.`;
 
 export const JIRA_DESCRIPTION_PROMPT_TEMPLATE =
-  "Посмотри задачу в {jira_task_file}. " +
-  "Сформируй типичное описание задачи для Jira простым продуктовым языком, без перегруза техническими деталями. " +
-  "Структура описания: Проблема, Контекст, Что нужно сделать, Критерии готовности. " +
-  "Пиши только то, что помогает понять суть задачи и ожидаемый результат; технические детали, названия внутренних сервисов, моделей данных, файлов, REST-методов и шаги реализации упоминай только если без них теряется смысл задачи. " +
-  `Сначала запиши source-of-truth JSON в {jira_description_json_file}. ${strictSchemaInstruction("{jira_description_json_file}", "jira-description/v1")}Затем markdown-версию в {jira_description_file}.`;
+  "Look at the task in {jira_task_file}. " +
+  "Formulate a typical Jira task description in simple product language, without overloading with technical details. " +
+  "Description structure: Problem, Context, What needs to be done, Acceptance criteria. " +
+  "Write only what helps understand the essence of the task and expected result; technical details, internal service names, data models, file names, REST methods, and implementation steps should only be mentioned if without them the task's meaning is lost. " +
+  `First write the source-of-truth JSON to {jira_description_json_file}. ${strictSchemaInstruction("{jira_description_json_file}", "jira-description/v1")}Then write the markdown version to {jira_description_file}.`;
 
 export const RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
-  "Используй структурированный результат последнего запуска run_go_tests.py из {tests_result_json_file} как source of truth. " +
-  "Проанализируй последнюю ошибку проверки, исправь код и подготовь изменения так, чтобы следующий прогон run_go_tests.py прошёл успешно.";
+  "Use the structured result of the last run of run_go_tests.py from {tests_result_json_file} as source of truth. " +
+  "Analyze the last test error, fix the code, and prepare changes so that the next run of run_go_tests.py succeeds.";
 export const RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE =
-  "Используй структурированный результат последнего запуска run_go_linter.py из {linter_result_json_file} как source of truth. " +
-  "Проанализируй последнюю ошибку линтера или генерации, исправь код и подготовь изменения так, чтобы следующий прогон run_go_linter.py прошёл успешно.";
+  "Use the structured result of the last run of run_go_linter.py from {linter_result_json_file} as source of truth. " +
+  "Analyze the last linter or generation error, fix the code, and prepare changes so that the next run of run_go_linter.py succeeds.";
 export const COMMIT_MESSAGE_PROMPT_TEMPLATE =
-  "Сгенерируй commit message для текущих изменений. " +
-  "Контекст задачи (Jira): {jira_task_file}. " +
-  "Текущие изменения (git diff): {git_diff_file}. " +
-  "Список changed files: {git_status_json_file}. " +
-  "Правила: " +
-  "1) Subject line ≤72 символа. " +
-  "2) Используй conventional commits format: type(scope): description. " +
+  "Generate a commit message for the current changes. " +
+  "Task context (Jira): {jira_task_file}. " +
+  "Current changes (git diff): {git_diff_file}. " +
+  "List of changed files: {git_status_json_file}. " +
+  "Rules: " +
+  "1) Subject line ≤72 characters. " +
+  "2) Use conventional commits format: type(scope): description. " +
   "3) Type: feat/fix/refactor/docs/test/chore. " +
-  "4) Scope — если уместно, иначе без scope. " +
-  "5) Упомяни ключ задачи (issue key) в subject или body. " +
-  "6) Optional body с деталями изменений — каждый пункт с '- ' prefix. " +
-  "7) Язык commit message: английский. " +
-  "8) Запиши JSON в {commit_message_json_file}: {\"subject\": \"...\", \"body\": \"...\"}. Body может быть пустой строкой если не нужен.";
-export const AUTO_REVIEW_FIX_EXTRA_PROMPT = "Исправлять только блокеры, критикалы и важные";
+  "4) Scope — if appropriate, otherwise without scope. " +
+  "5) Mention the issue key in the subject or body. " +
+  "6) Optional body with change details — each item with '- ' prefix. " +
+  "7) Commit message language: English. " +
+  "8) Write JSON to {commit_message_json_file}: {\"subject\": \"...\", \"body\": \"...\"}. Body can be an empty string if not needed.";
+export const AUTO_REVIEW_FIX_EXTRA_PROMPT = "Fix only blockers, criticals, and important issues";
 
 export function formatTemplate(template: string, values: Record<string, string>): string {
   let result = template;
