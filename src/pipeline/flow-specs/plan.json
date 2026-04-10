@@ -164,7 +164,7 @@
                   }
                 ]
               },
-              "message": "Codex summary did not produce the task summary artifact."
+              "message": "Summary did not produce the task summary artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -180,7 +180,7 @@
                   "schemaId": "task-summary/v1"
                 }
               ],
-              "message": "Codex summary produced invalid structured artifacts."
+              "message": "Summary produced invalid structured artifacts."
             }
           ],
           "after": [
@@ -331,7 +331,7 @@
           ]
         },
         {
-          "id": "run_codex_plan",
+          "id": "run_plan",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "plan",
@@ -400,7 +400,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex planning mode" },
+            "labelText": { "const": "Running planning mode" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           },

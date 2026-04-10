@@ -193,7 +193,7 @@
           }
         },
         {
-          "id": "run_codex_review_reply",
+          "id": "run_review_reply",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-project",
@@ -232,7 +232,7 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex review reply mode for imported GitLab review (iteration {iteration})",
+              "template": "Running review reply mode for imported GitLab review (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
@@ -255,7 +255,7 @@
                   }
                 ]
               },
-              "message": "Codex review reply did not produce the required review-reply artifact."
+              "message": "Review reply did not produce the required review-reply artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -272,7 +272,7 @@
                   "schemaId": "review-reply/v1"
                 }
               ],
-              "message": "Codex review reply produced invalid structured artifacts."
+              "message": "Review reply produced invalid structured artifacts."
             }
           ]
         },
@@ -301,8 +301,8 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing Codex reply summary" },
-            "summaryTitle": { "const": "Codex Reply Summary" },
+            "labelText": { "const": "Preparing reply summary" },
+            "summaryTitle": { "const": "Reply Summary" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" },
             "outputFile": {

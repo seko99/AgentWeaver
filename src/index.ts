@@ -54,6 +54,7 @@ import { findPhaseById, runExpandedPhase } from "./pipeline/declarative-flow-run
 import { findCatalogEntry, isBuiltInCommandFlowId, loadInteractiveFlowCatalog, toDeclarativeFlowRef, type FlowCatalogEntry } from "./pipeline/flow-catalog.js";
 import {
   ALLOWED_MODELS_BY_EXECUTOR,
+  defaultModelForExecutor,
   DEFAULT_LAUNCH_PROFILE,
   LLM_EXECUTOR_IDS,
   resolveLaunchProfile,
@@ -524,10 +525,11 @@ function buildFlowResumeDetails(state: FlowRunState): string {
 }
 
 function launchProfileSelectionForm(): UserInputFormDefinition {
+  const defaultExecutor = DEFAULT_LAUNCH_PROFILE.executor;
   return {
     formId: "flow-launch-profile",
     title: "Настройки запуска LLM",
-    description: "Выберите executor для запуска flow.",
+    description: `Выберите executor для запуска flow. Текущий default: ${defaultExecutor}.`,
     submitLabel: "Continue",
     fields: [
       {
@@ -537,8 +539,11 @@ function launchProfileSelectionForm(): UserInputFormDefinition {
         required: true,
         default: "default",
         options: [
-          { value: "default", label: "default" },
-          ...LLM_EXECUTOR_IDS.map((id) => ({ value: id, label: id })),
+          { value: "default", label: `default (${defaultExecutor})` },
+          ...LLM_EXECUTOR_IDS.map((id) => ({
+            value: id,
+            label: id === defaultExecutor ? `${id} [default]` : id,
+          })),
         ],
       },
     ],
@@ -546,16 +551,21 @@ function launchProfileSelectionForm(): UserInputFormDefinition {
 }
 
 function launchModelSelectionForm(executor: LaunchProfileSelection["executor"]): UserInputFormDefinition {
+  const resolvedExecutor = executor === "default" ? DEFAULT_LAUNCH_PROFILE.executor : executor;
+  const defaultModel = defaultModelForExecutor(resolvedExecutor);
   const options = executor === "default"
-    ? [{ value: "default", label: "default" }]
+    ? [{ value: "default", label: `default (${DEFAULT_LAUNCH_PROFILE.model})` }]
     : [
-      { value: "default", label: "default" },
-      ...ALLOWED_MODELS_BY_EXECUTOR[executor].map((model) => ({ value: model, label: model })),
+      { value: "default", label: `default (${defaultModel})` },
+      ...ALLOWED_MODELS_BY_EXECUTOR[executor].map((model) => ({
+        value: model,
+        label: model === defaultModel ? `${model} [default]` : model,
+      })),
     ];
   return {
     formId: "flow-launch-model",
     title: "Настройки запуска LLM",
-    description: "Выберите модель для запуска flow.",
+    description: `Выберите модель для запуска flow. Текущий default для ${resolvedExecutor}: ${defaultModel}.`,
     submitLabel: "Start",
     fields: [
       {
@@ -962,12 +972,29 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
   };
 }
 
+function autoFlowParamsWithLaunchProfile(
+  config: Config,
+  launchProfile?: ResolvedLaunchProfile,
+  forceRefreshSummary = false,
+): Record<string, unknown> {
+  return {
+    ...autoFlowParams(config, forceRefreshSummary),
+    ...(launchProfile
+      ? {
+          llmExecutor: launchProfile.executor,
+          llmModel: launchProfile.model,
+          launchProfile,
+        }
+      : {}),
+  };
+}
+
 const FLOW_DESCRIPTIONS: Record<string, string> = {
   auto: "Полный пайплайн задачи: планирование, реализация, проверки, ревью, ответы на ревью и повторные итерации до готовности к merge.",
   "bug-analyze":
     "Анализирует баг по Jira и создаёт структурированные артефакты: гипотезу причины, дизайн исправления и план работ.",
   "gitlab-diff-review":
-    "Запрашивает GitLab MR URL через user-input, загружает diff merge request по API и запускает код-ревью через Codex с сохранением markdown и structured JSON artifacts.",
+    "Запрашивает GitLab MR URL через user-input, загружает diff merge request по API и запускает код-ревью с сохранением markdown и structured JSON artifacts.",
   "gitlab-review":
     "Запрашивает GitLab MR URL через user-input, загружает комментарии код-ревью по API и сохраняет markdown плюс structured JSON artifact.",
   "bug-fix":
@@ -978,7 +1005,7 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   "task-describe": "Строит короткое описание задачи либо по Jira, либо по краткому user-input без Jira.",
   implement: "Реализует задачу по утверждённым design/plan артефактам и при необходимости запускает post-verify сборки.",
   review:
-    "Запускает Codex-код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания через Codex.",
+    "Запускает код-ревью текущих изменений, валидирует structured findings, затем готовит ответ на замечания.",
   "review-fix":
     "Исправляет замечания после review-reply, обновляет код и прогоняет обязательные проверки после правок.",
   "run-go-tests-loop":
@@ -1250,6 +1277,7 @@ async function runAutoPhaseViaSpec(
   state?: AutoPipelineState,
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
+  launchProfile?: ResolvedLaunchProfile,
   runtime: RuntimeServices = runtimeServices,
 ): Promise<"done" | "skipped"> {
   const context = createPipelineContext({
@@ -1265,21 +1293,27 @@ async function runAutoPhaseViaSpec(
   const phase = findPhaseById(autoFlow.phases, phaseId);
   publishFlowState("auto", executionState);
   try {
-    const result = await runExpandedPhase(phase, context, autoFlowParams(config, forceRefreshSummary), autoFlow.constants, {
-      executionState,
-      flowKind: autoFlow.kind,
-      flowVersion: autoFlow.version,
-      onStateChange: async (state) => {
-        publishFlowState("auto", state);
+    const result = await runExpandedPhase(
+      phase,
+      context,
+      autoFlowParamsWithLaunchProfile(config, launchProfile, forceRefreshSummary),
+      autoFlow.constants,
+      {
+        executionState,
+        flowKind: autoFlow.kind,
+        flowVersion: autoFlow.version,
+        onStateChange: async (state) => {
+          publishFlowState("auto", state);
+        },
+        onStepStart: async (_phase, step) => {
+          if (!state) {
+            return;
+          }
+          state.currentStep = `${phaseId}:${step.id}`;
+          saveAutoPipelineState(state);
+        },
       },
-      onStepStart: async (_phase, step) => {
-        if (!state) {
-          return;
-        }
-        state.currentStep = `${phaseId}:${step.id}`;
-        saveAutoPipelineState(state);
-      },
-    });
+    );
     if (state) {
       state.executionState = result.executionState;
       syncAndSaveAutoPipelineState(state);
@@ -1355,6 +1389,7 @@ async function executeCommand(
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
   launchMode: FlowLaunchMode = "restart",
+  launchProfile?: ResolvedLaunchProfile,
   runtime: RuntimeServices = runtimeServices,
 ): Promise<boolean> {
   const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
@@ -1362,7 +1397,7 @@ async function executeCommand(
     if (launchMode === "restart") {
       resetAutoPipelineState(config);
     }
-    await runAutoPipeline(config, setSummary, forceRefreshSummary, runtime);
+    await runAutoPipeline(config, setSummary, forceRefreshSummary, launchProfile, runtime);
     return false;
   }
   if (config.command === "auto-status") {
@@ -1403,7 +1438,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, {}, requestUserInput, setSummary, launchMode, runtime);
+    }, launchProfile ? { launchProfile } : {}, requestUserInput, setSummary, launchMode, runtime);
     return false;
   }
 
@@ -1419,7 +1454,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, {}, requestUserInput, setSummary, launchMode, runtime);
+    }, launchProfile ? { launchProfile } : {}, requestUserInput, setSummary, launchMode, runtime);
     return false;
   }
 
@@ -1433,7 +1468,7 @@ async function executeCommand(
         iteration,
         extraPrompt: config.extraPrompt,
       },
-      {},
+      launchProfile ? { launchProfile } : {},
       requestUserInput,
       undefined,
       launchMode,
@@ -1455,7 +1490,7 @@ async function executeCommand(
         iteration,
         extraPrompt: config.extraPrompt,
       },
-      {},
+      launchProfile ? { launchProfile } : {},
       requestUserInput,
       undefined,
       launchMode,
@@ -1485,7 +1520,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("bugz/bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, {}, requestUserInput, undefined, launchMode, runtime);
+    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1495,7 +1530,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("gitlab/mr-description.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, {}, requestUserInput, undefined, launchMode, runtime);
+    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1504,7 +1539,7 @@ async function executeCommand(
       jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, {}, requestUserInput, undefined, launchMode, runtime);
+    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1521,7 +1556,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("implement.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, {}, requestUserInput, undefined, launchMode);
+    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode);
     return false;
   }
 
@@ -1540,13 +1575,13 @@ async function executeCommand(
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, {}, requestUserInput, undefined, launchMode, runtime);
+      }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     } else {
       await runDeclarativeFlowBySpecFile("review/review-project.json", config, {
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, {}, requestUserInput, undefined, launchMode, runtime);
+      }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     }
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
@@ -1569,7 +1604,7 @@ async function executeCommand(
       reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
       extraPrompt: config.extraPrompt,
       reviewFixPoints: config.reviewFixPoints,
-    }, {}, requestUserInput, undefined, launchMode, runtime);
+    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1583,7 +1618,7 @@ async function executeCommand(
         runGoLinterScript: config.runGoLinterScript,
         extraPrompt: config.extraPrompt,
       },
-      {},
+      launchProfile ? { launchProfile } : {},
       requestUserInput,
       undefined,
       launchMode,
@@ -1613,7 +1648,7 @@ async function runAutoPipelineDryRun(
   publishFlowState("auto", executionState);
   for (const phase of autoFlow.phases) {
     printInfo(`Dry-run auto phase: ${phase.id}`);
-    await runAutoPhaseViaSpec(config, phase.id, executionState, undefined, setSummary, forceRefreshSummary, runtime);
+    await runAutoPhaseViaSpec(config, phase.id, executionState, undefined, setSummary, forceRefreshSummary, undefined, runtime);
     if (executionState.terminated) {
       break;
     }
@@ -1624,6 +1659,7 @@ async function runAutoPipeline(
   config: Config,
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
+  launchProfile?: ResolvedLaunchProfile,
   runtime: RuntimeServices = runtimeServices,
 ): Promise<void> {
   requireJiraConfig(config);
@@ -1677,6 +1713,7 @@ async function runAutoPipeline(
         state,
         setSummary,
         forceRefreshSummary,
+        launchProfile,
         runtime,
       );
       step.status = status;
@@ -1893,6 +1930,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
               (markdown) => ui.setSummary(markdown),
               forceRefresh,
               launchMode,
+              launchProfile,
               createRuntimeServices(abortController.signal),
             );
             return;

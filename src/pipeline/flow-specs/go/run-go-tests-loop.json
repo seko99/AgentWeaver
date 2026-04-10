@@ -90,7 +90,7 @@
           },
           "params": {
             "labelText": {
-              "const": "Running Codex Go tests loop fix (attempt 1)"
+              "const": "Running Go tests loop fix (attempt 1)"
             },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
@@ -199,7 +199,7 @@
               },
               "params": {
                 "labelText": {
-                  "template": "Running Codex Go tests loop fix (attempt ${attempt})"
+                  "template": "Running Go tests loop fix (attempt ${attempt})"
                 },
                 "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }

@@ -51,7 +51,7 @@
           ]
         },
         {
-          "id": "run_codex_review_fix",
+          "id": "run_review_fix",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-fix",
@@ -96,7 +96,7 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex review-fix mode locally (iteration {iteration})",
+              "template": "Running review-fix mode locally (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.latestIteration" }
               }

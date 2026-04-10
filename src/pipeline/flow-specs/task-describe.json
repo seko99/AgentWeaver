@@ -106,7 +106,7 @@
           ]
         },
         {
-          "id": "run_codex_task_describe_from_jira",
+          "id": "run_task_describe_from_jira",
           "node": "llm-prompt",
           "when": {
             "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"
@@ -137,7 +137,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex task description mode" },
+            "labelText": { "const": "Running task description mode" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {
@@ -188,7 +188,7 @@
           ]
         },
         {
-          "id": "run_codex_task_describe_from_input",
+          "id": "run_task_describe_from_input",
           "node": "llm-prompt",
           "when": {
             "not": {
@@ -226,7 +226,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex task description mode" },
+            "labelText": { "const": "Running task description mode" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {

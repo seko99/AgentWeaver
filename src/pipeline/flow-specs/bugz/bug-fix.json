@@ -6,7 +6,7 @@
       "id": "bug_fix",
       "steps": [
         {
-          "id": "run_codex_bug_fix",
+          "id": "run_bug_fix",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "bug-fix",
@@ -34,7 +34,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex bug fix mode locally" },
+            "labelText": { "const": "Running bug fix mode locally" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           }

@@ -167,7 +167,7 @@
                   }
                 ]
               },
-              "message": "Codex summary did not produce the task summary artifact."
+              "message": "Summary did not produce the task summary artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -183,7 +183,7 @@
                   "schemaId": "task-summary/v1"
                 }
               ],
-              "message": "Codex summary produced invalid structured artifacts."
+              "message": "Summary produced invalid structured artifacts."
             }
           ],
           "after": [
@@ -334,7 +334,7 @@
           ]
         },
         {
-          "id": "run_codex_plan",
+          "id": "run_plan",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "plan",
@@ -403,7 +403,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex planning mode" },
+            "labelText": { "const": "Running planning mode" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           },
@@ -461,7 +461,7 @@
       "id": "implement",
       "steps": [
         {
-          "id": "run_codex_implement",
+          "id": "run_implement",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "implement",
@@ -495,7 +495,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex implementation mode locally" },
+            "labelText": { "const": "Running implementation mode locally" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           }
@@ -552,7 +552,7 @@
       },
       "steps": [
         {
-          "id": "run_codex_review",
+          "id": "run_review",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "review",
@@ -606,7 +606,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex review mode" },
+            "labelText": { "const": "Running review mode" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           },
@@ -625,7 +625,7 @@
                   }
                 ]
               },
-              "message": "Codex review did not produce the required review artifact."
+              "message": "Review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -642,7 +642,7 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Codex review produced invalid structured artifacts."
+              "message": "Review produced invalid structured artifacts."
             }
           ]
         },
@@ -671,7 +671,7 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing Codex review summary" },
+            "labelText": { "const": "Preparing review summary" },
             "outputFile": {
               "artifact": {
                 "kind": "review-summary-file",
@@ -679,13 +679,13 @@
                 "iteration": { "const": 1 }
               }
             },
-            "summaryTitle": { "const": "Codex Comments" },
+            "summaryTitle": { "const": "Review Comments" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           }
         },
         {
-          "id": "run_codex_review_reply",
+          "id": "run_review_reply",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply",
@@ -753,7 +753,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex review reply mode" },
+            "labelText": { "const": "Running review reply mode" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           },
@@ -772,7 +772,7 @@
                   }
                 ]
               },
-              "message": "Codex review reply did not produce the required review-reply artifact."
+              "message": "Review reply did not produce the required review-reply artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -789,7 +789,7 @@
                   "schemaId": "review-reply/v1"
                 }
               ],
-              "message": "Codex review reply produced invalid structured artifacts."
+              "message": "Review reply produced invalid structured artifacts."
             }
           ]
         },
@@ -818,7 +818,7 @@
             "format": "plain"
           },
           "params": {
-            "labelText": { "const": "Preparing Codex reply summary" },
+            "labelText": { "const": "Preparing reply summary" },
             "outputFile": {
               "artifact": {
                 "kind": "review-reply-summary-file",
@@ -826,7 +826,7 @@
                 "iteration": { "const": 1 }
               }
             },
-            "summaryTitle": { "const": "Codex Reply Summary" },
+            "summaryTitle": { "const": "Reply Summary" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           }
@@ -860,7 +860,7 @@
       },
       "steps": [
         {
-          "id": "run_codex_review_fix",
+          "id": "run_review_fix",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-fix",
@@ -904,7 +904,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex review-fix mode locally" },
+            "labelText": { "const": "Running review-fix mode locally" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           },

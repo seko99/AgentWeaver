@@ -29,7 +29,7 @@ export type LlmPromptNodeParams = {
 };
 
 type LlmPromptNodeResult =
-  | (CodexLocalExecutorResult & { executor: "codex-local" })
+  | (CodexLocalExecutorResult & { executor: "codex" })
   | (OpenCodeExecutorResult & { executor: "opencode" });
 
 export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromptNodeResult> = {
@@ -45,9 +45,9 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
     printInfo(params.labelText);
     printPrompt(`LLM:${params.executor}`, params.prompt);
     const executorContext = toExecutorContext(context);
-    if (params.executor === "codex-local") {
+    if (params.executor === "codex") {
       const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
-        "codex-local",
+        "codex",
       );
       const value = await executor.execute(
         executorContext,
@@ -61,7 +61,7 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
       return {
         value: {
           ...value,
-          executor: "codex-local",
+          executor: "codex",
         },
         outputs: (params.requiredArtifacts ?? []).map((path) => ({ kind: "artifact" as const, path, required: true })),
       };

@@ -6,7 +6,7 @@
       "id": "review",
       "steps": [
         {
-          "id": "run_codex_review",
+          "id": "run_review",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-project",
@@ -37,7 +37,7 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex project review mode (iteration {iteration})",
+              "template": "Running project review mode (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
@@ -60,7 +60,7 @@
                   }
                 ]
               },
-              "message": "Codex project review did not produce the required review artifact."
+              "message": "Project review did not produce the required review artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -77,7 +77,7 @@
                   "schemaId": "review-findings/v1"
                 }
               ],
-              "message": "Codex project review produced invalid structured artifacts."
+              "message": "Project review produced invalid structured artifacts."
             }
           ]
         },
@@ -120,7 +120,7 @@
           }
         },
         {
-          "id": "run_codex_review_reply",
+          "id": "run_review_reply",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "review-reply-project",
@@ -159,7 +159,7 @@
           },
           "params": {
             "labelText": {
-              "template": "Running Codex project review reply mode (iteration {iteration})",
+              "template": "Running project review reply mode (iteration {iteration})",
               "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
@@ -182,7 +182,7 @@
                   }
                 ]
               },
-              "message": "Codex project review reply did not produce the required review-reply artifact."
+              "message": "Project review reply did not produce the required review-reply artifact."
             },
             {
               "kind": "require-structured-artifacts",
@@ -199,7 +199,7 @@
                   "schemaId": "review-reply/v1"
                 }
               ],
-              "message": "Codex project review reply produced invalid structured artifacts."
+              "message": "Project review reply produced invalid structured artifacts."
             }
           ]
         },

@@ -6,7 +6,7 @@
       "id": "mr_description",
       "steps": [
         {
-          "id": "run_codex_mr_description",
+          "id": "run_mr_description",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "mr-description",
@@ -34,7 +34,7 @@
             "format": "task-prompt"
           },
           "params": {
-            "labelText": { "const": "Running Codex MR description mode" },
+            "labelText": { "const": "Running MR description mode" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" },
             "requiredArtifacts": {

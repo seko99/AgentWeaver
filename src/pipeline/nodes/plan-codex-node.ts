@@ -19,7 +19,7 @@ export const planCodexNode: PipelineNodeDefinition<PlanCodexNodeParams, CodexLoc
   async run(context, params) {
     printInfo("Running Codex planning mode");
     printPrompt("Codex", params.prompt);
-    const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>("codex-local");
+    const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>("codex");
     const input: CodexLocalExecutorInput = {
       prompt: params.prompt,
       env: { ...context.env },
