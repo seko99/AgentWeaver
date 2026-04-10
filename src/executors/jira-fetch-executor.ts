@@ -4,6 +4,8 @@ import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js
 
 export type JiraFetchExecutorConfig = JsonObject & {
   authEnvVar: string;
+  usernameEnvVar?: string;
+  authModeEnvVar?: string;
   acceptHeader: string;
 };
 
