@@ -16,16 +16,16 @@ export function renderPrompt(binding: PromptBindingSpec, context: DeclarativeRes
   const resolvedExtraPrompt = binding.extraPrompt ? resolveValue(binding.extraPrompt, context) : null;
   const extraPrompt =
     resolvedExtraPrompt === null || resolvedExtraPrompt === undefined ? null : String(resolvedExtraPrompt);
-  const mdLang = context.flowParams.mdLang as string | undefined;
+  const mdLang = context.flowParams.mdLang as string | null | undefined;
   let langInstruction: string | null = null;
   if (mdLang === "en") {
     langInstruction = "Generate all markdown output files in English language.";
-  } else if (mdLang === "ru" || mdLang === undefined) {
+  } else if (mdLang === "ru" || mdLang === null || mdLang === undefined) {
     langInstruction = "Generate all markdown output files in Russian language.";
   }
   const finalExtraPrompt = [extraPrompt, langInstruction].filter(Boolean).join("\n");
   if ((binding.format ?? "task-prompt") === "plain") {
-    return basePrompt;
+    return finalExtraPrompt ? `${basePrompt}\n\n${finalExtraPrompt}` : basePrompt;
   }
   return formatPrompt(basePrompt, finalExtraPrompt);
 }
