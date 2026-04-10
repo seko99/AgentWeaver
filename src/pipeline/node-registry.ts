@@ -6,6 +6,9 @@ import { fetchGitLabDiffNode } from "./nodes/fetch-gitlab-diff-node.js";
 import { fetchGitLabReviewNode } from "./nodes/fetch-gitlab-review-node.js";
 import { fileCheckNode } from "./nodes/file-check-node.js";
 import { flowRunNode } from "./nodes/flow-run-node.js";
+import { gitCommitFormNode } from "./nodes/git-commit-form-node.js";
+import { gitCommitNode } from "./nodes/git-commit-node.js";
+import { gitStatusNode } from "./nodes/git-status-node.js";
 import { gitlabReviewArtifactsNode } from "./nodes/gitlab-review-artifacts-node.js";
 import { jiraFetchNode } from "./nodes/jira-fetch-node.js";
 import { jiraContextNode } from "./nodes/jira-context-node.js";
@@ -32,6 +35,9 @@ export type NodeKind =
   | "fetch-gitlab-review"
   | "file-check"
   | "flow-run"
+  | "git-commit"
+  | "git-commit-form"
+  | "git-status"
   | "gitlab-review-artifacts"
   | "jira-context"
   | "jira-fetch"
@@ -74,6 +80,9 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "fetch-gitlab-review": fetchGitLabReviewNode as unknown as AnyNodeDefinition,
   "file-check": fileCheckNode as unknown as AnyNodeDefinition,
   "flow-run": flowRunNode as unknown as AnyNodeDefinition,
+  "git-commit": gitCommitNode as unknown as AnyNodeDefinition,
+  "git-commit-form": gitCommitFormNode as unknown as AnyNodeDefinition,
+  "git-status": gitStatusNode as unknown as AnyNodeDefinition,
   "gitlab-review-artifacts": gitlabReviewArtifactsNode as unknown as AnyNodeDefinition,
   "jira-context": jiraContextNode as unknown as AnyNodeDefinition,
   "jira-fetch": jiraFetchNode as unknown as AnyNodeDefinition,
@@ -147,6 +156,14 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["gitlabReviewJsonFile", "reviewFile", "reviewJsonFile"],
   },
+  "git-commit": { kind: "git-commit", version: 1, prompt: "forbidden", requiredParams: ["message", "files"], executors: ["git-commit"] },
+  "git-commit-form": {
+    kind: "git-commit-form",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["gitStatusJsonFile", "commitMessageFile", "formId", "title", "outputFile"],
+  },
+  "git-status": { kind: "git-status", version: 1, prompt: "forbidden", requiredParams: ["outputFile"] },
   "jira-context": {
     kind: "jira-context",
     version: 1,

@@ -43,6 +43,10 @@ import {
   taskSummaryFile,
   taskDescribeInputJsonFile,
   taskSummaryJsonFile,
+  gitStatusJsonFile,
+  gitCommitMessageJsonFile,
+  gitCommitInputJsonFile,
+  gitDiffFile as gitDiffFileHelper,
 } from "../artifacts.js";
 import { TaskRunnerError } from "../errors.js";
 import { formatTemplate } from "../prompts.js";
@@ -240,6 +244,14 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return taskSummaryJsonFile(taskKey);
     case "task-describe-input-json-file":
       return taskDescribeInputJsonFile(taskKey);
+    case "git-status-json-file":
+      return gitStatusJsonFile(taskKey);
+    case "git-diff-file":
+      return gitDiffFileHelper(taskKey);
+    case "git-commit-message-json-file":
+      return gitCommitMessageJsonFile(taskKey);
+    case "git-commit-input-json-file":
+      return gitCommitInputJsonFile(taskKey);
   }
 }
 
