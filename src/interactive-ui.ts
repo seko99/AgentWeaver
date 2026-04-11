@@ -36,6 +36,7 @@ type InteractiveUiOptions = {
   summaryText: string;
   cwd: string;
   gitBranchName: string | null;
+  version: string;
   flows: InteractiveFlowDefinition[];
   getRunConfirmation: (flowId: string) => Promise<{
     resumeAvailable: boolean;
@@ -260,6 +261,7 @@ export class InteractiveUi {
   private scopeKey: string;
   private jiraIssueKey: string | null;
   private summaryVisible: boolean;
+  private readonly version: string;
 
   constructor(private readonly options: InteractiveUiOptions) {
     if (options.flows.length === 0) {
@@ -273,6 +275,7 @@ export class InteractiveUi {
     this.scopeKey = options.scopeKey;
     this.jiraIssueKey = options.jiraIssueKey ?? null;
     this.summaryVisible = options.summaryText.trim().length > 0;
+    this.version = options.version ?? "";
 
     this.screen = blessed.screen({
       smartCSR: true,
@@ -887,11 +890,13 @@ export class InteractiveUi {
     const branchLabel = this.options.gitBranchName ? this.options.gitBranchName : "detached-head";
     const flowLabel = `${current}${this.busy ? " {yellow-fg}[running]{/yellow-fg}" : ""}`;
     const divider = " {gray-fg}│{/gray-fg} ";
+    const versionLabel = this.version ? `${divider}{bold}Version{/bold} {white-fg}${this.version}{/white-fg}` : "";
     this.header.setContent(
       [
         "{bold}AgentWeaver{/bold}",
         divider,
         `{bold}Scope{/bold} {green-fg}${this.scopeKey}{/green-fg}`,
+        versionLabel,
         this.jiraIssueKey ? `${divider}{bold}Jira{/bold} {yellow-fg}${this.jiraIssueKey}{/yellow-fg}` : "",
         divider,
         `{bold}Flow{/bold} ${flowLabel}`,
