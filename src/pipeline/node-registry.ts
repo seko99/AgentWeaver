@@ -1,6 +1,5 @@
 import { buildFailureSummaryNode } from "./nodes/build-failure-summary-node.js";
 import { codexPromptNode } from "./nodes/codex-prompt-node.js";
-import { codexDockerPromptNode } from "./nodes/codex-docker-prompt-node.js";
 import { commandCheckNode } from "./nodes/command-check-node.js";
 import { fetchGitLabDiffNode } from "./nodes/fetch-gitlab-diff-node.js";
 import { fetchGitLabReviewNode } from "./nodes/fetch-gitlab-review-node.js";
@@ -22,14 +21,12 @@ import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
 import { reviewReplyCodexNode } from "./nodes/review-reply-codex-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
-import { verifyBuildNode } from "./nodes/verify-build-node.js";
 import type { ExecutorId } from "./registry.js";
 import type { PipelineNodeDefinition } from "./types.js";
 
 export type NodeKind =
   | "build-failure-summary"
   | "codex-prompt"
-  | "codex-docker-prompt"
   | "command-check"
   | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
@@ -50,8 +47,7 @@ export type NodeKind =
   | "review-findings-form"
   | "review-reply-codex"
   | "summary-file-load"
-  | "user-input"
-  | "verify-build";
+  | "user-input";
 
 type AnyNodeDefinition = PipelineNodeDefinition<Record<string, unknown>, unknown>;
 
@@ -74,7 +70,6 @@ export type NodeContractMetadata = {
 const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "build-failure-summary": buildFailureSummaryNode as unknown as AnyNodeDefinition,
   "codex-prompt": codexPromptNode as unknown as AnyNodeDefinition,
-  "codex-docker-prompt": codexDockerPromptNode as unknown as AnyNodeDefinition,
   "command-check": commandCheckNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-diff": fetchGitLabDiffNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-review": fetchGitLabReviewNode as unknown as AnyNodeDefinition,
@@ -96,7 +91,6 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "review-reply-codex": reviewReplyCodexNode as unknown as AnyNodeDefinition,
   "summary-file-load": summaryFileLoadNode as unknown as AnyNodeDefinition,
   "user-input": userInputNode as unknown as AnyNodeDefinition,
-  "verify-build": verifyBuildNode as unknown as AnyNodeDefinition,
 };
 
 const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
@@ -113,13 +107,6 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "required",
     requiredParams: ["labelText"],
     executors: ["codex"],
-  },
-  "codex-docker-prompt": {
-    kind: "codex-docker-prompt",
-    version: 1,
-    prompt: "required",
-    requiredParams: ["dockerComposeFile", "labelText"],
-    executors: ["codex-docker"],
   },
   "command-check": {
     kind: "command-check",
@@ -224,13 +211,6 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["formId", "title", "fields", "outputFile"],
-  },
-  "verify-build": {
-    kind: "verify-build",
-    version: 1,
-    prompt: "forbidden",
-    requiredParams: ["dockerComposeFile", "labelText"],
-    executors: ["verify-build"],
   },
 };
 

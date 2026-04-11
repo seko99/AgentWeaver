@@ -118,7 +118,7 @@
 - `expect` — что должно быть истинно после выполнения step
 - `after` — какие side effects выполнить после успешного завершения step
 
-Для `codex`, `codex-docker` и `opencode` модель теперь тоже считается частью `params`.
+Для `codex` и `opencode` модель теперь тоже считается частью `params`.
 
 Важно:
 
@@ -150,7 +150,6 @@
 - `jira-fetch`
 - `fetch-gitlab-diff`
 - `codex-prompt`
-- `verify-build`
 
 Runtime находит node через registry:
 
@@ -224,11 +223,6 @@ Runtime находит node через registry:
 - `labelText`
 - `model`
 
-Для `verify-build`:
-
-- `dockerComposeFile`
-- `labelText`
-
 То есть:
 
 - `prompt` отвечает за текст задания
@@ -238,7 +232,7 @@ Runtime находит node через registry:
 
 - `params` не должны описывать flow-level postconditions
 - если нужно сказать, какие файлы обязаны появиться после шага, для этого есть `expect`
-- для `codex`, `codex-docker`, `opencode` именно `params.model` теперь определяет модель на уровне flow
+- для `codex` и `opencode` именно `params.model` теперь определяет модель на уровне flow
 - summary-steps в built-in flow могут использовать prompt-ноды с `outputFile` и `summaryTitle`
 
 ## Что делает `expect`

@@ -1,9 +1,9 @@
 import { artifactFile, designFile, planFile } from "../../artifacts.js";
 import type {
-  CodexLocalExecutorConfig,
-  CodexLocalExecutorInput,
-  CodexLocalExecutorResult,
-} from "../../executors/codex-local-executor.js";
+  CodexExecutorConfig,
+  CodexExecutorInput,
+  CodexExecutorResult,
+} from "../../executors/codex-executor.js";
 import { REVIEW_REPLY_PROMPT_TEMPLATE, formatPrompt, formatTemplate } from "../../prompts.js";
 import { printInfo, printPrompt } from "../../tui.js";
 import type { PipelineNodeDefinition } from "../types.js";
@@ -17,7 +17,7 @@ export type ReviewReplyCodexNodeParams = {
   codexCmd: string;
 };
 
-export const reviewReplyCodexNode: PipelineNodeDefinition<ReviewReplyCodexNodeParams, CodexLocalExecutorResult> = {
+export const reviewReplyCodexNode: PipelineNodeDefinition<ReviewReplyCodexNodeParams, CodexExecutorResult> = {
   kind: "review-reply-codex",
   version: 1,
   async run(context, params) {
@@ -35,7 +35,7 @@ export const reviewReplyCodexNode: PipelineNodeDefinition<ReviewReplyCodexNodePa
     );
     printInfo(`Running Codex review reply mode (iteration ${params.iteration})`);
     printPrompt("Codex", prompt);
-    const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
+    const executor = context.executors.get<CodexExecutorConfig, CodexExecutorInput, CodexExecutorResult>(
       "codex",
     );
     const value = await executor.execute(

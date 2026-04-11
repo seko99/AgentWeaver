@@ -1,8 +1,8 @@
 import type {
-  CodexLocalExecutorConfig,
-  CodexLocalExecutorInput,
-  CodexLocalExecutorResult,
-} from "../../executors/codex-local-executor.js";
+  CodexExecutorConfig,
+  CodexExecutorInput,
+  CodexExecutorResult,
+} from "../../executors/codex-executor.js";
 import type {
   OpenCodeExecutorConfig,
   OpenCodeExecutorInput,
@@ -29,7 +29,7 @@ export type LlmPromptNodeParams = {
 };
 
 type LlmPromptNodeResult =
-  | (CodexLocalExecutorResult & { executor: "codex" })
+  | (CodexExecutorResult & { executor: "codex" })
   | (OpenCodeExecutorResult & { executor: "opencode" });
 
 export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromptNodeResult> = {
@@ -46,7 +46,7 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
     printPrompt(`LLM:${params.executor}`, params.prompt);
     const executorContext = toExecutorContext(context);
     if (params.executor === "codex") {
-      const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
+      const executor = context.executors.get<CodexExecutorConfig, CodexExecutorInput, CodexExecutorResult>(
         "codex",
       );
       const value = await executor.execute(

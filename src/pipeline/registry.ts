@@ -1,13 +1,12 @@
 import { commandCheckExecutor } from "../executors/command-check-executor.js";
-import { codexDockerExecutor } from "../executors/codex-docker-executor.js";
-import { codexLocalExecutor } from "../executors/codex-local-executor.js";
+import { codexExecutor } from "../executors/codex-executor.js";
 import { fetchGitLabDiffExecutor } from "../executors/fetch-gitlab-diff-executor.js";
 import { fetchGitLabReviewExecutor } from "../executors/fetch-gitlab-review-executor.js";
 import { gitCommitExecutor } from "../executors/git-commit-executor.js";
 import { jiraFetchExecutor } from "../executors/jira-fetch-executor.js";
 import { opencodeExecutor } from "../executors/opencode-executor.js";
 import { processExecutor } from "../executors/process-executor.js";
-import { verifyBuildExecutor } from "../executors/verify-build-executor.js";
+
 import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
 
 export type ExecutorId =
@@ -18,9 +17,7 @@ export type ExecutorId =
   | "git-commit"
   | "jira-fetch"
   | "codex"
-  | "codex-docker"
-  | "opencode"
-  | "verify-build";
+  | "opencode";
 
 export type ExecutorRegistry = {
   get: <TConfig extends JsonValue, TInput, TResult>(
@@ -39,10 +36,8 @@ const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   "fetch-gitlab-review": fetchGitLabReviewExecutor as unknown as AnyExecutorDefinition,
   "git-commit": gitCommitExecutor as unknown as AnyExecutorDefinition,
   "jira-fetch": jiraFetchExecutor as unknown as AnyExecutorDefinition,
-  codex: codexLocalExecutor as unknown as AnyExecutorDefinition,
-  "codex-docker": codexDockerExecutor as unknown as AnyExecutorDefinition,
+  codex: codexExecutor as unknown as AnyExecutorDefinition,
   opencode: opencodeExecutor as unknown as AnyExecutorDefinition,
-  "verify-build": verifyBuildExecutor as unknown as AnyExecutorDefinition,
 };
 
 export function createExecutorRegistry(): ExecutorRegistry {

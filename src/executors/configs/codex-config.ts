@@ -1,6 +1,6 @@
-import type { CodexLocalExecutorConfig } from "../codex-local-executor.js";
+import type { CodexExecutorConfig } from "../codex-executor.js";
 
-export const codexLocalExecutorDefaultConfig: CodexLocalExecutorConfig = {
+export const codexExecutorDefaultConfig: CodexExecutorConfig = {
   commandEnvVar: "CODEX_BIN",
   defaultCommand: "codex",
   modelEnvVar: "CODEX_MODEL",

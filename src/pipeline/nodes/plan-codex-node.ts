@@ -1,8 +1,8 @@
 import type {
-  CodexLocalExecutorConfig,
-  CodexLocalExecutorInput,
-  CodexLocalExecutorResult,
-} from "../../executors/codex-local-executor.js";
+  CodexExecutorConfig,
+  CodexExecutorInput,
+  CodexExecutorResult,
+} from "../../executors/codex-executor.js";
 import { printInfo, printPrompt } from "../../tui.js";
 import type { PipelineNodeDefinition } from "../types.js";
 import { toExecutorContext } from "../types.js";
@@ -13,14 +13,14 @@ export type PlanCodexNodeParams = {
   command?: string;
 };
 
-export const planCodexNode: PipelineNodeDefinition<PlanCodexNodeParams, CodexLocalExecutorResult> = {
+export const planCodexNode: PipelineNodeDefinition<PlanCodexNodeParams, CodexExecutorResult> = {
   kind: "plan-codex",
   version: 1,
   async run(context, params) {
     printInfo("Running Codex planning mode");
     printPrompt("Codex", params.prompt);
-    const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>("codex");
-    const input: CodexLocalExecutorInput = {
+    const executor = context.executors.get<CodexExecutorConfig, CodexExecutorInput, CodexExecutorResult>("codex");
+    const input: CodexExecutorInput = {
       prompt: params.prompt,
       env: { ...context.env },
     };

@@ -25,7 +25,6 @@ The package runs as an npm CLI and includes a full-screen TUI built on `neo-bles
 - Stores machine-readable JSON artifacts under `.agentweaver/scopes/<scope-key>/.artifacts/` and uses them as the source of truth between steps
 - Isolates workflows by scope: for Jira-backed runs this is usually the issue key, otherwise it defaults to `<git-branch>--<worktree-hash>`
 - Persists compact `auto` pipeline state on disk so runs can resume without keeping full agent transcripts
-- Uses Docker runtime services for isolated Codex execution and build verification
 
 In short, `AgentWeaver` is for cases where you do not want a one-off LLM script, but a durable engineering harness around agents.
 
@@ -41,11 +40,11 @@ In short, `AgentWeaver` is for cases where you do not want a one-off LLM script,
 The CLI is built around an `executor + node + declarative flow` architecture that fits harness engineering well.
 
 - `src/index.ts` remains the CLI entrypoint and top-level orchestration layer
-- `src/executors/` contains first-class executors for external actions such as Jira, GitLab, local Codex, OpenCode, Docker-based build verification, and process execution
+- `src/executors/` contains first-class executors for external actions such as Jira, GitLab, Codex, OpenCode, and process execution
 - `src/pipeline/nodes/` contains reusable runtime nodes built on top of executors
 - `src/pipeline/flow-specs/` contains declarative JSON flow specs for `preflight`, `bug-analyze`, `bug-fix`, `gitlab-diff-review`, `gitlab-review`, `mr-description`, `plan`, `task-describe`, `implement`, `review`, `review-fix`, `run-go-tests-loop`, `run-go-linter-loop`, and `auto`
 - project-local flows can be added under `.agentweaver/.flows/*.json`; they are discovered from the current workspace at runtime
-- `src/runtime/` contains shared runtime services such as command resolution, Docker runtime setup, and subprocess execution
+- `src/runtime/` contains shared runtime services such as command resolution and subprocess execution
 
 This keeps command handlers focused on selecting flows and passing parameters instead of assembling prompts, subprocess wiring, and side effects inline.
 
@@ -61,9 +60,6 @@ This keeps command handlers focused on selecting flows and passing parameters in
 - `src/executors/` — executor modules for concrete execution families
 - `src/executors/configs/` — default executor configs kept as plain data
 - `src/runtime/` — shared runtime services used by executors
-- `docker-compose.yml` — runtime services for Codex and build verification
-- `Dockerfile.codex` — container image for Codex runtime
-- `verify_build.sh` — aggregated verification entrypoint used by `verify-build`
 - `run_go_tests.py` — isolated Go test verification entrypoint
 - `run_go_linter.py` — isolated Go generate + lint verification entrypoint
 - `run_go_coverage.sh` — isolated Go coverage verification entrypoint
@@ -74,7 +70,6 @@ This keeps command handlers focused on selecting flows and passing parameters in
 
 - Node.js `>= 18.19.0`
 - npm
-- Docker with `docker compose` or `docker-compose`
 - `codex` CLI for `bug-analyze`, `bug-fix`, `mr-description`, `plan`, and other Codex-driven steps
 - `codex` CLI for built-in review and summary steps
 
@@ -112,13 +107,11 @@ Common optional variables:
 - `JIRA_BASE_URL` — required when you pass only an issue key like `DEMO-123`
 - `GITLAB_TOKEN` — personal access token for `gitlab-review` and `gitlab-diff-review`
 - `AGENTWEAVER_HOME` — path to the AgentWeaver installation directory
-- `DOCKER_COMPOSE_BIN` — override compose command, for example `docker compose`
+
 - `CODEX_BIN` — override `codex` executable path
 - `CODEX_MODEL` — fallback model for Codex executors when the flow spec does not set `params.model`
 - `OPENCODE_BIN` — override `opencode` executable path
 - `OPENCODE_MODEL` — fallback model for OpenCode executors when the flow spec does not set `params.model`
-
-Example `.env`:
 
 ```bash
 JIRA_API_KEY=your-jira-api-token
@@ -253,65 +246,6 @@ Activity pane behavior:
 - prompts and summaries are rendered as plain text for readability
 - live raw executor output is not shown there in normal mode
 
-## Docker Runtime
-
-Docker is used as an isolated execution environment for Codex-related runtime scenarios that still require container orchestration.
-
-Main services:
-
-- `codex` — interactive Codex container
-- `codex-exec` — non-interactive `codex exec`
-- `verify-build` — project verification script inside container
-- `run-go-tests` — isolated `run_go_tests.py` execution inside container
-- `run-go-linter` — isolated `run_go_linter.py` execution inside container
-- `run-go-coverage` — isolated `run_go_coverage.sh` execution inside container
-- `codex-login` — interactive login container
-- `dockerd` — internal Docker daemon for testcontainers/build flows
-
-Typical login flow:
-
-```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex-login
-```
-
-Interactive Codex container:
-
-```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm codex
-```
-
-Non-interactive Codex run:
-
-```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm \
-  -e CODEX_PROMPT="Review the project and fix failing tests" \
-  codex-exec
-```
-
-Build verification:
-
-```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm verify-build
-```
-
-Tests only:
-
-```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-go-tests
-```
-
-Linter only:
-
-```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-go-linter
-```
-
-Coverage only:
-
-```bash
-PROJECT_DIR="$PWD" docker compose -f "$AGENTWEAVER_HOME/docker-compose.yml" run --rm run-go-coverage
-```
-
 ## Development
 
 Install dependencies and build:
@@ -366,10 +300,3 @@ npm publish
 ```
 
 If you want a public package, verify the package name and license before publishing.
-
-## Security Notes
-
-- the Codex container does not receive host `docker.sock`
-- Docker access for tests goes through isolated `dockerd`
-- secure Git protocols only: `ssh` and `https`
-- `dockerd` runs privileged because DinD requires it; this is still safer than exposing host Docker directly
