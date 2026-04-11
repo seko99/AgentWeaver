@@ -65,8 +65,8 @@ import {
 import type { ExpandedPhaseExecutionState, ExpandedPhaseSpec, ExpandedStepSpec, FlowExecutionState } from "./pipeline/spec-types.js";
 import type { NodeCheckSpec, PipelineContext } from "./pipeline/types.js";
 import { evaluateCondition, resolveValue, type DeclarativeResolverContext } from "./pipeline/value-resolver.js";
-import { resolveCmd, resolveDockerComposeCmd } from "./runtime/command-resolution.js";
-import { agentweaverHome, defaultDockerComposeFile, dockerRuntimeEnv } from "./runtime/docker-runtime.js";
+import { resolveCmd } from "./runtime/command-resolution.js";
+import { agentweaverHome } from "./runtime/agentweaver-home.js";
 import { runCommand } from "./runtime/process-runner.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
 import {
@@ -116,8 +116,6 @@ const PACKAGE_ROOT = path.resolve(MODULE_DIR, "..");
 function createRuntimeServices(signal?: AbortSignal): RuntimeServices {
   return {
     resolveCmd,
-    resolveDockerComposeCmd,
-    dockerRuntimeEnv: () => dockerRuntimeEnv(PACKAGE_ROOT),
     runCommand: (argv, options = {}) => runCommand(argv, { ...options, ...(signal ? { signal } : {}) }),
   };
 }
@@ -134,7 +132,6 @@ type BaseConfig = {
   mdLang?: "en" | "ru" | null;
   dryRun: boolean;
   verbose: boolean;
-  dockerComposeFile: string;
   runGoTestsScript: string;
   runGoLinterScript: string;
   runGoCoverageScript: string;
@@ -244,7 +241,7 @@ Interactive Mode:
 Flags:
   --version       Show package version
   --force         In interactive mode, regenerate task summary in Jira-backed flows
-  --dry           Fetch Jira task, but print docker/codex commands instead of executing them
+  --dry           Fetch Jira task, but print codex/opencode commands instead of executing them
   --verbose       Show live stdout/stderr of launched commands
   --scope         Explicit workflow scope name for non-Jira runs
   --prompt        Extra prompt text appended to the base prompt
@@ -259,7 +256,6 @@ Optional environment variables:
   JIRA_BASE_URL
   GITLAB_TOKEN
   AGENTWEAVER_HOME
-  DOCKER_COMPOSE_BIN
   CODEX_BIN
   CODEX_MODEL
   OPENCODE_BIN
@@ -659,7 +655,6 @@ function buildBaseConfig(
     mdLang: options.mdLang ?? null,
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
-    dockerComposeFile: defaultDockerComposeFile(PACKAGE_ROOT),
     runGoTestsScript: path.join(homeDir, "run_go_tests.py"),
     runGoLinterScript: path.join(homeDir, "run_go_linter.py"),
     runGoCoverageScript: path.join(homeDir, "run_go_coverage.sh"),
@@ -755,7 +750,6 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
   return {
     jiraApiUrl: config.jiraApiUrl,
     taskKey: config.taskKey,
-    dockerComposeFile: config.dockerComposeFile,
     runGoTestsScript: config.runGoTestsScript,
     runGoLinterScript: config.runGoLinterScript,
     runGoCoverageScript: config.runGoCoverageScript,
@@ -1007,7 +1001,6 @@ function defaultDeclarativeFlowParams(
     jiraApiUrl: config.jiraApiUrl,
     jiraTaskFile: config.jiraTaskFile,
     scopeKey: config.scope.scopeKey,
-    dockerComposeFile: config.dockerComposeFile,
     runGoTestsScript: config.runGoTestsScript,
     runGoLinterScript: config.runGoLinterScript,
     runGoCoverageScript: config.runGoCoverageScript,

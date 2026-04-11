@@ -1,8 +1,8 @@
 import type {
-  CodexLocalExecutorConfig,
-  CodexLocalExecutorInput,
-  CodexLocalExecutorResult,
-} from "../../executors/codex-local-executor.js";
+  CodexExecutorConfig,
+  CodexExecutorInput,
+  CodexExecutorResult,
+} from "../../executors/codex-executor.js";
 import type { PipelineNodeDefinition } from "../types.js";
 import { toExecutorContext } from "../types.js";
 
@@ -57,7 +57,7 @@ export const buildFailureSummaryNode: PipelineNodeDefinition<BuildFailureSummary
       `Log:\n${truncateText(params.output)}`;
 
     try {
-      const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
+      const executor = context.executors.get<CodexExecutorConfig, CodexExecutorInput, CodexExecutorResult>(
         "codex",
       );
       const result = await executor.execute(

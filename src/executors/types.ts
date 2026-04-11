@@ -6,8 +6,6 @@ export type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
 
 export type RuntimeServices = {
   resolveCmd: (commandName: string, envVarName: string) => string;
-  resolveDockerComposeCmd: () => string[];
-  dockerRuntimeEnv: () => NodeJS.ProcessEnv;
   runCommand: (
     argv: string[],
     options?: {

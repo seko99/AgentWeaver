@@ -1,6 +1,5 @@
-import { accessSync, constants, existsSync } from "node:fs";
+import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
-import path from "node:path";
 
 import { TaskRunnerError } from "../errors.js";
 
@@ -110,44 +109,4 @@ export function resolveCmd(commandName: string, envVarName: string): string {
     return candidate;
   }
   throw new TaskRunnerError(`Missing required command: ${commandName}`);
-}
-
-export function requireDockerCompose(): void {
-  if (!commandExists("docker")) {
-    throw new TaskRunnerError("Missing required command: docker");
-  }
-  const result = spawnSync("docker", ["compose", "version"], { stdio: "ignore" });
-  if (result.status !== 0) {
-    throw new TaskRunnerError("Missing required docker compose plugin");
-  }
-}
-
-export function resolveDockerComposeCmd(): string[] {
-  const configured = process.env.DOCKER_COMPOSE_BIN?.trim() ?? "";
-  if (configured) {
-    const parts = splitArgs(configured);
-    if (parts.length === 0) {
-      throw new TaskRunnerError("DOCKER_COMPOSE_BIN is set but empty.");
-    }
-    const executable = parts[0] ?? "";
-    try {
-      if (path.isAbsolute(executable)) {
-        accessSync(executable, constants.X_OK);
-        return parts;
-      }
-    } catch {
-      throw new TaskRunnerError(`Configured docker compose command is not executable: ${configured}`);
-    }
-    if (commandExists(executable)) {
-      return parts;
-    }
-    throw new TaskRunnerError(`Configured docker compose command is not executable: ${configured}`);
-  }
-
-  if (commandExists("docker-compose")) {
-    return ["docker-compose"];
-  }
-
-  requireDockerCompose();
-  return ["docker", "compose"];
 }
