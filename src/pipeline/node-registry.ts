@@ -18,7 +18,6 @@ import { opencodePromptNode } from "./nodes/opencode-prompt-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.js";
 import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
-import { reviewReplyCodexNode } from "./nodes/review-reply-codex-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
 import type { ExecutorId } from "./registry.js";
@@ -45,7 +44,6 @@ export type NodeKind =
   | "plan-codex"
   | "planning-questions-form"
   | "review-findings-form"
-  | "review-reply-codex"
   | "summary-file-load"
   | "user-input";
 
@@ -88,7 +86,6 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
   "planning-questions-form": planningQuestionsFormNode as unknown as AnyNodeDefinition,
   "review-findings-form": reviewFindingsFormNode as unknown as AnyNodeDefinition,
-  "review-reply-codex": reviewReplyCodexNode as unknown as AnyNodeDefinition,
   "summary-file-load": summaryFileLoadNode as unknown as AnyNodeDefinition,
   "user-input": userInputNode as unknown as AnyNodeDefinition,
 };
@@ -196,14 +193,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     kind: "review-findings-form",
     version: 1,
     prompt: "forbidden",
-    requiredParams: ["reviewReplyJsonFile", "formId", "title"],
-  },
-  "review-reply-codex": {
-    kind: "review-reply-codex",
-    version: 1,
-    prompt: "forbidden",
-    requiredParams: ["jiraTaskFile", "taskKey", "iteration", "codexCmd"],
-    executors: ["codex"],
+    requiredParams: ["reviewFindingsJsonFile", "formId", "title"],
   },
   "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden", requiredParams: ["path"] },
   "user-input": {

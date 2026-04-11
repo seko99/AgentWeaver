@@ -521,26 +521,6 @@
     },
     "required": ["summary", "completed_actions", "validation_steps"]
   },
-  "review-reply/v1": {
-    "type": "object",
-    "properties": {
-      "summary": { "type": "string", "nonEmpty": true },
-      "responses": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "finding_title": { "type": "string", "nonEmpty": true },
-            "disposition": { "type": "string", "nonEmpty": true },
-            "action": { "type": "string", "nonEmpty": true }
-          },
-          "required": ["finding_title", "disposition", "action"]
-        }
-      },
-      "ready_to_merge": { "type": "boolean" }
-    },
-    "required": ["summary", "responses", "ready_to_merge"]
-  },
   "task-summary/v1": {
     "type": "object",
     "properties": {

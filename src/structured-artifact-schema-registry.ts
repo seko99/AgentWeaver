@@ -18,7 +18,6 @@ export const STRUCTURED_ARTIFACT_SCHEMA_IDS = [
   "qa-plan/v1",
   "review-findings/v1",
   "review-fix-report/v1",
-  "review-reply/v1",
   "task-summary/v1",
   "user-input/v1",
 ] as const;
