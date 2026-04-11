@@ -196,7 +196,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     kind: "review-findings-form",
     version: 1,
     prompt: "forbidden",
-    requiredParams: ["reviewReplyJsonFile", "formId", "title"],
+    requiredParams: ["reviewFindingsJsonFile", "formId", "title"],
   },
   "review-reply-codex": {
     kind: "review-reply-codex",

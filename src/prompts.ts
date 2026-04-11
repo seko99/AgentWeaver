@@ -121,7 +121,7 @@ export const REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE =
 
 export const REVIEW_FIX_PROMPT_TEMPLATE =
   "Use only structured artifacts as source of truth. " +
-  "Analyze the comments in {review_reply_json_file}. " +
+  "Analyze the findings in {review_json_file}. " +
   "Fix what is contained in the additional instructions, and if there are none - fix all items. " +
   "After completion, be sure to run the linter outside the sandbox, all tests, generate make swagger. " +
   "Fix any linter and test errors if they occur. " +

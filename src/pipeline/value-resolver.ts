@@ -36,8 +36,6 @@ import {
   reviewFixFile,
   reviewFixJsonFile,
   reviewJsonFile,
-  reviewReplyFile,
-  reviewReplyJsonFile,
   runGoLinterResultJsonFile,
   runGoTestsResultJsonFile,
   taskSummaryFile,
@@ -208,16 +206,6 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
         throw new TaskRunnerError("review-fix-json-file requires iteration");
       }
       return reviewFixJsonFile(taskKey, iteration);
-    case "review-reply-file":
-      if (iteration === undefined) {
-        throw new TaskRunnerError("review-reply-file requires iteration");
-      }
-      return reviewReplyFile(taskKey, iteration);
-    case "review-reply-json-file":
-      if (iteration === undefined) {
-        throw new TaskRunnerError("review-reply-json-file requires iteration");
-      }
-      return reviewReplyJsonFile(taskKey, iteration);
     case "run-go-linter-result-json-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("run-go-linter-result-json-file requires iteration");
@@ -228,11 +216,6 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
         throw new TaskRunnerError("run-go-tests-result-json-file requires iteration");
       }
       return runGoTestsResultJsonFile(taskKey, iteration);
-    case "review-reply-summary-file":
-      if (iteration === undefined) {
-        throw new TaskRunnerError("review-reply-summary-file requires iteration");
-      }
-      return artifactFile("review-reply-summary", taskKey, iteration);
     case "review-summary-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("review-summary-file requires iteration");
