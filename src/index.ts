@@ -988,6 +988,7 @@ function defaultDeclarativeFlowParams(
     jiraApiUrl: config.jiraApiUrl,
     jiraTaskFile: config.jiraTaskFile,
     scopeKey: config.scope.scopeKey,
+    workspaceDir: scopeWorkspaceDir(config.taskKey),
     runGoTestsScript: config.runGoTestsScript,
     runGoLinterScript: config.runGoLinterScript,
     runGoCoverageScript: config.runGoCoverageScript,

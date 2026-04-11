@@ -2,7 +2,7 @@
   "kind": "review-fix-flow",
   "version": 1,
   "constants": {
-    "autoReviewFixExtraPrompt": "Исправлять только блокеры, критикалы и важные"
+    "autoReviewFixExtraPrompt": "Fix only blockers and criticals"
   },
   "phases": [
     {
@@ -22,13 +22,50 @@
             "formId": { "const": "review-fix-selection" },
             "title": { "const": "Review-Fix Selection" },
             "description": {
-              "const": "Отметьте findings, которые нужно исправить в этой итерации review-fix. Можно включить режим исправления всех findings."
+              "const": "Mark findings to fix in this review-fix iteration. You can enable fix-all mode."
             }
+          }
+        },
+        {
+          "id": "check_existing_selection_file",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.reviewFixSelectionJsonFile" }
+          }
+        },
+        {
+          "id": "write_auto_selection_file",
+          "node": "write-selection-file",
+          "when": {
+            "all": [
+              { "ref": "params.reviewFixSelectionJsonFile" },
+              { "equals": [
+                { "ref": "steps.review-fix.check_existing_selection_file.value.exists" },
+                { "const": false }
+              ]}
+            ]
+          },
+          "params": {
+            "outputFile": { "ref": "params.reviewFixSelectionJsonFile" },
+            "reviewFindingsJsonFile": {
+              "artifact": {
+                "kind": "review-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.latestIteration" }
+              }
+            },
+            "selectionMode": { "const": "auto-blockers-criticals" }
           }
         },
         {
           "id": "collect_review_fix_selection",
           "node": "user-input",
+          "when": {
+            "equals": [
+              { "ref": "steps.review-fix.check_existing_selection_file.value.exists" },
+              { "const": false }
+            ]
+          },
           "params": {
             "formId": { "ref": "steps.review-fix.build_review_fix_selection_form.value.formId" },
             "title": { "ref": "steps.review-fix.build_review_fix_selection_form.value.title" },
@@ -49,6 +86,28 @@
               "message": "Review-fix selection input is missing or invalid."
             }
           ]
+        },
+        {
+          "id": "load_review_fix_selection",
+          "node": "read-file",
+          "when": {
+            "equals": [
+              { "ref": "steps.review-fix.check_existing_selection_file.value.exists" },
+              { "const": true }
+            ]
+          },
+          "params": {
+            "path": { "ref": "params.reviewFixSelectionJsonFile" }
+          }
+        },
+        {
+          "id": "build_selection_context",
+          "node": "build-review-fix-prompt",
+          "when": { "ref": "params.reviewFixSelectionJsonFile" },
+          "params": {
+            "selectionFile": { "ref": "params.reviewFixSelectionJsonFile" },
+            "autoMode": { "const": true }
+          }
         },
         {
           "id": "run_review_fix",
@@ -89,7 +148,7 @@
             "extraPrompt": {
               "appendPrompt": {
                 "base": { "ref": "params.extraPrompt" },
-                "suffix": { "ref": "steps.review-fix.collect_review_fix_selection.value.promptSuffix" }
+                "suffix": { "ref": "steps.review-fix.build_selection_context.value.promptSuffix" }
               }
             },
             "format": "task-prompt"

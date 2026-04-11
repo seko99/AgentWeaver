@@ -2,7 +2,7 @@
   "kind": "review-loop-flow",
   "version": 1,
   "constants": {
-    "autoReviewFixExtraPrompt": "Fix only blockers, criticals and important findings. Skip minor and warning severity."
+    "autoReviewFixExtraPrompt": "Fix only blockers and criticals. Skip minor and warning severity."
   },
   "phases": [
     {
@@ -43,6 +43,34 @@
           }
         },
         {
+          "id": "write_auto_selection",
+          "node": "write-selection-file",
+          "when": {
+            "equals": [
+              { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+              { "const": false }
+            ]
+          },
+          "params": {
+            "outputFile": {
+              "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
+              "vars": {
+                "workspace": { "ref": "params.workspaceDir" },
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            },
+            "reviewFindingsJsonFile": {
+              "artifact": {
+                "kind": "review-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            },
+            "selectionMode": { "const": "auto-blockers-criticals" }
+          }
+        },
+        {
           "id": "run_review_fix",
           "node": "flow-run",
           "when": {
@@ -58,10 +86,19 @@
             },
             "taskKey": { "ref": "params.taskKey" },
             "latestIteration": { "const": 1 },
+            "reviewFixSelectionJsonFile": {
+              "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
+              "vars": {
+                "workspace": { "ref": "params.workspaceDir" },
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            },
+            "reviewFixPoints": { "ref": "params.reviewFixPoints" },
             "extraPrompt": {
               "appendPrompt": {
                 "base": { "ref": "params.extraPrompt" },
-                "suffix": { "const": "Focus on fixing only blockers, criticals and important findings." }
+                "suffix": { "const": "Fix only blockers and criticals." }
               }
             },
             "llmModel": { "ref": "params.llmModel" },
@@ -117,6 +154,34 @@
               }
             },
             {
+              "id": "write_auto_selection",
+              "node": "write-selection-file",
+              "when": {
+                "equals": [
+                  { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                  { "const": false }
+                ]
+              },
+              "params": {
+                "outputFile": {
+                  "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
+                  "vars": {
+                    "workspace": { "ref": "params.workspaceDir" },
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "reviewFindingsJsonFile": {
+                  "artifact": {
+                    "kind": "review-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "selectionMode": { "const": "auto-blockers-criticals" }
+              }
+            },
+            {
               "id": "run_review_fix",
               "when": {
                 "equals": [
@@ -132,10 +197,19 @@
                 },
                 "taskKey": { "ref": "params.taskKey" },
                 "latestIteration": { "ref": "repeat.iteration" },
+                "reviewFixSelectionJsonFile": {
+                  "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
+                  "vars": {
+                    "workspace": { "ref": "params.workspaceDir" },
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "reviewFixPoints": { "ref": "params.reviewFixPoints" },
                 "extraPrompt": {
                   "appendPrompt": {
                     "base": { "ref": "params.extraPrompt" },
-                    "suffix": { "const": "Focus on fixing only blockers, criticals and important findings." }
+                    "suffix": { "const": "Fix only blockers and criticals." }
                   }
                 },
                 "llmModel": { "ref": "params.llmModel" },
