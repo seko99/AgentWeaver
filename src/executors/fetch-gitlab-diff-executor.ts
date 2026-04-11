@@ -38,7 +38,7 @@ export const fetchGitLabDiffExecutor: ExecutorDefinition<
       context.ui.writeStdout(`Saving GitLab diff markdown to: ${input.outputFile}\n`);
       context.ui.writeStdout(`Saving GitLab diff JSON to: ${input.outputJsonFile}\n`);
     }
-    const artifact = await fetchGitLabMergeRequestDiff(input.mergeRequestUrl, input.outputFile, input.outputJsonFile);
+    const artifact = await fetchGitLabMergeRequestDiff(input.mergeRequestUrl, input.outputFile, input.outputJsonFile, context.mdLang);
     return {
       outputFile: input.outputFile,
       outputJsonFile: input.outputJsonFile,

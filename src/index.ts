@@ -503,6 +503,7 @@ function validateDeclarativeFlowResumeState(
     jiraRef: config.jiraRef,
     dryRun: config.dryRun,
     verbose: config.verbose,
+    ...(config.mdLang !== undefined ? { mdLang: config.mdLang } : {}),
     runtime,
     requestUserInput: requestUserInputInTerminal,
   });
@@ -876,6 +877,7 @@ async function runDeclarativeFlowByRef(
     jiraRef: config.jiraRef,
     dryRun: config.dryRun,
     verbose: config.verbose,
+    ...(config.mdLang !== undefined ? { mdLang: config.mdLang } : {}),
     runtime,
     ...(setSummary ? { setSummary } : {}),
     requestUserInput,
@@ -1054,6 +1056,7 @@ async function summarizeBuildFailure(output: string): Promise<string> {
       jiraRef: "build-failure-summary",
       dryRun: false,
       verbose: false,
+      mdLang: null,
       runtime: runtimeServices,
       requestUserInput: requestUserInputInTerminal,
     }),
