@@ -18,6 +18,7 @@ import { llmPromptNode } from "./nodes/llm-prompt-node.js";
 import { opencodePromptNode } from "./nodes/opencode-prompt-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.js";
+import { readFileNode } from "./nodes/read-file-node.js";
 import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
@@ -46,6 +47,7 @@ export type NodeKind =
   | "opencode-prompt"
   | "plan-codex"
   | "planning-questions-form"
+  | "read-file"
   | "review-findings-form"
   | "summary-file-load"
   | "user-input"
@@ -90,6 +92,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "opencode-prompt": opencodePromptNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
   "planning-questions-form": planningQuestionsFormNode as unknown as AnyNodeDefinition,
+  "read-file": readFileNode as unknown as AnyNodeDefinition,
   "review-findings-form": reviewFindingsFormNode as unknown as AnyNodeDefinition,
   "summary-file-load": summaryFileLoadNode as unknown as AnyNodeDefinition,
   "user-input": userInputNode as unknown as AnyNodeDefinition,
@@ -201,6 +204,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["planningQuestionsJsonFile", "formId", "title"],
   },
+  "read-file": { kind: "read-file", version: 1, prompt: "forbidden", requiredParams: ["path"] },
   "review-findings-form": {
     kind: "review-findings-form",
     version: 1,
