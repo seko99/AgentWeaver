@@ -1,0 +1,150 @@
+{
+  "kind": "review-loop-flow",
+  "version": 1,
+  "constants": {
+    "autoReviewFixExtraPrompt": "Fix only blockers, criticals and important findings. Skip minor and warning severity."
+  },
+  "phases": [
+    {
+      "id": "review_iteration_1",
+      "steps": [
+        {
+          "id": "run_review",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "review.json" },
+            "labelText": { "const": "Running review (iteration 1)" },
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "const": 1 },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmModel": { "ref": "params.llmModel" },
+            "llmExecutor": { "ref": "params.llmExecutor" }
+          }
+        },
+        {
+          "id": "check_ready_to_merge",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Changes are ready to merge.\nready-to-merge.md file created." },
+            "tone": { "const": "green" }
+          },
+          "stopFlowIf": {
+            "equals": [
+              { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+              { "const": true }
+            ]
+          }
+        },
+        {
+          "id": "run_review_fix",
+          "node": "flow-run",
+          "when": {
+            "equals": [
+              { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+              { "const": false }
+            ]
+          },
+          "params": {
+            "fileName": { "const": "review-fix.json" },
+            "labelText": {
+              "template": "Running review-fix (iteration 1)"
+            },
+            "taskKey": { "ref": "params.taskKey" },
+            "latestIteration": { "const": 1 },
+            "extraPrompt": {
+              "appendPrompt": {
+                "base": { "ref": "params.extraPrompt" },
+                "suffix": { "const": "Focus on fixing only blockers, criticals and important findings." }
+              }
+            },
+            "llmModel": { "ref": "params.llmModel" },
+            "llmExecutor": { "ref": "params.llmExecutor" }
+          }
+        }
+      ]
+    },
+    {
+      "repeat": {
+        "var": "iteration",
+        "from": 2,
+        "to": 5
+      },
+      "phases": [
+        {
+          "id": "review_iteration_${iteration}",
+          "steps": [
+            {
+              "id": "run_review",
+              "node": "flow-run",
+              "params": {
+                "fileName": { "const": "review.json" },
+                "labelText": {
+                  "template": "Running review (iteration ${iteration})"
+                },
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "repeat.iteration" },
+                "extraPrompt": { "ref": "params.extraPrompt" },
+                "llmModel": { "ref": "params.llmModel" },
+                "llmExecutor": { "ref": "params.llmExecutor" }
+              }
+            },
+            {
+              "id": "check_ready_to_merge",
+              "node": "file-check",
+              "params": {
+                "path": {
+                  "artifact": {
+                    "kind": "ready-to-merge-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                },
+                "panelTitle": { "const": "Ready To Merge" },
+                "foundMessage": { "const": "Changes are ready to merge.\nready-to-merge.md file created." },
+                "tone": { "const": "green" }
+              },
+              "stopFlowIf": {
+                "equals": [
+                  { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                  { "const": true }
+                ]
+              }
+            },
+            {
+              "id": "run_review_fix",
+              "when": {
+                "equals": [
+                  { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                  { "const": false }
+                ]
+              },
+              "node": "flow-run",
+              "params": {
+                "fileName": { "const": "review-fix.json" },
+                "labelText": {
+                  "template": "Running review-fix (iteration ${iteration})"
+                },
+                "taskKey": { "ref": "params.taskKey" },
+                "latestIteration": { "ref": "repeat.iteration" },
+                "extraPrompt": {
+                  "appendPrompt": {
+                    "base": { "ref": "params.extraPrompt" },
+                    "suffix": { "const": "Focus on fixing only blockers, criticals and important findings." }
+                  }
+                },
+                "llmModel": { "ref": "params.llmModel" },
+                "llmExecutor": { "ref": "params.llmExecutor" }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

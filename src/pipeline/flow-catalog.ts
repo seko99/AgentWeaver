@@ -29,6 +29,7 @@ export const BUILT_IN_COMMAND_FLOW_IDS = [
   "implement",
   "review",
   "review-fix",
+  "review-loop",
   "run-go-tests-loop",
   "run-go-linter-loop",
 ] as const;
@@ -46,6 +47,7 @@ const BUILT_IN_COMMAND_FLOW_FILES: Record<(typeof BUILT_IN_COMMAND_FLOW_IDS)[num
   implement: "implement.json",
   review: "review/review.json",
   "review-fix": "review/review-fix.json",
+  "review-loop": "review/review-loop.json",
   "run-go-tests-loop": "go/run-go-tests-loop.json",
   "run-go-linter-loop": "go/run-go-linter-loop.json",
 };
