@@ -37,7 +37,7 @@ export const fetchGitLabReviewExecutor: ExecutorDefinition<
       context.ui.writeStdout(`Saving GitLab review markdown to: ${input.outputFile}\n`);
       context.ui.writeStdout(`Saving GitLab review JSON to: ${input.outputJsonFile}\n`);
     }
-    const artifact = await fetchGitLabReview(input.mergeRequestUrl, input.outputFile, input.outputJsonFile);
+    const artifact = await fetchGitLabReview(input.mergeRequestUrl, input.outputFile, input.outputJsonFile, context.mdLang);
     return {
       outputFile: input.outputFile,
       outputJsonFile: input.outputJsonFile,

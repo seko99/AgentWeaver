@@ -25,6 +25,7 @@ export type ExecutorContext = {
   ui: OutputAdapter;
   dryRun: boolean;
   verbose: boolean;
+  mdLang?: "en" | "ru" | null;
   runtime: RuntimeServices;
 };
 

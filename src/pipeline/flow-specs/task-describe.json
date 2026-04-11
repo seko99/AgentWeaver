@@ -112,7 +112,7 @@
             "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"
           },
           "prompt": {
-            "inlineTemplate": "Review the task in {jira_task_file}. Formulate a typical Jira task description in simple product language, without overloading with technical details. Description structure: Problem, Context, What needs to be done, Acceptance criteria. Write only what helps understand the essence of the task and expected result; technical details, internal service names, data models, file names, REST methods, and implementation steps should only be mentioned if without them the task's meaning is lost. First write the source-of-truth JSON to {jira_description_json_file} as object { summary: string }, then the markdown version to {jira_description_file}.",
+            "inlineTemplate": "Review the task in {jira_task_file}. Formulate a typical Jira task description in simple product language, without overloading with technical details. Description structure: Problem, Context, What needs to be done, Acceptance criteria. Write only what helps understand the essence of the task and expected result; technical details, internal service names, data models, file names, REST methods, and implementation steps should only be mentioned if without them the task's meaning is lost. The source-of-truth JSON must be in English for all generated semantic string values. First write the source-of-truth JSON to {jira_description_json_file} as object { summary: string }, then the markdown version to {jira_description_file}.",
             "vars": {
               "jira_task_file": {
                 "artifact": {
@@ -202,7 +202,7 @@
             }
           },
           "prompt": {
-            "inlineTemplate": "Review the user-provided task description in {task_input_file}. Use the values.task_description field as source of truth. Formulate a typical Jira task description in simple product language, without overloading with technical details. Description structure: Problem, Context, What needs to be done, Acceptance criteria. If the user description lacks details, do not invent them and keep formulations general enough. First write the source-of-truth JSON to {jira_description_json_file} as object { summary: string }, then the markdown version to {jira_description_file}.",
+            "inlineTemplate": "Review the user-provided task description in {task_input_file}. Use the values.task_description field as source of truth. Formulate a typical Jira task description in simple product language, without overloading with technical details. Description structure: Problem, Context, What needs to be done, Acceptance criteria. If the user description lacks details, do not invent them and keep formulations general enough. The source-of-truth JSON must be in English for all generated semantic string values, while verbatim user-provided source text may be preserved as needed. First write the source-of-truth JSON to {jira_description_json_file} as object { summary: string }, then the markdown version to {jira_description_file}.",
             "vars": {
               "task_input_file": {
                 "artifact": {
