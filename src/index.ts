@@ -90,6 +90,10 @@ import {
 } from "./scope.js";
 
 const COMMANDS = [
+  "auto",
+  "auto-common",
+  "auto-status",
+  "auto-reset",
   "bug-analyze",
   "bug-fix",
   "git-commit",
@@ -104,9 +108,6 @@ const COMMANDS = [
   "review-loop",
   "run-go-tests-loop",
   "run-go-linter-loop",
-  "auto",
-  "auto-status",
-  "auto-reset",
 ] as const;
 
 type CommandName = (typeof COMMANDS)[number];
@@ -132,9 +133,7 @@ type BaseConfig = {
   mdLang?: "en" | "ru" | null;
   dryRun: boolean;
   verbose: boolean;
-  runGoTestsScript: string;
-  runGoLinterScript: string;
-  runGoCoverageScript: string;
+
 };
 
 type Config = BaseConfig & {
@@ -566,6 +565,16 @@ function printAutoPhasesHelp(): void {
   printPanel("Auto Phases", phaseLines.join("\n"), "magenta");
 }
 
+function autoCommonPhaseIds(): string[] {
+  return loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" }).phases.map((phase) => phase.id);
+}
+
+function printAutoCommonPhasesHelp(): void {
+  const phaseLines = ["Available auto-common phases:", "", ...autoCommonPhaseIds()];
+  phaseLines.push("", "You can run auto-common with:", "agentweaver auto-common <jira>");
+  printPanel("Auto-Common Phases", phaseLines.join("\n"), "magenta");
+}
+
 function loadEnvFile(envFilePath: string): void {
   if (!existsSync(envFilePath)) {
     return;
@@ -638,9 +647,6 @@ function buildBaseConfig(
     mdLang: options.mdLang ?? null,
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
-    runGoTestsScript: path.join(homeDir, "run_go_tests.py"),
-    runGoLinterScript: path.join(homeDir, "run_go_linter.py"),
-    runGoCoverageScript: path.join(homeDir, "run_go_coverage.sh"),
   };
 }
 
@@ -651,6 +657,7 @@ function commandRequiresTask(command: string): boolean {
     command === "bug-fix" ||
     command === "mr-description" ||
     command === "auto" ||
+    command === "auto-common" ||
     command === "auto-status" ||
     command === "auto-reset"
   );
@@ -734,13 +741,12 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
   return {
     jiraApiUrl: config.jiraApiUrl,
     taskKey: config.taskKey,
-    runGoTestsScript: config.runGoTestsScript,
-    runGoLinterScript: config.runGoLinterScript,
-    runGoCoverageScript: config.runGoCoverageScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
     forceRefresh: forceRefreshSummary,
     mdLang: config.mdLang,
+    runGoTestsScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_tests.py"),
+    runGoLinterScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_linter.py"),
   };
 }
 
@@ -989,9 +995,6 @@ function defaultDeclarativeFlowParams(
     jiraTaskFile: config.jiraTaskFile,
     scopeKey: config.scope.scopeKey,
     workspaceDir: scopeWorkspaceDir(config.taskKey),
-    runGoTestsScript: config.runGoTestsScript,
-    runGoLinterScript: config.runGoLinterScript,
-    runGoCoverageScript: config.runGoCoverageScript,
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
     mdLang: config.mdLang,
@@ -1100,6 +1103,25 @@ async function executeCommand(
       requestUserInput,
       setSummary,
       effectiveLaunchMode,
+      runtime,
+    );
+    return false;
+  }
+  if (config.command === "auto-common") {
+    requireJiraConfig(config);
+    checkAutoPrerequisites(config);
+    process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
+    process.env.JIRA_API_URL = config.jiraApiUrl;
+    process.env.JIRA_TASK_FILE = config.jiraTaskFile;
+
+    await runDeclarativeFlowBySpecFile(
+      "auto-common.json",
+      config,
+      autoFlowParams(config, forceRefreshSummary),
+      launchProfile ? { launchProfile } : {},
+      requestUserInput,
+      setSummary,
+      launchMode,
       runtime,
     );
     return false;
@@ -1384,8 +1406,8 @@ async function executeCommand(
       config,
       {
         taskKey: config.taskKey,
-        runGoTestsScript: config.runGoTestsScript,
-        runGoLinterScript: config.runGoLinterScript,
+        runGoTestsScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_tests.py"),
+        runGoLinterScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_linter.py"),
         runGoTestsIteration: nextArtifactIteration(config.taskKey, "run-go-tests-result", "json"),
         runGoLinterIteration: nextArtifactIteration(config.taskKey, "run-go-linter-result", "json"),
         extraPrompt: config.extraPrompt,
@@ -1503,6 +1525,10 @@ function parseCliArgs(argv: string[]): ParsedArgs {
 
   if (command === "auto" && helpPhases) {
     printAutoPhasesHelp();
+    process.exit(0);
+  }
+  if (command === "auto-common" && helpPhases) {
+    printAutoCommonPhasesHelp();
     process.exit(0);
   }
 
