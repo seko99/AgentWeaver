@@ -1546,6 +1546,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
       summaryText: "",
       cwd: process.cwd(),
       gitBranchName,
+      version: packageVersion(),
       flows: interactiveFlowDefinitions(flowCatalog),
       getRunConfirmation: async (flowId) => {
         const flowEntry = findCatalogEntry(flowId, flowCatalog);
