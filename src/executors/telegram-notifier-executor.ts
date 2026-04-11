@@ -28,14 +28,15 @@ export const telegramNotifierExecutor: ExecutorDefinition<
     input: TelegramNotifierExecutorInput,
     config: TelegramNotifierExecutorConfig,
   ) {
-    const botToken = context.env.BOT_TOKEN;
+    const botToken = context.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
       context.ui.writeStderr(`Telegram notifier error: BOT_TOKEN environment variable is not set\n`);
       return { success: false };
     }
 
-    if (!input.chatId) {
-      context.ui.writeStderr(`Telegram notifier error: chatId is required\n`);
+    const chatId = context.env.TELEGRAM_CHAT_ID ?? input.chatId;
+    if (!chatId) {
+      context.ui.writeStderr(`Telegram notifier error: chatId is required (set TELEGRAM_CHAT_ID env or pass in input)\n`);
       return { success: false };
     }
 
@@ -46,7 +47,7 @@ export const telegramNotifierExecutor: ExecutorDefinition<
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          chat_id: input.chatId,
+          chat_id: chatId,
           text: input.text,
         }),
       });

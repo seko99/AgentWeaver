@@ -307,7 +307,7 @@
           "id": "notify_questions_need_answering",
           "node": "telegram-notify",
           "params": {
-            "message": { "const": "AG-5: questions need answering" }
+            "message": { "const": "Questions need answering" }
           }
         },
         {
@@ -479,7 +479,7 @@
           "id": "notify_plan_complete",
           "node": "telegram-notify",
           "params": {
-            "message": { "const": "AG-5: plan phase complete" }
+            "message": { "const": "Plan phase complete" }
           }
         }
       ]

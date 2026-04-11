@@ -22,7 +22,7 @@ export const telegramNotifierNode: PipelineNodeDefinition<
     const labelText = params.label ?? "Sending Telegram notification";
     printInfo(labelText);
 
-    const chatId = context.env.chat_id;
+    const chatId = context.env.TELEGRAM_CHAT_ID;
     if (!chatId) {
       printInfo("Telegram notification skipped: chat_id environment variable is not set");
       return { value: { success: false } };
