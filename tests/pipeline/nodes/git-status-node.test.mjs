@@ -188,8 +188,6 @@ describe("gitCommitExecutor", () => {
         verbose: false,
         runtime: {
           resolveCmd: (commandName) => commandName,
-          resolveDockerComposeCmd: () => [],
-          dockerRuntimeEnv: () => process.env,
           runCommand: async (argv) => {
             commands.push(argv);
             if (argv[0] === "git" && argv[1] === "commit") {

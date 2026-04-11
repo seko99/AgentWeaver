@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 
 import type {
-  CodexLocalExecutorConfig,
-  CodexLocalExecutorInput,
-  CodexLocalExecutorResult,
-} from "../../executors/codex-local-executor.js";
+  CodexExecutorConfig,
+  CodexExecutorInput,
+  CodexExecutorResult,
+} from "../../executors/codex-executor.js";
 import { printInfo, printPrompt, printSummary } from "../../tui.js";
 import type { PipelineNodeDefinition } from "../types.js";
 import { toExecutorContext } from "../types.js";
@@ -19,13 +19,13 @@ export type CodexPromptNodeParams = {
   summaryTitle?: string;
 };
 
-export const codexPromptNode: PipelineNodeDefinition<CodexPromptNodeParams, CodexLocalExecutorResult> = {
+export const codexPromptNode: PipelineNodeDefinition<CodexPromptNodeParams, CodexExecutorResult> = {
   kind: "codex-prompt",
   version: 1,
   async run(context, params) {
     printInfo(params.labelText);
     printPrompt("Codex", params.prompt);
-    const executor = context.executors.get<CodexLocalExecutorConfig, CodexLocalExecutorInput, CodexLocalExecutorResult>(
+    const executor = context.executors.get<CodexExecutorConfig, CodexExecutorInput, CodexExecutorResult>(
       "codex",
     );
     const value = await executor.execute(
