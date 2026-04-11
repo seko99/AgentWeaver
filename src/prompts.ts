@@ -97,27 +97,10 @@ export const GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE =
   "Then write the derivative markdown version to {review_file}. " +
   "If ready_to_merge=true and there are no blockers, create the {ready_to_merge_file} file.";
 
-export const REVIEW_REPLY_PROMPT_TEMPLATE =
-  "Your colleague conducted a code review and wrote the structured result to {review_json_file}. " +
-  "Use only structured artifacts as source of truth: the task in {jira_task_file}, design in {design_json_file}, plan in {plan_json_file}, and review in {review_json_file}. " +
-  `First write the structured reply to {review_reply_json_file}. ${strictSchemaInstruction("{review_reply_json_file}", "review-reply/v1")}` +
-  "Then write the derivative markdown version to {review_reply_file}.";
-
-export const REVIEW_REPLY_PROJECT_PROMPT_TEMPLATE =
-  "Your colleague conducted a code review and wrote the structured result to {review_json_file}. " +
-  "Use the review in {review_json_file} as source of truth, understand the comments, and prepare a structured reply. " +
-  `First write the structured reply to {review_reply_json_file}. ${strictSchemaInstruction("{review_reply_json_file}", "review-reply/v1")}` +
-  "Then write the derivative markdown version to {review_reply_file}.";
-
 export const REVIEW_SUMMARY_PROMPT_TEMPLATE =
   "Look at {review_file}. " +
   "Create a brief list of comments without details, 3-7 items. " +
   "Write the result to {review_summary_file}.";
-
-export const REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE =
-  "Look at {review_reply_file}. " +
-  "Create a brief list of replies and resulting actions without details, 3-7 items. " +
-  "Write the result to {review_reply_summary_file}.";
 
 export const REVIEW_FIX_PROMPT_TEMPLATE =
   "Use only structured artifacts as source of truth. " +
