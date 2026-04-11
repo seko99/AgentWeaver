@@ -12,9 +12,9 @@
           "id": "build_review_fix_selection_form",
           "node": "review-findings-form",
           "params": {
-            "reviewReplyJsonFile": {
+            "reviewFindingsJsonFile": {
               "artifact": {
-                "kind": "review-reply-json-file",
+                "kind": "review-json-file",
                 "taskKey": { "ref": "params.taskKey" },
                 "iteration": { "ref": "params.latestIteration" }
               }
@@ -56,16 +56,16 @@
           "prompt": {
             "templateRef": "review-fix",
             "vars": {
-              "review_reply_file": {
+              "review_file": {
                 "artifact": {
-                  "kind": "review-reply-file",
+                  "kind": "review-file",
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.latestIteration" }
                 }
               },
-              "review_reply_json_file": {
+              "review_json_file": {
                 "artifact": {
-                  "kind": "review-reply-json-file",
+                  "kind": "review-json-file",
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.latestIteration" }
                 }
