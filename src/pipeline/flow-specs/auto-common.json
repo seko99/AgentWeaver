@@ -467,6 +467,13 @@
               "message": "Plan mode produced invalid structured artifacts."
             }
           ]
+        },
+        {
+          "id": "notify_plan_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": { "const": "Plan complete" }
+          }
         }
       ]
     },
@@ -511,6 +518,13 @@
             "labelText": { "const": "Running implementation mode locally" },
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
+          }
+        },
+        {
+          "id": "notify_implement_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": { "const": "Implementation complete" }
           }
         }
       ]
