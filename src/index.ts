@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import type { RuntimeServices } from "./executors/types.js";
 import {
   REVIEW_FILE_RE,
-  REVIEW_REPLY_FILE_RE,
   bugAnalyzeArtifacts,
   bugAnalyzeJsonFile,
   bugFixDesignJsonFile,
@@ -19,6 +18,7 @@ import {
   ensureScopeWorkspaceDir,
   gitlabReviewFile,
   gitlabReviewJsonFile,
+  latestArtifactIteration,
   nextArtifactIteration,
   planJsonFile,
   planArtifacts,
@@ -26,7 +26,6 @@ import {
   readyToMergeFile,
   requireArtifacts,
   reviewFile,
-  reviewReplyJsonFile,
   reviewFixSelectionJsonFile,
   reviewJsonFile,
   scopeWorkspaceDir,
@@ -605,31 +604,12 @@ function nextReviewIterationForTask(taskKey: string): number {
     if (!entry.isFile()) {
       continue;
     }
-    const match = REVIEW_FILE_RE.exec(entry.name) ?? REVIEW_REPLY_FILE_RE.exec(entry.name);
+    const match = REVIEW_FILE_RE.exec(entry.name);
     if (match && match[1] === taskKey) {
       maxIndex = Math.max(maxIndex, Number.parseInt(match[2] ?? "0", 10));
     }
   }
   return maxIndex + 1;
-}
-
-function latestReviewReplyIteration(taskKey: string): number | null {
-  let maxIndex: number | null = null;
-  const workspaceDir = scopeWorkspaceDir(taskKey);
-  if (!existsSync(workspaceDir)) {
-    return null;
-  }
-  for (const entry of readdirSync(workspaceDir, { withFileTypes: true })) {
-    if (!entry.isFile()) {
-      continue;
-    }
-    const match = REVIEW_REPLY_FILE_RE.exec(entry.name);
-    if (match && match[1] === taskKey) {
-      const current = Number.parseInt(match[2] ?? "0", 10);
-      maxIndex = maxIndex === null ? current : Math.max(maxIndex, current);
-    }
-  }
-  return maxIndex;
 }
 
 function buildBaseConfig(
@@ -994,7 +974,7 @@ function defaultDeclarativeFlowParams(
   overrides: DeclarativeFlowOverrides = {},
 ): Record<string, unknown> {
   const iteration = nextReviewIterationForTask(config.taskKey);
-  const latestIteration = latestReviewReplyIteration(config.taskKey);
+  const latestIteration = latestArtifactIteration(config.taskKey, "review");
   const launchProfile = overrides.launchProfile ?? resolveLaunchProfile({ executor: "default", model: "default" }, DEFAULT_LAUNCH_PROFILE);
   return {
     taskKey: config.taskKey,
@@ -1352,14 +1332,13 @@ async function executeCommand(
   }
 
   if (config.command === "review-fix") {
-    const latestIteration = latestReviewReplyIteration(config.taskKey);
+    const latestIteration = latestArtifactIteration(config.taskKey, "review");
     if (latestIteration === null) {
-      throw new TaskRunnerError("Review-fix mode requires at least one review-reply artifact.");
+      throw new TaskRunnerError("Review-fix mode requires at least one review artifact.");
     }
     validateStructuredArtifacts(
       [
         { path: reviewJsonFile(config.taskKey, latestIteration), schemaId: "review-findings/v1" },
-        { path: reviewReplyJsonFile(config.taskKey, latestIteration), schemaId: "review-reply/v1" },
       ],
       "Review-fix mode requires valid structured review artifacts.",
     );
