@@ -21,6 +21,7 @@ import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.
 import { readFileNode } from "./nodes/read-file-node.js";
 import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
+import { telegramNotifierNode } from "./nodes/telegram-notifier-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
 import { writeSelectionFileNode } from "./nodes/write-selection-file-node.js";
 import type { ExecutorId } from "./registry.js";
@@ -50,6 +51,7 @@ export type NodeKind =
   | "read-file"
   | "review-findings-form"
   | "summary-file-load"
+  | "telegram-notify"
   | "user-input"
   | "write-selection-file";
 
@@ -95,6 +97,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "read-file": readFileNode as unknown as AnyNodeDefinition,
   "review-findings-form": reviewFindingsFormNode as unknown as AnyNodeDefinition,
   "summary-file-load": summaryFileLoadNode as unknown as AnyNodeDefinition,
+  "telegram-notify": telegramNotifierNode as unknown as AnyNodeDefinition,
   "user-input": userInputNode as unknown as AnyNodeDefinition,
   "write-selection-file": writeSelectionFileNode as unknown as AnyNodeDefinition,
 };
@@ -212,6 +215,13 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     requiredParams: ["reviewFindingsJsonFile", "formId", "title"],
   },
   "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden", requiredParams: ["path"] },
+  "telegram-notify": {
+    kind: "telegram-notify",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["message"],
+    executors: ["telegram-notifier"],
+  },
   "user-input": {
     kind: "user-input",
     version: 1,

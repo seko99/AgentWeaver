@@ -6,6 +6,7 @@ import { gitCommitExecutor } from "../executors/git-commit-executor.js";
 import { jiraFetchExecutor } from "../executors/jira-fetch-executor.js";
 import { opencodeExecutor } from "../executors/opencode-executor.js";
 import { processExecutor } from "../executors/process-executor.js";
+import { telegramNotifierExecutor } from "../executors/telegram-notifier-executor.js";
 
 import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
 
@@ -17,7 +18,8 @@ export type ExecutorId =
   | "git-commit"
   | "jira-fetch"
   | "codex"
-  | "opencode";
+  | "opencode"
+  | "telegram-notifier";
 
 export type ExecutorRegistry = {
   get: <TConfig extends JsonValue, TInput, TResult>(
@@ -38,6 +40,7 @@ const builtInExecutors: Record<ExecutorId, AnyExecutorDefinition> = {
   "jira-fetch": jiraFetchExecutor as unknown as AnyExecutorDefinition,
   codex: codexExecutor as unknown as AnyExecutorDefinition,
   opencode: opencodeExecutor as unknown as AnyExecutorDefinition,
+  "telegram-notifier": telegramNotifierExecutor as unknown as AnyExecutorDefinition,
 };
 
 export function createExecutorRegistry(): ExecutorRegistry {
