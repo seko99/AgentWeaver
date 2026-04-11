@@ -1,8 +1,8 @@
-import { codexLocalExecutorDefaultConfig } from "./configs/codex-local-config.js";
+import { codexExecutorDefaultConfig } from "./configs/codex-config.js";
 import type { ExecutorContext, ExecutorDefinition, JsonObject } from "./types.js";
 import { processExecutor } from "./process-executor.js";
 
-export type CodexLocalExecutorConfig = JsonObject & {
+export type CodexExecutorConfig = JsonObject & {
   commandEnvVar: string;
   defaultCommand: string;
   modelEnvVar: string;
@@ -11,32 +11,32 @@ export type CodexLocalExecutorConfig = JsonObject & {
   fullAutoFlag: string;
 };
 
-export type CodexLocalExecutorInput = {
+export type CodexExecutorInput = {
   prompt: string;
   command?: string;
   model?: string;
   env?: NodeJS.ProcessEnv;
 };
 
-export type CodexLocalExecutorResult = {
+export type CodexExecutorResult = {
   output: string;
   command: string;
   model: string;
 };
 
-function resolveModel(config: CodexLocalExecutorConfig, env: NodeJS.ProcessEnv): string {
+function resolveModel(config: CodexExecutorConfig, env: NodeJS.ProcessEnv): string {
   return env[config.modelEnvVar]?.trim() || config.defaultModel;
 }
 
-export const codexLocalExecutor: ExecutorDefinition<
-  CodexLocalExecutorConfig,
-  CodexLocalExecutorInput,
-  CodexLocalExecutorResult
+export const codexExecutor: ExecutorDefinition<
+  CodexExecutorConfig,
+  CodexExecutorInput,
+  CodexExecutorResult
 > = {
   kind: "codex",
   version: 1,
-  defaultConfig: codexLocalExecutorDefaultConfig,
-  async execute(context: ExecutorContext, input: CodexLocalExecutorInput, config: CodexLocalExecutorConfig) {
+  defaultConfig: codexExecutorDefaultConfig,
+  async execute(context: ExecutorContext, input: CodexExecutorInput, config: CodexExecutorConfig) {
     const env = input.env ?? context.env;
     const command = input.command ?? context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);
     const model = input.model?.trim() || resolveModel(config, env);
