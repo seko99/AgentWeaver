@@ -304,6 +304,13 @@
           }
         },
         {
+          "id": "notify_questions_need_answering",
+          "node": "telegram-notify",
+          "params": {
+            "message": { "const": "Questions need answering" }
+          }
+        },
+        {
           "id": "collect_planning_answers",
           "node": "user-input",
           "params": {
@@ -467,6 +474,13 @@
               "message": "Plan mode produced invalid structured artifacts."
             }
           ]
+        },
+        {
+          "id": "notify_plan_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": { "const": "Plan phase complete" }
+          }
         }
       ]
     }
