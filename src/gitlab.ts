@@ -133,6 +133,12 @@ type GitLabMergeRequestDiffArtifact = {
   files: GitLabMergeRequestDiffFile[];
 };
 
+type MarkdownLanguage = "en" | "ru" | null | undefined;
+
+function normalizeMarkdownLanguage(mdLang: MarkdownLanguage): "en" | "ru" {
+  return mdLang === "en" ? "en" : "ru";
+}
+
 function normalizeUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
@@ -270,7 +276,8 @@ function normalizeDiscussionNotes(discussions: GitLabDiscussion[]): GitLabReview
   });
 }
 
-function buildGitLabReviewMarkdown(artifact: GitLabReviewArtifact): string {
+function buildGitLabReviewMarkdown(artifact: GitLabReviewArtifact, mdLang?: MarkdownLanguage): string {
+  const lang = normalizeMarkdownLanguage(mdLang);
   const lines = [
     "# GitLab Review",
     "",
@@ -283,7 +290,7 @@ function buildGitLabReviewMarkdown(artifact: GitLabReviewArtifact): string {
   ];
 
   if (artifact.comments.length === 0) {
-    lines.push("Код-ревью комментариев не найдено.");
+    lines.push(lang === "en" ? "No code review comments found." : "Код-ревью комментариев не найдено.");
     return lines.join("\n");
   }
 
@@ -417,7 +424,8 @@ async function fetchMergeRequestDiffs(
   }
 }
 
-function buildGitLabMergeRequestDiffMarkdown(artifact: GitLabMergeRequestDiffArtifact): string {
+function buildGitLabMergeRequestDiffMarkdown(artifact: GitLabMergeRequestDiffArtifact, mdLang?: MarkdownLanguage): string {
+  const lang = normalizeMarkdownLanguage(mdLang);
   const lines = [
     "# GitLab MR Diff",
     "",
@@ -441,7 +449,7 @@ function buildGitLabMergeRequestDiffMarkdown(artifact: GitLabMergeRequestDiffArt
   }
 
   if (artifact.files.length === 0) {
-    lines.push("Изменений в diff не найдено.");
+    lines.push(lang === "en" ? "No changes found in the diff." : "Изменений в diff не найдено.");
     return lines.join("\n");
   }
 
@@ -470,6 +478,7 @@ export async function fetchGitLabReview(
   mergeRequestUrl: string,
   outputFile: string,
   outputJsonFile: string,
+  mdLang?: MarkdownLanguage,
 ): Promise<GitLabReviewArtifact> {
   const token = process.env.GITLAB_TOKEN?.trim();
   if (!token) {
@@ -492,7 +501,7 @@ export async function fetchGitLabReview(
   mkdirSync(path.dirname(outputFile), { recursive: true });
   mkdirSync(path.dirname(outputJsonFile), { recursive: true });
   await writeFile(outputJsonFile, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
-  await writeFile(outputFile, `${buildGitLabReviewMarkdown(artifact)}\n`, "utf8");
+  await writeFile(outputFile, `${buildGitLabReviewMarkdown(artifact, mdLang)}\n`, "utf8");
   return artifact;
 }
 
@@ -500,6 +509,7 @@ export async function fetchGitLabMergeRequestDiff(
   mergeRequestUrl: string,
   outputFile: string,
   outputJsonFile: string,
+  mdLang?: MarkdownLanguage,
 ): Promise<GitLabMergeRequestDiffArtifact> {
   const token = process.env.GITLAB_TOKEN?.trim();
   if (!token) {
@@ -534,6 +544,6 @@ export async function fetchGitLabMergeRequestDiff(
   mkdirSync(path.dirname(outputFile), { recursive: true });
   mkdirSync(path.dirname(outputJsonFile), { recursive: true });
   await writeFile(outputJsonFile, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
-  await writeFile(outputFile, `${buildGitLabMergeRequestDiffMarkdown(artifact)}\n`, "utf8");
+  await writeFile(outputFile, `${buildGitLabMergeRequestDiffMarkdown(artifact, mdLang)}\n`, "utf8");
   return artifact;
 }

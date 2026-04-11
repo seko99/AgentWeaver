@@ -47,6 +47,7 @@ export type PipelineContext = {
   ui: OutputAdapter;
   dryRun: boolean;
   verbose: boolean;
+  mdLang?: "en" | "ru" | null;
   runtime: RuntimeServices;
   executors: ExecutorRegistry;
   nodes: NodeRegistry;
@@ -68,6 +69,7 @@ export function toExecutorContext(context: PipelineContext): ExecutorContext {
     ui: context.ui,
     dryRun: context.dryRun,
     verbose: context.verbose,
+    mdLang: context.mdLang ?? null,
     runtime: context.runtime,
   };
 }
