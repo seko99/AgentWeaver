@@ -1,4 +1,5 @@
 import { buildFailureSummaryNode } from "./nodes/build-failure-summary-node.js";
+import { buildReviewFixPromptNode } from "./nodes/build-review-fix-prompt-node.js";
 import { codexPromptNode } from "./nodes/codex-prompt-node.js";
 import { commandCheckNode } from "./nodes/command-check-node.js";
 import { fetchGitLabDiffNode } from "./nodes/fetch-gitlab-diff-node.js";
@@ -20,11 +21,13 @@ import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.
 import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
+import { writeSelectionFileNode } from "./nodes/write-selection-file-node.js";
 import type { ExecutorId } from "./registry.js";
 import type { PipelineNodeDefinition } from "./types.js";
 
 export type NodeKind =
   | "build-failure-summary"
+  | "build-review-fix-prompt"
   | "codex-prompt"
   | "command-check"
   | "fetch-gitlab-diff"
@@ -45,7 +48,8 @@ export type NodeKind =
   | "planning-questions-form"
   | "review-findings-form"
   | "summary-file-load"
-  | "user-input";
+  | "user-input"
+  | "write-selection-file";
 
 type AnyNodeDefinition = PipelineNodeDefinition<Record<string, unknown>, unknown>;
 
@@ -67,6 +71,7 @@ export type NodeContractMetadata = {
 
 const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "build-failure-summary": buildFailureSummaryNode as unknown as AnyNodeDefinition,
+  "build-review-fix-prompt": buildReviewFixPromptNode as unknown as AnyNodeDefinition,
   "codex-prompt": codexPromptNode as unknown as AnyNodeDefinition,
   "command-check": commandCheckNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-diff": fetchGitLabDiffNode as unknown as AnyNodeDefinition,
@@ -88,6 +93,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "review-findings-form": reviewFindingsFormNode as unknown as AnyNodeDefinition,
   "summary-file-load": summaryFileLoadNode as unknown as AnyNodeDefinition,
   "user-input": userInputNode as unknown as AnyNodeDefinition,
+  "write-selection-file": writeSelectionFileNode as unknown as AnyNodeDefinition,
 };
 
 const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
@@ -97,6 +103,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["output"],
     executors: ["codex"],
+  },
+  "build-review-fix-prompt": {
+    kind: "build-review-fix-prompt",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["selectionFile", "autoMode"],
   },
   "codex-prompt": {
     kind: "codex-prompt",
@@ -201,6 +213,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["formId", "title", "fields", "outputFile"],
+  },
+  "write-selection-file": {
+    kind: "write-selection-file",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["outputFile", "reviewFindingsJsonFile", "selectionMode"],
   },
 };
 

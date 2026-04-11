@@ -101,6 +101,7 @@ const COMMANDS = [
   "implement",
   "review",
   "review-fix",
+  "review-loop",
   "run-go-tests-loop",
   "run-go-linter-loop",
   "auto",
@@ -224,6 +225,7 @@ function usage(): string {
   agentweaver implement [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review-fix [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver review-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver run-go-tests-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver run-go-linter-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver auto [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
@@ -663,6 +665,7 @@ function commandSupportsProjectScope(command: string): boolean {
     command === "implement" ||
     command === "review" ||
     command === "review-fix" ||
+    command === "review-loop" ||
     command === "run-go-tests-loop" ||
     command === "run-go-linter-loop"
   );
@@ -762,6 +765,8 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
     "Runs code review of current changes, validates structured findings, then prepares a reply to comments.",
   "review-fix":
     "Fixes issues after review-reply, updates code, and runs mandatory checks after modifications.",
+  "review-loop":
+    "Iteratively runs review and review-fix cycles up to 5 times until ready-to-merge is achieved.",
   "run-go-tests-loop":
     "Cycles through `./run_go_tests.py` locally, analyzes the last error, and fixes code until successful or attempts exhausted.",
   "run-go-linter-loop":
@@ -983,6 +988,7 @@ function defaultDeclarativeFlowParams(
     jiraApiUrl: config.jiraApiUrl,
     jiraTaskFile: config.jiraTaskFile,
     scopeKey: config.scope.scopeKey,
+    workspaceDir: scopeWorkspaceDir(config.taskKey),
     runGoTestsScript: config.runGoTestsScript,
     runGoLinterScript: config.runGoLinterScript,
     runGoCoverageScript: config.runGoCoverageScript,
@@ -1350,6 +1356,26 @@ async function executeCommand(
       reviewFixPoints: config.reviewFixPoints,
     }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
     return false;
+  }
+
+  if (config.command === "review-loop") {
+    const iteration = nextReviewIterationForTask(config.taskKey);
+    if (config.jiraBrowseUrl && config.jiraApiUrl && config.jiraTaskFile) {
+      requireJiraConfig(config);
+      validateStructuredArtifacts(
+        [
+          { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
+          { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
+        ],
+        "Review-loop mode requires valid structured plan artifacts from the planning phase.",
+      );
+    }
+    await runDeclarativeFlowBySpecFile("review/review-loop.json", config, {
+      taskKey: config.taskKey,
+      iteration,
+      extraPrompt: config.extraPrompt,
+    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
+    return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
 
   if (config.command === "run-go-tests-loop" || config.command === "run-go-linter-loop") {
