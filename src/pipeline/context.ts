@@ -12,6 +12,7 @@ export type CreatePipelineContextInput = {
   jiraRef: string;
   dryRun: boolean;
   verbose: boolean;
+  mdLang?: "en" | "ru" | null;
   runtime: RuntimeServices;
   setSummary?: (markdown: string) => void;
   requestUserInput?: UserInputRequester;
@@ -26,6 +27,7 @@ export function createPipelineContext(input: CreatePipelineContextInput): Pipeli
     ui: getOutputAdapter(),
     dryRun: input.dryRun,
     verbose: input.verbose,
+    mdLang: input.mdLang ?? null,
     runtime: input.runtime,
     executors: createExecutorRegistry(),
     nodes: createNodeRegistry(),

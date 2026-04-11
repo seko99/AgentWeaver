@@ -36,6 +36,10 @@ export type GitLabReviewArtifactsNodeParams = {
   reviewJsonFile: string;
 };
 
+function normalizeMarkdownLanguage(mdLang: "en" | "ru" | null | undefined): "en" | "ru" {
+  return mdLang === "en" ? "en" : "ru";
+}
+
 function commentLine(comment: GitLabReviewCommentRecord): number | null {
   if (typeof comment.new_line === "number") {
     return comment.new_line;
@@ -83,7 +87,7 @@ function toReviewFinding(comment: GitLabReviewCommentRecord, index: number): Rev
   };
 }
 
-function renderReviewMarkdown(artifact: ReviewFindingsArtifact): string {
+function renderReviewMarkdown(artifact: ReviewFindingsArtifact, mdLang: "en" | "ru"): string {
   const lines = [
     "# Review",
     "",
@@ -94,7 +98,7 @@ function renderReviewMarkdown(artifact: ReviewFindingsArtifact): string {
   ];
 
   if (artifact.findings.length === 0) {
-    lines.push("Замечаний не найдено.");
+    lines.push(mdLang === "en" ? "No findings found." : "Замечаний не найдено.");
     return lines.join("\n");
   }
 
@@ -116,7 +120,7 @@ export const gitlabReviewArtifactsNode: PipelineNodeDefinition<
 > = {
   kind: "gitlab-review-artifacts",
   version: 1,
-  async run(_context, params) {
+  async run(context, params) {
     let parsed: unknown;
     try {
       parsed = JSON.parse(readFileSync(params.gitlabReviewJsonFile, "utf8"));
@@ -134,14 +138,15 @@ export const gitlabReviewArtifactsNode: PipelineNodeDefinition<
     const artifact: ReviewFindingsArtifact = {
       summary:
         findings.length > 0
-          ? `Импортировано ${findings.length} комментариев код-ревью из GitLab.`
-          : "Комментарии код-ревью в GitLab не найдены.",
+          ? `Imported ${findings.length} GitLab code review comments.`
+          : "No GitLab code review comments found.",
       ready_to_merge: findings.length === 0,
       findings,
     };
+    const mdLang = normalizeMarkdownLanguage(context.mdLang);
 
     writeFileSync(params.reviewJsonFile, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
-    writeFileSync(params.reviewFile, `${renderReviewMarkdown(artifact)}\n`, "utf8");
+    writeFileSync(params.reviewFile, `${renderReviewMarkdown(artifact, mdLang)}\n`, "utf8");
 
     return {
       value: {

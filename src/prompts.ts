@@ -5,12 +5,16 @@ import {
 
 export const BASE_PROMPT_HEADER = "Primary task:";
 export const EXTRA_PROMPT_HEADER = "Additional instructions:";
+export const STRUCTURED_JSON_LANGUAGE_INSTRUCTION =
+  "All structured JSON artifacts are machine-readable and must use English for all generated semantic string values. " +
+  "If a JSON artifact needs to preserve verbatim user-provided or external source text, keep that quoted source text unchanged, but write all generated summaries, titles, descriptions, decisions, and explanations in English. ";
 
 function strictSchemaInstruction(outputFileVar: string, schemaId: StructuredArtifactSchemaId): string {
   return (
     `The artifact format for ${outputFileVar} must fully conform to schema ${schemaId} from the registry. ` +
     "Do not skip required fields, do not rename fields, do not change types, do not replace arrays with objects or strings, and do not leave required strings empty. " +
     "The final JSON must pass validation against this schema without manual corrections. " +
+    STRUCTURED_JSON_LANGUAGE_INSTRUCTION +
     `Canonical schema:\n${renderStructuredArtifactSchema(schemaId)}\n`
   );
 }

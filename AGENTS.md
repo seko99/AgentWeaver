@@ -25,7 +25,8 @@ npm run pack:check                   # inspect npm publish tarball
 Follow TypeScript/Node conventions: 2-space or existing-file indentation consistency, `camelCase` for functions and variables, `PascalCase` for classes/types, and `UPPER_CASE` for module-level constants. Keep imports grouped and prefer focused modules over large inline blocks when extending command handlers or TUI components. New external actions should usually be added as executor modules plus config entries rather than inline process logic inside `src/index.ts`.
 
 ## Language For Artifacts
-Design docs, implementation plans, architecture notes, and similar project artifacts created in the repository must be written in Russian by default, unless the user explicitly asks for another language.
+Structured machine-readable artifacts such as `.json` files must always be written in English, unless the artifact is intentionally storing verbatim user-provided or external source text.
+Human-readable markdown artifacts such as `.md` files must use the workflow-selected markdown language, for example `mdLang` when such a setting exists.
 
 ## Testing Guidelines
 No committed automated test suite exists yet, so every change should include at least `npm run check` and one CLI smoke test. Prefer adding tests under `tests/` for new behavior. For executor or orchestration changes, prefer smoke checks such as `node dist/index.js --help`, `node dist/index.js auto --help-phases`, and representative `--dry` command runs.
