@@ -11,9 +11,6 @@ import {
   REVIEW_FIX_PROMPT_TEMPLATE,
   REVIEW_PROJECT_PROMPT_TEMPLATE,
   REVIEW_PROMPT_TEMPLATE,
-  REVIEW_REPLY_PROJECT_PROMPT_TEMPLATE,
-  REVIEW_REPLY_PROMPT_TEMPLATE,
-  REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   REVIEW_SUMMARY_PROMPT_TEMPLATE,
   RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
   RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
@@ -33,9 +30,6 @@ export type PromptTemplateRef =
   | "review"
   | "review-fix"
   | "review-project"
-  | "review-reply"
-  | "review-reply-project"
-  | "review-reply-summary"
   | "review-summary"
   | "run-go-linter-loop-fix"
   | "run-go-tests-loop-fix"
@@ -54,9 +48,6 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   review: REVIEW_PROMPT_TEMPLATE,
   "review-project": REVIEW_PROJECT_PROMPT_TEMPLATE,
   "review-fix": REVIEW_FIX_PROMPT_TEMPLATE,
-  "review-reply": REVIEW_REPLY_PROMPT_TEMPLATE,
-  "review-reply-project": REVIEW_REPLY_PROJECT_PROMPT_TEMPLATE,
-  "review-reply-summary": REVIEW_REPLY_SUMMARY_PROMPT_TEMPLATE,
   "review-summary": REVIEW_SUMMARY_PROMPT_TEMPLATE,
   "run-go-linter-loop-fix": RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
   "run-go-tests-loop-fix": RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE,

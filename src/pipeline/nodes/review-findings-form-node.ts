@@ -8,6 +8,7 @@ type ReviewFinding = {
   severity?: unknown;
   title?: unknown;
   description?: unknown;
+  disposition?: unknown;
 };
 
 type ReviewFindingsArtifact = {
@@ -47,9 +48,13 @@ export const reviewFindingsFormNode: PipelineNodeDefinition<ReviewFindingsFormNo
         severity: typeof finding.severity === "string" ? finding.severity.trim().toLowerCase() : "",
         title: typeof finding.title === "string" ? finding.title.trim() : "",
         description: typeof finding.description === "string" ? finding.description.trim() : "",
+        disposition: typeof finding.disposition === "string" ? finding.disposition.trim().toLowerCase() : null,
       }))
       .filter(
-        (finding) => finding.title.length > 0 && SEVERITY_FIX_THRESHOLD.includes(finding.severity),
+        (finding) =>
+          finding.title.length > 0 &&
+          SEVERITY_FIX_THRESHOLD.includes(finding.severity) &&
+          finding.disposition !== "resolved",
       );
 
     const fields: UserInputFieldDefinition[] = [
