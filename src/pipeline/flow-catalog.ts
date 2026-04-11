@@ -18,6 +18,7 @@ export type FlowCatalogEntry = {
 
 export const BUILT_IN_COMMAND_FLOW_IDS = [
   "auto",
+  "auto-common",
   "bug-analyze",
   "bug-fix",
   "git-commit",
@@ -36,6 +37,7 @@ export const BUILT_IN_COMMAND_FLOW_IDS = [
 
 const BUILT_IN_COMMAND_FLOW_FILES: Record<(typeof BUILT_IN_COMMAND_FLOW_IDS)[number], string> = {
   auto: "auto.json",
+  "auto-common": "auto-common.json",
   "bug-analyze": "bugz/bug-analyze.json",
   "bug-fix": "bugz/bug-fix.json",
   "git-commit": "git-commit.json",
