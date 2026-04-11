@@ -304,6 +304,19 @@
           }
         },
         {
+          "id": "notify_planning_questions",
+          "when": { "not": { "equals": [{ "ref": "steps.plan.build_planning_questions_form.value.questionCount" }, { "const": 0 }] } },
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Planning questions generated for {taskKey}. Please review and answer if needed.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          }
+        },
+        {
           "id": "collect_planning_answers",
           "node": "user-input",
           "params": {
@@ -472,7 +485,12 @@
           "id": "notify_plan_complete",
           "node": "telegram-notify",
           "params": {
-            "message": { "const": "Plan complete" }
+            "message": {
+              "template": "Plan phase for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
           }
         }
       ]
@@ -524,7 +542,12 @@
           "id": "notify_implement_complete",
           "node": "telegram-notify",
           "params": {
-            "message": { "const": "Implementation complete" }
+            "message": {
+              "template": "Implementation phase for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
           }
         }
       ]
@@ -544,6 +567,18 @@
             "reviewFixPoints": { "ref": "params.reviewFixPoints" },
             "llmExecutor": { "ref": "params.llmExecutor" },
             "llmModel": { "ref": "params.llmModel" }
+          }
+        },
+        {
+          "id": "notify_task_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Task {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
           }
         }
       ]

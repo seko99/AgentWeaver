@@ -25,7 +25,12 @@
           "id": "notify_review_complete",
           "node": "telegram-notify",
           "params": {
-            "message": { "const": "Review complete" }
+            "message": {
+              "template": "Review for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
           }
         },
         {
@@ -116,7 +121,12 @@
           "id": "notify_review_fix_complete",
           "node": "telegram-notify",
           "params": {
-            "message": { "const": "Review fix complete" }
+            "message": {
+              "template": "Review fix for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
           }
         }
       ]
@@ -150,7 +160,13 @@
               "id": "notify_review_complete",
               "node": "telegram-notify",
               "params": {
-                "message": { "const": "Review iteration ${iteration} complete" }
+                "message": {
+                  "template": "Review iteration ${iteration} for {taskKey} complete.",
+                  "vars": {
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
               }
             },
             {
@@ -247,7 +263,13 @@
                 ]
               },
               "params": {
-                "message": { "const": "Review fix iteration ${iteration} complete" }
+                "message": {
+                  "template": "Review fix iteration ${iteration} for {taskKey} complete.",
+                  "vars": {
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
               }
             }
           ]
