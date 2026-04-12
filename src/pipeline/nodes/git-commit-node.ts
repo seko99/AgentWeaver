@@ -11,6 +11,7 @@ export type GitCommitNodeParams = {
   message: string;
   files: string[];
   labelText?: string;
+  editInEditor?: boolean;
 };
 
 export const gitCommitNode: PipelineNodeDefinition<GitCommitNodeParams, GitCommitExecutorResult> = {
@@ -34,9 +35,17 @@ export const gitCommitNode: PipelineNodeDefinition<GitCommitNodeParams, GitCommi
       GitCommitExecutorInput,
       GitCommitExecutorResult
     >("git-commit");
+    const executorInput: GitCommitExecutorInput = {
+      message: params.message,
+      files: params.files,
+    };
+    if (params.editInEditor) {
+      executorInput.editEnabled = true;
+    }
+
     const value = await executor.execute(
       toExecutorContext(context),
-      { message: params.message, files: params.files },
+      executorInput,
       executor.defaultConfig,
     );
 
