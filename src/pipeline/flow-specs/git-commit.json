@@ -106,11 +106,11 @@
       ]
     },
     {
-      "id": "confirm_and_commit",
+      "id": "select_files",
       "steps": [
         {
-          "id": "collect_commit_input",
-          "node": "git-commit-form",
+          "id": "select_files_form",
+          "node": "select-files-form",
           "params": {
             "gitStatusJsonFile": {
               "artifact": {
@@ -120,6 +120,34 @@
                 }
               }
             },
+            "formId": {
+              "const": "select-files"
+            },
+            "title": {
+              "const": "Select Files"
+            },
+            "description": {
+              "const": "Select files to include in the commit"
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "select-files-output-json-file",
+                "taskKey": {
+                  "ref": "params.taskKey"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "confirm_and_commit",
+      "steps": [
+        {
+          "id": "commit_message_form",
+          "node": "commit-message-form",
+          "params": {
             "commitMessageFile": {
               "artifact": {
                 "kind": "git-commit-message-json-file",
@@ -129,17 +157,17 @@
               }
             },
             "formId": {
-              "const": "git-commit"
+              "const": "commit-message"
             },
             "title": {
-              "const": "Git Commit"
+              "const": "Commit Message"
             },
             "description": {
-              "const": "Выберите файлы для коммита и отредактируйте commit message."
+              "const": "Review and edit the commit message"
             },
             "outputFile": {
               "artifact": {
-                "kind": "git-commit-input-json-file",
+                "kind": "commit-message-output-json-file",
                 "taskKey": {
                   "ref": "params.taskKey"
                 }
@@ -152,10 +180,10 @@
           "node": "git-commit",
           "params": {
             "message": {
-              "ref": "steps.confirm_and_commit.collect_commit_input.value.values.commit_message"
+              "ref": "steps.confirm_and_commit.commit_message_form.value.values.commit_message"
             },
             "files": {
-              "ref": "steps.confirm_and_commit.collect_commit_input.value.values.selected_files"
+              "ref": "steps.select_files.select_files_form.value.values.selected_files"
             },
             "labelText": {
               "const": "Committing changes"

@@ -135,13 +135,10 @@ export const COMMIT_MESSAGE_PROMPT_TEMPLATE =
   "List of changed files: {git_status_json_file}. " +
   "Rules: " +
   "1) Subject line ≤72 characters. " +
-  "2) Use conventional commits format: type(scope): description. " +
-  "3) Type: feat/fix/refactor/docs/test/chore. " +
-  "4) Scope — if appropriate, otherwise without scope. " +
-  "5) Mention the issue key in the subject or body. " +
-  "6) Optional body with change details — each item with '- ' prefix. " +
-  "7) Commit message language: English. " +
-  "8) Write JSON to {commit_message_json_file}: {\"subject\": \"...\", \"body\": \"...\"}. Body can be an empty string if not needed.";
+  "2) Format: {taskKey}: {taskDescription} (e.g., DEMO-1234: Add user authentication). " +
+  "3) Include task key from Jira task. " +
+  "4) Commit message language: English. " +
+  "5) Write JSON to {commit_message_json_file}: {\"subject\": \"...\"}.";
 export const AUTO_REVIEW_FIX_EXTRA_PROMPT = "Fix only blockers, criticals, and important issues";
 
 export function formatTemplate(template: string, values: Record<string, string>): string {
