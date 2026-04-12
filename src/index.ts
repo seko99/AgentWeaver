@@ -91,7 +91,7 @@ import {
 } from "./scope.js";
 
 const COMMANDS = [
-  "auto",
+  "auto-golang",
   "auto-common",
   "auto-status",
   "auto-reset",
@@ -228,9 +228,9 @@ function usage(): string {
   agentweaver review-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver run-go-tests-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver run-go-linter-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
-  agentweaver auto [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
-  agentweaver auto [--dry] [--verbose] [--prompt <text>] --from <phase> [<jira-browse-url|jira-issue-key>]
-  agentweaver auto --help-phases
+  agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
+  agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] --from <phase> [<jira-browse-url|jira-issue-key>]
+  agentweaver auto-golang --help-phases
   agentweaver auto-status [<jira-browse-url|jira-issue-key>]
   agentweaver auto-reset [<jira-browse-url|jira-issue-key>]
 
@@ -282,14 +282,14 @@ function normalizeAutoPhaseId(phaseId: string): string {
 }
 
 function autoPhaseIds(): string[] {
-  return loadDeclarativeFlow({ source: "built-in", fileName: "auto.json" }).phases.map((phase) => phase.id);
+  return loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" }).phases.map((phase) => phase.id);
 }
 
 function validateAutoPhaseId(phaseId: string): string {
   const normalized = normalizeAutoPhaseId(phaseId);
   if (!autoPhaseIds().includes(normalized)) {
     throw new TaskRunnerError(
-      `Unknown auto phase: ${phaseId}\nUse 'agentweaver auto --help-phases' or '/help auto' to list valid phases.`,
+      `Unknown auto-golang phase: ${phaseId}\nUse 'agentweaver auto-golang --help-phases' or '/help auto-golang' to list valid phases.`,
     );
   }
   return normalized;
@@ -461,6 +461,9 @@ function validateDeclarativePhaseResumeState(
   flowConstants: Record<string, unknown>,
   executionState: FlowExecutionState,
 ): void {
+  if (phaseState.status === "done") {
+    return;
+  }
   for (const [stepIndex, step] of phase.steps.entries()) {
     const stepState = phaseState.steps[stepIndex];
     if (!stepState || stepState.status !== "done") {
@@ -561,9 +564,9 @@ function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: 
 }
 
 function printAutoPhasesHelp(): void {
-  const phaseLines = ["Available auto phases:", "", ...autoPhaseIds()];
-  phaseLines.push("", "You can resume auto from a phase with:", "agentweaver auto --from <phase> <jira>", "or in interactive mode:", "/auto --from <phase>");
-  printPanel("Auto Phases", phaseLines.join("\n"), "magenta");
+  const phaseLines = ["Available auto-golang phases:", "", ...autoPhaseIds()];
+  phaseLines.push("", "You can resume auto-golang from a phase with:", "agentweaver auto-golang --from <phase> <jira>", "or in interactive mode:", "/auto-golang --from <phase>");
+  printPanel("Auto-Golang Phases", phaseLines.join("\n"), "magenta");
 }
 
 function autoCommonPhaseIds(): string[] {
@@ -626,7 +629,7 @@ function commandRequiresTask(command: string): boolean {
     command === "bug-analyze" ||
     command === "bug-fix" ||
     command === "mr-description" ||
-    command === "auto" ||
+    command === "auto-golang" ||
     command === "auto-common" ||
     command === "auto-status" ||
     command === "auto-reset"
@@ -717,11 +720,13 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
     mdLang: config.mdLang,
     runGoTestsScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_tests.py"),
     runGoLinterScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_linter.py"),
+    runGoTestsIteration: nextArtifactIteration(config.taskKey, "run-go-tests-result", "json"),
+    runGoLinterIteration: nextArtifactIteration(config.taskKey, "run-go-linter-result", "json"),
   };
 }
 
 const FLOW_DESCRIPTIONS: Record<string, string> = {
-  auto: "Full task pipeline: planning, implementation, checks, review, review replies, and repeated iterations until ready to merge.",
+  "auto-golang": "Full task pipeline: planning, implementation, checks, review, review replies, and repeated iterations until ready to merge.",
   "bug-analyze":
     "Analyzes bug from Jira and creates structured artifacts: root cause hypothesis, fix design, and implementation plan.",
   "git-commit":
@@ -1041,7 +1046,7 @@ async function executeCommand(
   runtime: RuntimeServices = runtimeServices,
 ): Promise<boolean> {
   const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
-  if (config.command === "auto") {
+  if (config.command === "auto-golang") {
     requireJiraConfig(config);
     checkAutoPrerequisites(config);
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
@@ -1051,22 +1056,22 @@ async function executeCommand(
     let effectiveLaunchMode = launchMode;
     let effectiveLaunchProfile = launchProfile;
     if (config.autoFromPhase) {
-      const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto.json" });
-      const persistedState = loadFlowRunState(config.scope.scopeKey, "auto");
+      const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
+      const persistedState = loadFlowRunState(config.scope.scopeKey, "auto-golang");
       if (!persistedState) {
         throw new TaskRunnerError(
-          `Cannot restart auto from phase '${config.autoFromPhase}' because persisted flow state was not found.`,
+          `Cannot restart auto-golang from phase '${config.autoFromPhase}' because persisted flow state was not found.`,
         );
       }
       rewindFlowRunStateToPhase(persistedState, flow.phases, config.autoFromPhase);
       saveFlowRunState(persistedState);
       effectiveLaunchMode = "resume";
       effectiveLaunchProfile ??= persistedState.launchProfile;
-      printPanel("Auto Resume", `Auto pipeline will continue from phase: ${config.autoFromPhase}`, "yellow");
+      printPanel("Auto-Golang Resume", `Auto-golang pipeline will continue from phase: ${config.autoFromPhase}`, "yellow");
     }
 
     await runDeclarativeFlowBySpecFile(
-      "auto.json",
+      "auto-golang.json",
       config,
       autoFlowParams(config, forceRefreshSummary),
       effectiveLaunchProfile ? { launchProfile: effectiveLaunchProfile } : {},
@@ -1097,13 +1102,13 @@ async function executeCommand(
     return false;
   }
   if (config.command === "auto-status") {
-    const state = loadFlowRunState(config.scope.scopeKey, "auto");
+    const state = loadFlowRunState(config.scope.scopeKey, "auto-golang");
     if (!state) {
-      printPanel("Auto Status", `No flow state file found for ${config.taskKey}.`, "yellow");
+      printPanel("Auto-Golang Status", `No flow state file found for ${config.taskKey}.`, "yellow");
       return false;
     }
     const currentStep = findCurrentFlowExecutionStep(state) ?? state.currentStep ?? "-";
-    const phaseOrder = loadDeclarativeFlow({ source: "built-in", fileName: "auto.json" }).phases;
+    const phaseOrder = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" }).phases;
     const lines = [
       `Issue: ${config.taskKey}`,
       `Status: ${state.status}`,
@@ -1130,14 +1135,14 @@ async function executeCommand(
     if (state.executionState.terminated) {
       lines.push("", `Execution terminated: ${state.executionState.terminationReason ?? "yes"}`);
     }
-    printPanel("Auto Status", lines.join("\n"), "cyan");
+    printPanel("Auto-Golang Status", lines.join("\n"), "cyan");
     return false;
   }
   if (config.command === "auto-reset") {
-    const removed = resetFlowRunState(config.scope.scopeKey, "auto");
+    const removed = resetFlowRunState(config.scope.scopeKey, "auto-golang");
     printPanel(
-      "Auto Reset",
-      removed ? `State file ${flowStateFile(config.scope.scopeKey, "auto")} removed.` : "No flow state file found.",
+      "Auto-Golang Reset",
+      removed ? `State file ${flowStateFile(config.scope.scopeKey, "auto-golang")} removed.` : "No flow state file found.",
       "yellow",
     );
     return false;
@@ -1493,7 +1498,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     jiraRef = token;
   }
 
-  if (command === "auto" && helpPhases) {
+  if (command === "auto-golang" && helpPhases) {
     printAutoPhasesHelp();
     process.exit(0);
   }

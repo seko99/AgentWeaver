@@ -1,13 +1,13 @@
 import { loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
 
-type LoadedAutoFlow = LoadedDeclarativeFlow;
+type LoadedAutoGolangFlow = LoadedDeclarativeFlow;
 
-let cachedAutoFlow: LoadedAutoFlow | null = null;
+let cachedAutoGolangFlow: LoadedAutoGolangFlow | null = null;
 
-export function loadAutoFlow(): LoadedAutoFlow {
-  if (cachedAutoFlow) {
-    return cachedAutoFlow;
+export function loadAutoGolangFlow(): LoadedAutoGolangFlow {
+  if (cachedAutoGolangFlow) {
+    return cachedAutoGolangFlow;
   }
-  cachedAutoFlow = loadDeclarativeFlow({ source: "built-in", fileName: "auto.json" });
-  return cachedAutoFlow;
+  cachedAutoGolangFlow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
+  return cachedAutoGolangFlow;
 }

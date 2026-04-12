@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { TaskRunnerError } from "../errors.js";
-import { loadAutoFlow } from "./auto-flow.js";
+import { loadAutoGolangFlow } from "./auto-flow.js";
 import { type DeclarativeFlowRef, loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
 import { listBuiltInFlowSpecFiles, listProjectFlowSpecFiles, projectFlowSpecsDir } from "./spec-loader.js";
 
@@ -17,7 +17,7 @@ export type FlowCatalogEntry = {
 };
 
 export const BUILT_IN_COMMAND_FLOW_IDS = [
-  "auto",
+  "auto-golang",
   "auto-common",
   "bug-analyze",
   "bug-fix",
@@ -36,7 +36,7 @@ export const BUILT_IN_COMMAND_FLOW_IDS = [
 ] as const;
 
 const BUILT_IN_COMMAND_FLOW_FILES: Record<(typeof BUILT_IN_COMMAND_FLOW_IDS)[number], string> = {
-  auto: "auto.json",
+  "auto-golang": "auto-golang.json",
   "auto-common": "auto-common.json",
   "bug-analyze": "bugz/bug-analyze.json",
   "bug-fix": "bugz/bug-fix.json",
@@ -67,7 +67,7 @@ function loadBuiltInCatalogEntry(fileName: string): FlowCatalogEntry {
   const commandId = builtInCommandIdForFile(fileName);
   const relativePath = fileName.replace(/\.json$/i, "").split(/[\\/]+/).filter((segment) => segment.length > 0);
   const id = commandId ?? relativePath.join("/");
-  const flow = id === "auto" ? loadAutoFlow() : loadDeclarativeFlow({ source: "built-in", fileName });
+  const flow = id === "auto-golang" ? loadAutoGolangFlow() : loadDeclarativeFlow({ source: "built-in", fileName });
   return {
     id,
     source: "built-in",
