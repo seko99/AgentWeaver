@@ -46,6 +46,8 @@ export const ARTIFACT_REF_KINDS = [
   "git-diff-file",
   "git-commit-message-json-file",
   "git-commit-input-json-file",
+  "select-files-output-json-file",
+  "commit-message-output-json-file",
 ] as const;
 
 export const ARTIFACT_LIST_REF_KINDS = ["bug-analyze-artifacts", "plan-artifacts"] as const;

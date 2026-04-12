@@ -5,6 +5,7 @@ export type GitCommitExecutorConfig = JsonObject;
 export type GitCommitExecutorInput = {
   message: string;
   files: string[];
+  editEnabled?: boolean;
 };
 
 export type GitCommitExecutorResult = {
@@ -29,14 +30,15 @@ export const gitCommitExecutor: ExecutorDefinition<
       });
     }
 
-    const output = await context.runtime.runCommand(
-      ["git", "commit", "-m", input.message],
-      {
-        dryRun: context.dryRun,
-        verbose: context.verbose,
-        label: "git commit",
-      },
-    );
+    const commitArgs = input.editEnabled
+      ? ["git", "commit", "-e", "-m", input.message]
+      : ["git", "commit", "-m", input.message];
+
+    const output = await context.runtime.runCommand(commitArgs, {
+      dryRun: context.dryRun,
+      verbose: context.verbose,
+      label: "git commit",
+    });
 
     const match = output.match(/\[\S+ ([0-9a-f]{7,40})\]/);
     const commitHash = match?.[1] ?? null;
