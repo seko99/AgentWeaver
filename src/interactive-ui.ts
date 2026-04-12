@@ -269,7 +269,7 @@ export class InteractiveUi {
     }
     this.flowMap = new Map(options.flows.map((flow) => [flow.id, flow]));
     this.flowTree = buildFlowTree(options.flows);
-    this.selectedFlowId = options.flows[0]?.id ?? "auto";
+    this.selectedFlowId = options.flows[0]?.id ?? "auto-golang";
     this.visibleFlowItems = this.computeVisibleFlowItems();
     this.selectedFlowItemKey = this.visibleFlowItems[0]?.key ?? makeFlowKey(this.selectedFlowId);
     this.scopeKey = options.scopeKey;

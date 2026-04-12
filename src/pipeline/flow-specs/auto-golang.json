@@ -302,7 +302,20 @@
             "formId": { "const": "planning-questions" },
             "title": { "const": "Planning Questions" },
             "description": {
-              "const": "Ответьте на вопросы модели, если они нужны для точного design/plan. Если вопросов нет, шаг завершится автоматически."
+              "const": "Reply to model questions if they are needed for accurate design and plan. If there are no questions, the step will complete automatically."
+            }
+          }
+        },
+        {
+          "id": "notify_planning_questions",
+          "when": { "not": { "equals": [{ "ref": "steps.plan.build_planning_questions_form.value.questionCount" }, { "const": 0 }] } },
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Planning questions generated for {taskKey}. Please review and answer if needed.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
             }
           }
         },
@@ -470,6 +483,18 @@
               "message": "Plan mode produced invalid structured artifacts."
             }
           ]
+        },
+        {
+          "id": "notify_plan_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Plan phase for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          }
         }
       ]
     },
@@ -515,348 +540,162 @@
             "model": { "ref": "params.llmModel" },
             "executor": { "ref": "params.llmExecutor" }
           }
-        }
-      ]
-    },
-    {
-      "id": "run_go_linter_loop_after_implement",
-      "steps": [
-        {
-          "id": "run_go_linter_loop",
-          "node": "flow-run",
-          "params": {
-            "fileName": { "const": "run-go-linter-loop.json" },
-            "labelText": { "const": "Running run-go-linter-loop after implement" },
-            "taskKey": { "ref": "params.taskKey" },
-            "runGoLinterScript": { "ref": "params.runGoLinterScript" },
-            "extraPrompt": { "ref": "params.extraPrompt" },
-            "llmExecutor": { "ref": "params.llmExecutor" },
-            "llmModel": { "ref": "params.llmModel" }
-          }
-        }
-      ]
-    },
-    {
-      "id": "run_go_tests_loop_after_implement",
-      "steps": [
-        {
-          "id": "run_go_tests_loop",
-          "node": "flow-run",
-          "params": {
-            "fileName": { "const": "run-go-tests-loop.json" },
-            "labelText": { "const": "Running run-go-tests-loop after implement" },
-            "taskKey": { "ref": "params.taskKey" },
-            "runGoTestsScript": { "ref": "params.runGoTestsScript" },
-            "extraPrompt": { "ref": "params.extraPrompt" },
-            "llmExecutor": { "ref": "params.llmExecutor" },
-            "llmModel": { "ref": "params.llmModel" }
-          }
-        }
-      ]
-    },
-    {
-      "id": "review",
-      "when": {
-        "not": {
-          "exists": {
-            "artifact": {
-              "kind": "ready-to-merge-file",
-              "taskKey": { "ref": "params.taskKey" }
-            }
-          }
-        }
-      },
-      "steps": [
-        {
-          "id": "run_review",
-          "node": "llm-prompt",
-          "prompt": {
-            "templateRef": "review",
-            "vars": {
-              "jira_task_file": {
-                "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_file": {
-                "artifact": {
-                  "kind": "design-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_json_file": {
-                "artifact": {
-                  "kind": "design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_file": {
-                "artifact": {
-                  "kind": "plan-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_json_file": {
-                "artifact": {
-                  "kind": "plan-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "review_file": {
-                "artifact": {
-                  "kind": "review-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "review_json_file": {
-                "artifact": {
-                  "kind": "review-json-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              }
-            },
-            "extraPrompt": { "ref": "params.extraPrompt" },
-            "format": "task-prompt"
-          },
-          "params": {
-            "labelText": { "const": "Running review mode" },
-            "model": { "ref": "params.llmModel" },
-            "executor": { "ref": "params.llmExecutor" }
-          },
-          "expect": [
-            {
-              "kind": "require-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
-              "paths": {
-                "list": [
-                  {
-                    "artifact": {
-                      "kind": "review-file",
-                      "taskKey": { "ref": "params.taskKey" },
-                      "iteration": { "ref": "params.iteration" }
-                    }
-                  }
-                ]
-              },
-              "message": "Review did not produce the required review artifact."
-            },
-            {
-              "kind": "require-structured-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
-              "items": [
-                {
-                  "path": {
-                    "artifact": {
-                      "kind": "review-json-file",
-                      "taskKey": { "ref": "params.taskKey" },
-                      "iteration": { "ref": "params.iteration" }
-                    }
-                  },
-                  "schemaId": "review-findings/v1"
-                }
-              ],
-              "message": "Review produced invalid structured artifacts."
-            }
-          ]
         },
         {
-          "id": "summarize_review",
-          "when": { "not": { "ref": "context.dryRun" } },
-          "node": "llm-prompt",
-          "prompt": {
-            "templateRef": "review-summary",
-            "vars": {
-              "review_file": {
-                "artifact": {
-                  "kind": "review-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "review_summary_file": {
-                "artifact": {
-                  "kind": "review-summary-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              }
-            },
-            "format": "plain"
-          },
+          "id": "notify_implement_complete",
+          "node": "telegram-notify",
           "params": {
-            "labelText": { "const": "Preparing review summary" },
-            "outputFile": {
-              "artifact": {
-                "kind": "review-summary-file",
-                "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "ref": "params.iteration" }
-              }
-            },
-            "summaryTitle": { "const": "Review Comments" },
-            "model": { "ref": "params.llmModel" },
-            "executor": { "ref": "params.llmExecutor" }
-          }
-        },
-        {
-          "id": "check_ready_to_merge",
-          "node": "file-check",
-          "stopFlowIf": {
-            "ref": "steps.review.check_ready_to_merge.outputs.exists"
-          },
-          "params": {
-            "path": {
-              "artifact": {
-                "kind": "ready-to-merge-file",
+            "message": {
+              "template": "Implementation phase for {taskKey} complete.",
+              "vars": {
                 "taskKey": { "ref": "params.taskKey" }
               }
-            },
-            "panelTitle": { "const": "Ready To Merge" },
-            "foundMessage": { "const": "Изменения готовы к merge\nФайл ready-to-merge.md создан." },
-            "tone": { "const": "green" }
+            }
           }
         }
       ]
     },
     {
-      "id": "review_fix",
-      "when": {
-        "not": {
-          "ref": "steps.review.check_ready_to_merge.outputs.exists"
-        }
-      },
-      "steps": [
-        {
-          "id": "run_review_fix",
-          "node": "llm-prompt",
-          "prompt": {
-            "templateRef": "review-fix",
-            "vars": {
-              "review_file": {
-                "artifact": {
-                  "kind": "review-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "review_json_file": {
-                "artifact": {
-                  "kind": "review-json-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "items": { "ref": "params.reviewFixPoints" },
-              "review_fix_file": {
-                "artifact": {
-                  "kind": "review-fix-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "review_fix_json_file": {
-                "artifact": {
-                  "kind": "review-fix-json-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              }
-            },
-            "extraPrompt": {
-              "appendPrompt": {
-                "base": { "ref": "params.extraPrompt" },
-                "suffix": { "ref": "flow.autoReviewFixExtraPrompt" }
-              }
-            },
-            "format": "task-prompt"
-          },
-          "params": {
-            "labelText": { "const": "Running review-fix mode locally" },
-            "model": { "ref": "params.llmModel" },
-            "executor": { "ref": "params.llmExecutor" }
-          },
-          "expect": [
-            {
-              "kind": "require-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
-              "paths": {
-                "list": [
-                  {
-                    "artifact": {
-                      "kind": "review-fix-file",
-                      "taskKey": { "ref": "params.taskKey" },
-                      "iteration": { "ref": "params.iteration" }
-                    }
-                  }
-                ]
-              },
-              "message": "Review-fix mode did not produce the required review-fix artifact."
-            },
-            {
-              "kind": "require-structured-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
-              "items": [
-                {
-                  "path": {
-                    "artifact": {
-                      "kind": "review-fix-json-file",
-                      "taskKey": { "ref": "params.taskKey" },
-                      "iteration": { "ref": "params.iteration" }
-                    }
-                  },
-                  "schemaId": "review-fix-report/v1"
-                }
-              ],
-              "message": "Review-fix mode produced invalid structured artifacts."
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "run_go_linter_loop_after_review_fix",
-      "when": {
-        "not": {
-          "ref": "steps.review.check_ready_to_merge.outputs.exists"
-        }
-      },
+      "id": "after_implement_checks",
       "steps": [
         {
           "id": "run_go_linter_loop",
           "node": "flow-run",
           "params": {
             "fileName": { "const": "run-go-linter-loop.json" },
-            "labelText": { "const": "Running run-go-linter-loop after review-fix" },
+            "labelText": { "const": "Running final linter check" },
             "taskKey": { "ref": "params.taskKey" },
             "runGoLinterScript": { "ref": "params.runGoLinterScript" },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "llmExecutor": { "ref": "params.llmExecutor" },
-            "llmModel": { "ref": "params.llmModel" }
+            "llmModel": { "ref": "params.llmModel" },
+            "runGoLinterIteration": { "ref": "params.runGoLinterIteration" }
           }
-        }
-      ]
-    },
-    {
-      "id": "run_go_tests_loop_after_review_fix",
-      "when": {
-        "not": {
-          "ref": "steps.review.check_ready_to_merge.outputs.exists"
-        }
-      },
-      "steps": [
+        },
+        {
+          "id": "notify_linter_loop_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Linter loop for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          }
+        },
         {
           "id": "run_go_tests_loop",
           "node": "flow-run",
           "params": {
             "fileName": { "const": "run-go-tests-loop.json" },
-            "labelText": { "const": "Running run-go-tests-loop after review-fix" },
+            "labelText": { "const": "Running final tests check" },
             "taskKey": { "ref": "params.taskKey" },
             "runGoTestsScript": { "ref": "params.runGoTestsScript" },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
+            "runGoTestsIteration": { "ref": "params.runGoTestsIteration" }
+          }
+        },
+        {
+          "id": "notify_tests_loop_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Tests loop for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "review_loop",
+      "steps": [
+        {
+          "id": "run_review_loop",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "review-loop.json" },
+            "labelText": { "const": "Running review-loop" },
+            "taskKey": { "ref": "params.taskKey" },
+            "workspaceDir": { "ref": "params.workspaceDir" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
             "llmModel": { "ref": "params.llmModel" }
+          }
+        },
+        {
+          "id": "notify_review_loop_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Review loop for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "final_checks",
+      "steps": [
+        {
+          "id": "run_go_linter_loop",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "run-go-linter-loop.json" },
+            "labelText": { "const": "Running final linter check" },
+            "taskKey": { "ref": "params.taskKey" },
+            "runGoLinterScript": { "ref": "params.runGoLinterScript" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
+            "runGoLinterIteration": { "ref": "params.runGoLinterIteration" }
+          }
+        },
+        {
+          "id": "notify_final_linter_loop_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Final linter loop for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          }
+        },
+        {
+          "id": "run_go_tests_loop",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "run-go-tests-loop.json" },
+            "labelText": { "const": "Running final tests check" },
+            "taskKey": { "ref": "params.taskKey" },
+            "runGoTestsScript": { "ref": "params.runGoTestsScript" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
+            "runGoTestsIteration": { "ref": "params.runGoTestsIteration" }
+          }
+        },
+        {
+          "id": "notify_final_tests_loop_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": {
+              "template": "Final tests loop for {taskKey} complete.",
+              "vars": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
           }
         }
       ]
