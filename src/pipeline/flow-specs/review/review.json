@@ -106,44 +106,6 @@
           ]
         },
         {
-          "id": "summarize_review",
-          "when": { "not": { "ref": "context.dryRun" } },
-          "node": "llm-prompt",
-          "prompt": {
-            "templateRef": "review-summary",
-            "vars": {
-              "review_file": {
-                "artifact": {
-                  "kind": "review-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              },
-              "review_summary_file": {
-                "artifact": {
-                  "kind": "review-summary-file",
-                  "taskKey": { "ref": "params.taskKey" },
-                  "iteration": { "ref": "params.iteration" }
-                }
-              }
-            },
-            "format": "plain"
-          },
-          "params": {
-            "labelText": { "const": "Preparing review summary" },
-            "summaryTitle": { "const": "Review Comments" },
-            "model": { "ref": "params.llmModel" },
-            "executor": { "ref": "params.llmExecutor" },
-            "outputFile": {
-              "artifact": {
-                "kind": "review-summary-file",
-                "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "ref": "params.iteration" }
-              }
-            }
-          }
-        },
-        {
           "id": "check_ready_to_merge",
           "node": "file-check",
           "params": {
