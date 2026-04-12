@@ -1,185 +1,205 @@
 # Flow Specs
 
-## Зачем нужен этот файл
+This document describes the declarative flow-spec format used by AgentWeaver today.
 
-`src/pipeline/flow-specs/*.json` описывают встроенные pipeline декларативно.
+In architectural terms, flow specs are the language AgentWeaver uses for harness engineering. They are not just config files for commands. They define the workflow model that the CLI, resumable automation, and TUI all operate on.
 
-Дополнительно flow можно положить в `.agentweaver/.flows/*.json` в текущем проекте.
+The current implementation lives in:
 
-Обе группы flow проходят одинаковую runtime-валидацию при загрузке.
+- [src/pipeline/spec-types.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-types.ts)
+- [src/pipeline/spec-loader.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-loader.ts)
+- [src/pipeline/spec-validator.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-validator.ts)
+- [src/pipeline/spec-compiler.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-compiler.ts)
+- [src/pipeline/declarative-flow-runner.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/declarative-flow-runner.ts)
+- [src/pipeline/value-resolver.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/value-resolver.ts)
 
-Идея такая:
+If this document and the code disagree, the code is the source of truth.
 
-- JSON отвечает за то, **что** выполнять
-- `node` runtime в TypeScript отвечает за то, **как** это выполнять
+## Why Flow Specs Exist
 
-На практике это означает:
+Flow specs keep orchestration declarative:
 
-- flow spec выбирает phases и steps
-- step выбирает `node`
-- step описывает `prompt`
-- step описывает runtime `params`
-- step описывает `expect`, то есть postconditions после выполнения node
+- JSON says what phases and steps should run
+- runtime nodes in TypeScript say how each step executes
+- executors provide integration with Codex, OpenCode, Jira, GitLab, shell commands, and related actions
 
-Этот документ объясняет, как читать flow spec и где проходит граница ответственности.
+That separation is the core of AgentWeaver's harness engineering approach. It keeps workflow design, runtime execution, validation, and operational control separated cleanly enough to evolve without rewriting command handlers.
 
-## Где может лежать flow
+Practically, this gives the project:
 
-- built-in flow: `src/pipeline/flow-specs/*.json`
-- project-local flow: `.agentweaver/.flows/*.json`
+- a stable workflow description that can be reviewed like code
+- reusable runtime behavior behind nodes and executors
+- predictable artifacts and postconditions between stages
+- a workflow graph that can be surfaced consistently in the TUI and in resumable runs
 
-Для project-local flow действуют ограничения:
+## Where Flow Specs Live
 
-- поддерживаются только файлы верхнего уровня в `.agentweaver/.flows`
-- `id` flow берётся из имени файла без `.json`
-- конфликт `id` с built-in flow считается ошибкой загрузки
+Built-in flow specs:
 
-При загрузке flow валидируются:
+- `src/pipeline/flow-specs/**/*.json`
 
-- `node`
-- executor-зависимости, объявленные в metadata соответствующего node
-- `prompt.templateRef`
-- `artifact.kind`
-- `artifactList.kind`
-- `StructuredArtifactSchemaId`
-- ссылки `ref` между шагами
+Project-local flow specs:
 
-Для `flow-run` дополнительно проверяется существование вложенного flow, если `params.fileName` задан константой.
+- `.agentweaver/.flows/**/*.json`
 
-## Базовые сущности
+Discovery is recursive for both built-in and project-local flows.
 
-### `kind`
+Project-local flow ids are derived from the relative path inside `.agentweaver/.flows/` without the `.json` suffix. For example:
 
-Тип flow spec.
+- `.agentweaver/.flows/my-team/release-check.json` -> `my-team/release-check`
 
-Пример:
+Flow ids must be unique across the combined catalog. A project-local flow cannot shadow a built-in flow id.
+
+## Load and Validation Pipeline
+
+When a flow is loaded:
+
+1. the JSON file is parsed
+2. the validator checks structure and references
+3. the compiler expands repeated phases into executable phases
+4. the runner executes the expanded phases
+
+Validation currently checks:
+
+- `kind` and `version` structure
+- known `node` ids
+- required executors declared by node metadata
+- required node params
+- prompt template references
+- artifact ref kinds
+- artifact-list ref kinds
+- structured artifact schema ids
+- `ref` scope/path correctness
+- nested `flow-run` file references when they are constant strings
+
+## Top-Level Shape
+
+Every flow spec has this shape:
 
 ```json
 {
-  "kind": "auto-flow"
+  "kind": "flow",
+  "version": 1,
+  "constants": {},
+  "phases": []
 }
 ```
 
-### `version`
+Fields:
 
-Версия формата flow spec.
+- `kind: string` — flow family identifier persisted into execution state
+- `version: number` — flow format/version marker
+- `constants?: Record<string, JsonValue>` — reusable flow-level constants available through `ref: "flow.<name>"`
+- `phases` — ordered list of executable phases or repeat blocks
 
-### `constants`
+## Phases
 
-Набор констант, которые можно переиспользовать внутри spec через `ref: "flow.<name>"`.
+A phase is the main user-visible stage in a declarative flow.
 
-Пример:
+Shape:
 
 ```json
 {
-  "constants": {
-    "autoReviewFixExtraPrompt": "Исправлять только блокеры, критикалы и важные"
-  }
+  "id": "plan",
+  "when": { "exists": { "ref": "params.taskKey" } },
+  "steps": []
 }
 ```
 
-### `phases`
+Fields:
 
-Верхний уровень `auto`.
+- `id` — non-empty phase id
+- `when?` — optional condition; false means the phase is skipped
+- `steps` — ordered list of steps
 
-Именно `phase.id` сейчас становится:
+For resumable flows such as `auto-golang`, phase ids are the identifiers shown in `--help-phases`, persisted in flow state, and used by restart-from-phase logic.
 
-- phase id в `auto --help-phases`
-- id phase в persisted flow state для `auto`
-- значением для `auto --from <phase>`
+They are also the primary units the TUI can present to an operator when showing workflow progress.
 
-Примеры:
+## Repeat Blocks
 
-- `plan`
-- `task_describe`
-- `implement`
-- `test_after_implement`
-- `review_1`
-- `review_fix_1`
+The flow compiler supports repeated phase groups:
 
-### `steps`
+```json
+{
+  "repeat": {
+    "var": "iteration",
+    "from": 1,
+    "to": 3
+  },
+  "phases": [
+    {
+      "id": "review_{iteration}",
+      "steps": []
+    }
+  ]
+}
+```
 
-Внутренние действия внутри одной phase.
+At compile time, repeated phases are expanded and receive `repeatVars`. Those values are later available via `ref: "repeat.<name>"`.
 
-Например, phase `plan` состоит из двух steps:
+## Steps
 
-1. `fetch_jira`
-2. `run_codex_plan`
+A step is the executable unit inside a phase.
 
-## Что делает step
-
-Каждый step описывает:
-
-- `id` — стабильный идентификатор шага внутри phase
-- `node` — какой runtime node нужно вызвать
-- `when` — условие запуска
-- `prompt` — как собрать prompt
-- `params` — какие runtime-параметры передать в node
-- `expect` — что должно быть истинно после выполнения step
-- `after` — какие side effects выполнить после успешного завершения step
-
-Для `codex` и `opencode` модель теперь тоже считается частью `params`.
-
-Важно:
-
-- runtime во время текущего запуска может держать `step.value` и `step.outputs` в памяти, чтобы следующие шаги могли ссылаться на результаты через `ref`
-- persisted flow state сохраняет только компактный execution state: статусы, timestamps, `repeatVars` и `stopFlow`
-- большие agent outputs в persisted flow state не сериализуются
-
-Общий шаблон:
+Shape:
 
 ```json
 {
   "id": "run_codex_plan",
   "node": "codex-prompt",
-  "prompt": { "...": "..." },
-  "params": { "...": "..." },
-  "expect": [ { "...": "..." } ],
-  "after": [ { "...": "..." } ]
+  "when": { "exists": { "ref": "params.taskKey" } },
+  "prompt": {},
+  "params": {},
+  "expect": [],
+  "stopFlowIf": { "ref": "steps.run_codex_plan.stopFlow" },
+  "after": []
 }
 ```
 
-## Что делает `node`
+Fields:
 
-`node` в JSON не содержит реализации.
+- `id` — stable step id within the phase
+- `node` — runtime node kind from the node registry
+- `when?` — optional condition; false means the step is skipped
+- `prompt?` — declarative prompt binding for nodes that accept or require prompts
+- `params?` — runtime parameters passed to the node after value resolution
+- `expect?` — postconditions checked after the node completes
+- `stopFlowIf?` — condition that can terminate the remaining flow after a successful step
+- `after?` — post-step side effects
 
-Это ссылка на runtime node в коде.
+Node metadata controls whether a prompt is forbidden, optional, or required, and which params are mandatory.
 
-Примеры:
+From a harness-engineering perspective, steps are where a declarative workflow binds to concrete runtime capabilities without collapsing back into imperative scripting.
+
+## Nodes
+
+`node` values are references into the runtime node registry, not inline implementations.
+
+Examples in the current codebase include:
 
 - `jira-fetch`
-- `fetch-gitlab-diff`
 - `codex-prompt`
+- `opencode-prompt`
+- `flow-run`
+- `command-check`
+- `build-failure-summary`
+- `git-commit`
+- `telegram-notifier`
 
-Runtime находит node через registry:
+See:
 
 - [src/pipeline/node-registry.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/node-registry.ts)
-
-А сами node-ы живут в:
-
 - [src/pipeline/nodes/](/home/seko/Projects/ai/AgentWeaver/src/pipeline/nodes)
 
-Важно:
+## Prompt Binding
 
-- JSON не описывает subprocess напрямую
-- JSON не знает argv/env/docker flags
-- JSON только говорит: "вызови node `X` с такими params"
+`prompt` describes how to assemble the final prompt text before it is passed to a prompt-capable node.
 
-## Что делает `prompt`
-
-`prompt` отвечает только за сборку итогового текста prompt.
-
-Обычно внутри есть:
-
-- `templateRef` — ссылка на prompt template
-- `vars` — переменные для подстановки
-- `extraPrompt` — дополнительные указания
-- `format` — как оформить prompt
-
-Пример:
+Shape:
 
 ```json
-"prompt": {
+{
   "templateRef": "plan",
   "vars": {
     "jira_task_file": {
@@ -194,181 +214,80 @@ Runtime находит node через registry:
 }
 ```
 
-Это значит:
+Supported fields:
 
-1. взять шаблон `plan`
-2. вычислить переменные
-3. подставить их в шаблон
-4. при наличии добавить `extraPrompt`
-5. передать итоговую строку в `params.prompt` для node
+- `templateRef` — named prompt template from the prompt registry
+- `inlineTemplate` — inline string template instead of a named one
+- `vars` — variables used for template interpolation
+- `extraPrompt` — additional text appended via prompt runtime
+- `format` — currently `plain` or `task-prompt`
 
-Где это реализовано:
+At least one of `templateRef` or `inlineTemplate` must be present when `prompt` is defined.
+
+See:
 
 - [src/pipeline/prompt-registry.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/prompt-registry.ts)
 - [src/pipeline/prompt-runtime.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/prompt-runtime.ts)
 
-## Что делают `params`
+## Params
 
-`params` — это runtime input конкретного node.
+`params` are runtime inputs for the selected node.
 
-Примеры:
+Examples:
 
-Для `jira-fetch`:
+- `jira-fetch` may receive `jiraApiUrl` and `outputFile`
+- `codex-prompt` may receive `labelText`, `model`, `outputFile`, or other node-specific values
+- `flow-run` requires `fileName`
 
-- `jiraApiUrl`
-- `outputFile`
+Prompt text is not part of `params`; it is assembled separately through `prompt`.
 
-Для `codex-prompt`:
+## Value Resolution
 
-- `labelText`
-- `model`
+Most non-literal values in a flow spec are expressed with `ValueSpec`.
 
-То есть:
+Currently supported value forms:
 
-- `prompt` отвечает за текст задания
-- `params` отвечает за остальные runtime-параметры node
+- `{ "const": ... }`
+- `{ "ref": "..." }`
+- `{ "artifact": { ... } }`
+- `{ "artifactList": { ... } }`
+- `{ "template": "...", "vars": { ... } }`
+- `{ "appendPrompt": { "base": ..., "suffix": ... } }`
+- `{ "add": [ ... ] }`
+- `{ "concat": [ ... ] }`
+- `{ "list": [ ... ] }`
 
-Важно:
+### `const`
 
-- `params` не должны описывать flow-level postconditions
-- если нужно сказать, какие файлы обязаны появиться после шага, для этого есть `expect`
-- для `codex` и `opencode` именно `params.model` теперь определяет модель на уровне flow
-- summary-steps в built-in flow могут использовать prompt-ноды с `outputFile` и `summaryTitle`
-
-## Что делает `expect`
-
-`expect` — это flow-level postconditions.
-
-Они выполняются после завершения node.
-
-Сейчас поддерживаются:
-
-- `require-artifacts`
-- `require-structured-artifacts`
-- `require-file`
-- `step-output`
-
-Пример:
-
-```json
-"expect": [
-  {
-    "kind": "require-artifacts",
-    "paths": {
-      "artifactList": {
-        "kind": "plan-artifacts",
-        "taskKey": { "ref": "params.taskKey" }
-      }
-    },
-    "message": "Plan mode did not produce the required artifacts."
-  }
-]
-```
-
-Это значит:
-
-1. выполнить node
-2. вычислить `paths`
-3. проверить, что все эти файлы существуют
-4. если нет, упасть с `message`
-
-Для structured JSON-артефактов есть отдельная postcondition:
-
-```json
-"expect": [
-  {
-    "kind": "require-structured-artifacts",
-    "items": [
-      {
-        "path": {
-          "artifact": {
-            "kind": "review-json-file",
-            "taskKey": { "ref": "params.taskKey" },
-            "iteration": { "ref": "params.iteration" }
-          }
-        },
-        "schemaId": "review-findings/v1"
-      }
-    ],
-    "message": "Codex review produced invalid structured artifacts."
-  }
-]
-```
-
-Это значит:
-
-1. выполнить node
-2. вычислить пути к JSON-артефактам
-3. провалидировать каждый файл по указанной schema
-4. если JSON отсутствует или невалиден, упасть с `message`
-
-Где это реализовано:
-
-- [src/pipeline/declarative-flow-runner.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/declarative-flow-runner.ts)
-- [src/pipeline/checks.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/checks.ts)
-
-Важно:
-
-- если step задаёт `expect`, declarative runner использует именно его как источник postconditions
-- встроенные node-level checks для такого шага пропускаются, чтобы не было дублирования
-- legacy flow, которые вызывают node напрямую, продолжают использовать built-in checks node
-- `step-output` проверяется по runtime execution state текущего запуска, а не по persisted auto state на диске
-
-## Что делает `after`
-
-`after` — это declarative post-step side effects.
-
-В отличие от `expect`, это не валидация, а изменение runtime state после успешного шага.
-
-Сейчас поддерживается:
-
-- `set-summary-from-file`
-
-Пример:
-
-```json
-"after": [
-  {
-    "kind": "set-summary-from-file",
-    "path": {
-      "artifact": {
-        "kind": "task-summary-file",
-        "taskKey": { "ref": "params.taskKey" }
-      }
-    }
-  }
-]
-```
-
-Это значит:
-
-1. вычислить путь к файлу
-2. прочитать файл
-3. передать текст в `context.setSummary(...)`
-
-Такой механизм нужен, когда flow должен обновить interactive runtime state без отдельной special-case node.
-
-## Что делают `ref`, `artifact`, `artifactList`, `template`
-
-Это не значения сами по себе, а декларативные способы их вычислить.
+Returns the literal JSON value as-is.
 
 ### `ref`
 
-Ссылка на уже существующее значение.
+Reads another runtime value by path.
 
-Примеры:
+Supported ref scopes are:
+
+- `params`
+- `flow`
+- `context`
+- `repeat`
+- `steps`
+
+Examples:
 
 - `params.taskKey`
-- `params.jiraApiUrl`
-- `params.extraPrompt`
 - `flow.autoReviewFixExtraPrompt`
+- `context.cwd`
 - `repeat.iteration`
+- `steps.fetch_jira.outputs.outputFile`
+
+`steps.*` refs are validated against previously available steps. A step cannot depend on a later step.
 
 ### `artifact`
 
-Вычислить путь к одному артефакту.
+Resolves the path to a single known artifact kind.
 
-Пример:
+Example:
 
 ```json
 {
@@ -379,13 +298,13 @@ Runtime находит node через registry:
 }
 ```
 
-Это только вычисление пути, а не проверка существования файла.
+This computes a path only. It does not assert that the file exists.
 
 ### `artifactList`
 
-Вычислить список путей.
+Resolves to a list of artifact paths for a known artifact-list kind.
 
-Пример:
+Example:
 
 ```json
 {
@@ -398,99 +317,221 @@ Runtime находит node через registry:
 
 ### `template`
 
-Локальный string template для вычисления param.
+Interpolates a local string template using resolved variables.
 
-Пример:
+### `appendPrompt`
+
+Builds prompt-like text by appending `suffix` to an optional `base`.
+
+### `add`
+
+Resolves a list of values and adds them numerically.
+
+### `concat`
+
+Resolves a list of values and concatenates them as strings.
+
+### `list`
+
+Resolves a list of values and returns them as an array.
+
+## Conditions
+
+`when` and `stopFlowIf` use `ConditionSpec`.
+
+Supported condition forms:
+
+- `{ "ref": "..." }`
+- `{ "not": { ... } }`
+- `{ "all": [ ... ] }`
+- `{ "any": [ ... ] }`
+- `{ "equals": [valueA, valueB] }`
+- `{ "exists": valueSpec }`
+
+Conditions are evaluated at runtime after all referenced values have been resolved.
+
+## Expectations
+
+`expect` defines postconditions for a completed step.
+
+Currently supported expectation kinds:
+
+- `require-artifacts`
+- `require-structured-artifacts`
+- `require-file`
+- `step-output`
+
+### `require-artifacts`
+
+Expects a resolved string array of file paths and fails if required artifacts are missing.
+
+### `require-structured-artifacts`
+
+Expects a list of `{ path, schemaId }` items and validates each JSON artifact against the registered structured-artifact schema.
+
+### `require-file`
+
+Expects a single path to exist.
+
+### `step-output`
+
+Checks a runtime value from execution state. It can either:
+
+- assert truthiness of `value`
+- compare `value` to `equals`
+
+Important detail: `step-output` is evaluated against current execution state, not against serialized persisted auto state on disk.
+
+## `after` Actions
+
+`after` performs post-step side effects after a successful step.
+
+Currently supported action:
+
+- `set-summary-from-file`
+
+Example:
 
 ```json
 {
-  "template": "Running Codex review mode (iteration {iteration})",
-  "vars": {
-    "iteration": { "ref": "repeat.iteration" }
+  "kind": "set-summary-from-file",
+  "path": {
+    "artifact": {
+      "kind": "task-summary-file",
+      "taskKey": { "ref": "params.taskKey" }
+    }
   }
 }
 ```
 
-## Подробный разбор `plan`
+This reads the file and updates runtime summary state through `context.setSummary(...)`.
 
-Ниже тот же блок `plan`, но с пояснениями.
+## Nested Flows with `flow-run`
+
+The `flow-run` node executes another declarative flow by file name.
+
+Example:
 
 ```json
 {
-  "id": "plan",
-  "steps": [
+  "id": "run_review_loop",
+  "node": "flow-run",
+  "params": {
+    "fileName": { "const": "review-loop.json" },
+    "taskKey": { "ref": "params.taskKey" }
+  }
+}
+```
+
+Resolution rules:
+
+- if the file name matches exactly one built-in flow spec, it is used
+- if it matches exactly one project-local flow spec, it is used
+- ambiguous names fail validation/runtime
+- constant `fileName` values are validated up front
+
+## Persisted State vs Runtime State
+
+Declarative flow execution uses two different layers of state:
+
+- runtime execution state
+- persisted resumable state
+
+Runtime execution state includes:
+
+- phase and step statuses
+- step `value`
+- step `outputs`
+- repeat variables
+- termination flags
+
+Persisted resumable state is intentionally smaller and is used mainly for long-running resumable flows such as `auto-golang`.
+
+Persisted state keeps:
+
+- statuses
+- timestamps
+- repeat variables
+- stop/termination markers
+- selected launch profile
+
+Large prompt outputs and step payloads are not serialized there.
+
+That split matters operationally:
+
+- runtime state is rich enough for intra-run references and step chaining
+- persisted state is compact enough for resumable harness execution
+- the TUI and automation logic can expose flow progress without depending on raw agent transcripts
+
+## Minimal Example
+
+```json
+{
+  "kind": "flow",
+  "version": 1,
+  "constants": {
+    "summaryTitle": "Planning summary"
+  },
+  "phases": [
     {
-      "id": "fetch_jira",
-      "node": "jira-fetch",
-      "params": {
-        "jiraApiUrl": { "ref": "params.jiraApiUrl" },
-        "outputFile": {
-          "artifact": {
-            "kind": "jira-task-file",
-            "taskKey": { "ref": "params.taskKey" }
-          }
-        }
-      },
-      "expect": [
+      "id": "plan",
+      "steps": [
         {
-          "kind": "require-file",
-          "path": {
-            "artifact": {
-              "kind": "jira-task-file",
-              "taskKey": { "ref": "params.taskKey" }
+          "id": "fetch_jira",
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
             }
           },
-          "message": "Jira fetch node did not produce the Jira task file."
-        }
-      ]
-    },
-    {
-      "id": "run_codex_plan",
-      "node": "codex-prompt",
-      "prompt": {
-        "templateRef": "plan",
-        "vars": {
-          "jira_task_file": {
-            "artifact": {
-              "kind": "jira-task-file",
-              "taskKey": { "ref": "params.taskKey" }
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
             }
-          },
-          "design_file": {
-            "artifact": {
-              "kind": "design-file",
-              "taskKey": { "ref": "params.taskKey" }
-            }
-          },
-          "plan_file": {
-            "artifact": {
-              "kind": "plan-file",
-              "taskKey": { "ref": "params.taskKey" }
-            }
-          },
-          "qa_file": {
-            "artifact": {
-              "kind": "qa-file",
-              "taskKey": { "ref": "params.taskKey" }
-            }
-          }
+          ]
         },
-        "extraPrompt": { "ref": "params.extraPrompt" },
-        "format": "task-prompt"
-      },
-      "params": {
-        "labelText": { "const": "Running Codex planning mode" }
-      },
-      "expect": [
         {
-          "kind": "require-artifacts",
-          "paths": {
-            "artifactList": {
-              "kind": "plan-artifacts",
-              "taskKey": { "ref": "params.taskKey" }
-            }
+          "id": "run_codex_plan",
+          "node": "codex-prompt",
+          "prompt": {
+            "templateRef": "plan",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
           },
-          "message": "Plan mode did not produce the required artifacts."
+          "params": {
+            "labelText": { "const": "Running Codex planning mode" }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "paths": {
+                "artifactList": {
+                  "kind": "plan-artifacts",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Plan mode did not produce the required artifacts."
+            }
+          ]
         }
       ]
     }
@@ -498,257 +539,12 @@ Runtime находит node через registry:
 }
 ```
 
-### Phase `plan`
+## Practical Guidance
 
-```json
-{
-  "id": "plan"
-}
-```
-
-Это user-facing стадия `auto`.
-
-Именно она:
-
-- видна пользователю
-- хранится в auto state
-- используется в `auto --from plan`
-
-### Step `fetch_jira`
-
-```json
-{
-  "id": "fetch_jira",
-  "node": "jira-fetch"
-}
-```
-
-Этот step говорит:
-
-- взять runtime node `jira-fetch`
-- вычислить `params`
-- после выполнения проверить `expect`
-
-Его runtime params:
-
-```json
-"params": {
-  "jiraApiUrl": { "ref": "params.jiraApiUrl" },
-  "outputFile": {
-    "artifact": {
-      "kind": "jira-task-file",
-      "taskKey": { "ref": "params.taskKey" }
-    }
-  }
-}
-```
-
-После resolve node получит примерно:
-
-```json
-{
-  "jiraApiUrl": "https://jira.example.com/rest/api/...",
-  "outputFile": "/work/.agentweaver-DEMO-123/DEMO-123.json"
-}
-```
-
-Что делает node:
-
-- [src/pipeline/nodes/jira-fetch-node.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/nodes/jira-fetch-node.ts)
-- вызывает executor `jira-fetch`
-- создаёт Jira JSON файл
-
-Что делает `expect`:
-
-```json
-"expect": [
-  {
-    "kind": "require-file",
-    "path": {
-      "artifact": {
-        "kind": "jira-task-file",
-        "taskKey": { "ref": "params.taskKey" }
-      }
-    },
-    "message": "Jira fetch node did not produce the Jira task file."
-  }
-]
-```
-
-Это flow-level проверка:
-
-- какой файл должен появиться
-- с каким сообщением падать, если его нет
-
-То есть для `fetch_jira`:
-
-- `params` задают input node
-- `expect` задаёт postcondition flow
-
-### Step `run_codex_plan`
-
-```json
-{
-  "id": "run_codex_plan",
-  "node": "codex-prompt"
-}
-```
-
-Этот step говорит:
-
-- взять generic node `codex-prompt`
-- собрать для него prompt
-- передать runtime params
-- после выполнения проверить expected outputs
-
-#### Что делает `prompt`
-
-```json
-"prompt": {
-  "templateRef": "plan",
-  "vars": {
-    "jira_task_file": "...",
-    "design_file": "...",
-    "plan_file": "...",
-    "qa_file": "..."
-  },
-  "extraPrompt": { "ref": "params.extraPrompt" },
-  "format": "task-prompt"
-}
-```
-
-Это значит:
-
-- взять template `plan`
-- вычислить пути к файлам
-- подставить их
-- при наличии добавить `extraPrompt`
-
-Итог уйдёт в `params.prompt` для node.
-
-#### Что делает `params`
-
-```json
-"params": {
-  "labelText": { "const": "Running Codex planning mode" }
-}
-```
-
-Это уже runtime contract node.
-
-Здесь сказано только:
-
-- что показать в UI перед запуском
-
-Node получит примерно:
-
-```json
-{
-  "prompt": "<готовый текст prompt>",
-  "labelText": "Running Codex planning mode"
-}
-```
-
-#### Что делает `expect`
-
-```json
-"expect": [
-  {
-    "kind": "require-artifacts",
-    "paths": {
-      "artifactList": {
-        "kind": "plan-artifacts",
-        "taskKey": { "ref": "params.taskKey" }
-      }
-    },
-    "message": "Plan mode did not produce the required artifacts."
-  }
-]
-```
-
-Это уже не runtime input node.
-
-Это описание того, что flow считает корректным результатом шага:
-
-- после выполнения должны существовать `design`, `plan`, `qa`
-
-То есть на примере `plan` ответственность распределена так:
-
-- JSON `prompt` описывает текст задания
-- JSON `params` описывает runtime input node
-- JSON `expect` описывает expected outputs
-- node runtime выполняет работу
-- flow runtime проверяет postconditions
-
-## Итоговое правило ответственности
-
-### В JSON spec живёт
-
-- sequencing
-- phase ids
-- выбор node
-- prompt template
-- prompt variables
-- runtime params node
-- flow-level postconditions через `expect`
-
-### В runtime node живёт
-
-- вызов executor
-- печать UI
-- внутренний runtime contract node
-- node-specific checks, если они являются частью самого node
-
-### В declarative flow runner живёт
-
-- resolve `prompt`
-- resolve `params`
-- выполнение `node`
-- выполнение `expect`
-- хранение runtime `step.value`/`step.outputs` в памяти только на время текущего запуска
-
-### В persisted auto state живёт
-
-- phase statuses
-- step statuses
-- timestamps
-- `repeatVars`
-- `terminationReason`
-- `stopFlow`
-
-И не живёт:
-
-- полный agent `output`
-- `step.value`
-- `step.outputs`
-
-## Почему `expect` лучше, чем старый `requiredArtifacts` в `params`
-
-Потому что теперь граница ответственности чище:
-
-- `params` описывает только runtime input node
-- `expect` описывает только flow-level postconditions
-
-Node больше не должен знать, какие именно артефакты flow считает обязательными, если это не часть собственного runtime contract.
-
-## Где смотреть реализацию
-
-- spec: [src/pipeline/flow-specs/auto.json](/home/seko/Projects/ai/AgentWeaver/src/pipeline/flow-specs/auto.json)
-- loader: [src/pipeline/spec-loader.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-loader.ts)
-- validator: [src/pipeline/spec-validator.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-validator.ts)
-- compiler: [src/pipeline/spec-compiler.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-compiler.ts)
-- value resolver: [src/pipeline/value-resolver.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/value-resolver.ts)
-- prompt runtime: [src/pipeline/prompt-runtime.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/prompt-runtime.ts)
-- declarative runner: [src/pipeline/declarative-flow-runner.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/declarative-flow-runner.ts)
-- node registry: [src/pipeline/node-registry.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/node-registry.ts)
-
-## Короткий итог
-
-На примере `plan`:
-
-- `fetch_jira` создаёт Jira JSON
-- `run_codex_plan` запускает Codex с prompt `plan`
-- `prompt` отвечает за текст задания
-- `params` отвечает за runtime input node
-- `expect` отвечает за обязательные выходные артефакты
-- flow runtime проверяет, что эти файлы реально появились
+- Use flow JSON to describe orchestration, not subprocess details.
+- Put executor-specific behavior into nodes and executors, not into ad-hoc flow fields.
+- Use `expect` to define postconditions explicitly instead of relying on implicit side effects.
+- Prefer structured JSON artifacts for machine-readable contracts between stages.
+- Keep nested flow file names unique if you plan to call them via `flow-run`.
+- When changing the format, update `spec-types.ts`, validator, resolver, and this document together.
+- When designing a new workflow, think in harness terms first: operator-visible phases, durable artifacts, explicit postconditions, and resumability boundaries.
