@@ -65,6 +65,7 @@ import type { ExpandedPhaseExecutionState, ExpandedPhaseSpec, ExpandedStepSpec, 
 import type { NodeCheckSpec, PipelineContext } from "./pipeline/types.js";
 import { evaluateCondition, resolveValue, type DeclarativeResolverContext } from "./pipeline/value-resolver.js";
 import { resolveCmd } from "./runtime/command-resolution.js";
+import { loadTieredEnv } from "./runtime/env-loader.js";
 import { agentweaverHome } from "./runtime/agentweaver-home.js";
 import { runCommand } from "./runtime/process-runner.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
@@ -575,36 +576,6 @@ function printAutoCommonPhasesHelp(): void {
   printPanel("Auto-Common Phases", phaseLines.join("\n"), "magenta");
 }
 
-function loadEnvFile(envFilePath: string): void {
-  if (!existsSync(envFilePath)) {
-    return;
-  }
-
-  const lines = readFileSync(envFilePath, "utf8").split(/\r?\n/);
-  for (const rawLine of lines) {
-    let line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-    if (line.startsWith("export ")) {
-      line = line.slice(7).trim();
-    }
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex < 0) {
-      continue;
-    }
-    const key = line.slice(0, separatorIndex).trim();
-    if (!key || process.env[key] !== undefined) {
-      continue;
-    }
-    let value = line.slice(separatorIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    process.env[key] = value;
-  }
-}
-
 function nextReviewIterationForTask(taskKey: string): number {
   let maxIndex = 0;
   const workspaceDir = scopeWorkspaceDir(taskKey);
@@ -636,7 +607,6 @@ function buildBaseConfig(
     verbose?: boolean;
   } = {},
 ): BaseConfig {
-  const homeDir = agentweaverHome(PACKAGE_ROOT);
   return {
     command,
     jiraRef: options.jiraRef ?? null,
@@ -1713,7 +1683,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
-  loadEnvFile(path.join(process.cwd(), ".env"));
+  loadTieredEnv(process.cwd());
 
   let forceRefresh = false;
   const args = [...argv];
