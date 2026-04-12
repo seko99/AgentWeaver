@@ -44,6 +44,8 @@ import {
   gitStatusJsonFile,
   gitCommitMessageJsonFile,
   gitCommitInputJsonFile,
+  selectFilesOutputJsonFile,
+  commitMessageOutputJsonFile,
   gitDiffFile as gitDiffFileHelper,
 } from "../artifacts.js";
 import { TaskRunnerError } from "../errors.js";
@@ -235,6 +237,10 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return gitCommitMessageJsonFile(taskKey);
     case "git-commit-input-json-file":
       return gitCommitInputJsonFile(taskKey);
+    case "select-files-output-json-file":
+      return selectFilesOutputJsonFile(taskKey);
+    case "commit-message-output-json-file":
+      return commitMessageOutputJsonFile(taskKey);
   }
 }
 

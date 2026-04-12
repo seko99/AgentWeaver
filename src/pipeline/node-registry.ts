@@ -2,6 +2,7 @@ import { buildFailureSummaryNode } from "./nodes/build-failure-summary-node.js";
 import { buildReviewFixPromptNode } from "./nodes/build-review-fix-prompt-node.js";
 import { codexPromptNode } from "./nodes/codex-prompt-node.js";
 import { commandCheckNode } from "./nodes/command-check-node.js";
+import { commitMessageFormNode } from "./nodes/commit-message-form-node.js";
 import { fetchGitLabDiffNode } from "./nodes/fetch-gitlab-diff-node.js";
 import { fetchGitLabReviewNode } from "./nodes/fetch-gitlab-review-node.js";
 import { fileCheckNode } from "./nodes/file-check-node.js";
@@ -20,6 +21,7 @@ import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.js";
 import { readFileNode } from "./nodes/read-file-node.js";
 import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
+import { selectFilesFormNode } from "./nodes/select-files-form-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
 import { telegramNotifierNode } from "./nodes/telegram-notifier-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
@@ -32,6 +34,7 @@ export type NodeKind =
   | "build-review-fix-prompt"
   | "codex-prompt"
   | "command-check"
+  | "commit-message-form"
   | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
   | "file-check"
@@ -50,6 +53,7 @@ export type NodeKind =
   | "planning-questions-form"
   | "read-file"
   | "review-findings-form"
+  | "select-files-form"
   | "summary-file-load"
   | "telegram-notify"
   | "user-input"
@@ -78,6 +82,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "build-review-fix-prompt": buildReviewFixPromptNode as unknown as AnyNodeDefinition,
   "codex-prompt": codexPromptNode as unknown as AnyNodeDefinition,
   "command-check": commandCheckNode as unknown as AnyNodeDefinition,
+  "commit-message-form": commitMessageFormNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-diff": fetchGitLabDiffNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-review": fetchGitLabReviewNode as unknown as AnyNodeDefinition,
   "file-check": fileCheckNode as unknown as AnyNodeDefinition,
@@ -96,6 +101,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "planning-questions-form": planningQuestionsFormNode as unknown as AnyNodeDefinition,
   "read-file": readFileNode as unknown as AnyNodeDefinition,
   "review-findings-form": reviewFindingsFormNode as unknown as AnyNodeDefinition,
+  "select-files-form": selectFilesFormNode as unknown as AnyNodeDefinition,
   "summary-file-load": summaryFileLoadNode as unknown as AnyNodeDefinition,
   "telegram-notify": telegramNotifierNode as unknown as AnyNodeDefinition,
   "user-input": userInputNode as unknown as AnyNodeDefinition,
@@ -129,6 +135,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["commands"],
     executors: ["command-check"],
+  },
+  "commit-message-form": {
+    kind: "commit-message-form",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["commitMessageFile", "formId", "title", "outputFile"],
   },
   "fetch-gitlab-diff": {
     kind: "fetch-gitlab-diff",
@@ -213,6 +225,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["reviewFindingsJsonFile", "formId", "title"],
+  },
+  "select-files-form": {
+    kind: "select-files-form",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["gitStatusJsonFile", "formId", "title", "outputFile"],
   },
   "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden", requiredParams: ["path"] },
   "telegram-notify": {

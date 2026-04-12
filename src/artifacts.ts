@@ -224,6 +224,14 @@ export function gitCommitInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `git-commit-input-${taskKey}.json`);
 }
 
+export function selectFilesOutputJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `select-files-output-${taskKey}.json`);
+}
+
+export function commitMessageOutputJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `commit-message-output-${taskKey}.json`);
+}
+
 export function mrDescriptionFile(taskKey: string, iteration?: number): string {
   return versionedMarkdownArtifactFile(taskKey, "mr-description", iteration);
 }
