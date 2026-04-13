@@ -234,7 +234,14 @@ export async function requestUserInputInTerminal(form: UserInputFormDefinition):
         continue;
       }
 
-      const options = field.options.map((option, index) => `${index + 1}. ${option.label}`).join("\n");
+      const options = field.options
+        .map((option, index) => {
+          const description = option.description
+            ? `\n   ${option.description.split("\n").join("\n   ")}`
+            : "";
+          return `${index + 1}. ${option.label}${description}`;
+        })
+        .join("\n");
       process.stdout.write(`${field.label}\n${options}\n`);
       if (field.type === "single-select") {
         while (true) {
