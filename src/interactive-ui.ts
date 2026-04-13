@@ -234,6 +234,8 @@ export class InteractiveUi {
   private readonly confirm: any;
   private readonly formModal: any;
   private readonly formTextInput: any;
+  private readonly formBooleanInput: any;
+  private readonly formSelectInput: any;
   private readonly flowMap: Map<string, InteractiveFlowDefinition>;
   private readonly flowTree: FlowTreeNode[];
   private readonly expandedFlowFolders = new Set<string>();
@@ -429,6 +431,47 @@ export class InteractiveUi {
       style: {
         border: { fg: "cyan" },
         fg: "white",
+      },
+    });
+
+    this.formBooleanInput = blessed.checkbox({
+      parent: this.formModal,
+      top: 0,
+      left: 0,
+      width: "100%-2",
+      height: 3,
+      hidden: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      border: "line",
+      style: {
+        border: { fg: "cyan" },
+        fg: "white",
+      },
+    });
+
+    this.formSelectInput = blessed.list({
+      parent: this.formModal,
+      top: 0,
+      left: 0,
+      width: "100%-2",
+      height: 8,
+      hidden: true,
+      tags: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      border: "line",
+      scrollable: true,
+      alwaysScroll: true,
+      style: {
+        border: { fg: "cyan" },
+        fg: "white",
+        selected: {
+          fg: "black",
+          bg: "green",
+        },
       },
     });
 
@@ -963,112 +1006,12 @@ export class InteractiveUi {
     return Math.max(24, rawWidth - 2 - paddingLeft - paddingRight);
   }
 
-  private wrapFormText(text: string, width: number): string[] {
-    const normalized = text.trim();
-    if (!normalized) {
-      return [""];
-    }
-
-    const wrapped: string[] = [];
-    for (const paragraph of normalized.split("\n")) {
-      if (!paragraph.trim()) {
-        wrapped.push("");
-        continue;
-      }
-
-      let remaining = paragraph.trim();
-      while (remaining.length > width) {
-        let splitAt = remaining.lastIndexOf(" ", width);
-        if (splitAt <= 0) {
-          splitAt = width;
-        }
-        wrapped.push(remaining.slice(0, splitAt).trimEnd());
-        remaining = remaining.slice(splitAt).trimStart();
-      }
-      wrapped.push(remaining);
-    }
-
-    return wrapped.length > 0 ? wrapped : [""];
-  }
-
-  private renderSelectableFieldWindow(
-    field: UserInputFieldDefinition & { type: "single-select" | "multi-select" },
-    value: UserInputFormValues[string] | undefined,
-    currentOptionIndex: number,
-    availableLines: number,
-  ): string[] {
-    const contentWidth = this.formModalInnerWidth();
-    const firstLineWidth = Math.max(12, contentWidth - 6);
-    const continuationWidth = Math.max(8, contentWidth - 6);
-    const descriptionWidth = Math.max(8, contentWidth - 4);
-
-    const renderedOptions = field.options.map((option, index) => {
-      const isCursor = index === currentOptionIndex;
-      const isSelected =
-        field.type === "single-select"
-          ? value === option.value
-          : Array.isArray(value) && value.includes(option.value);
-      const cursor = isCursor ? "{cyan-fg}>{/cyan-fg}" : " ";
-      const marker = isSelected ? "[x]" : "[ ]";
-      const labelLines = this.wrapFormText(option.label, firstLineWidth);
-      const itemLines = [`${cursor} ${marker} ${labelLines[0] ?? ""}`];
-
-      for (const continuation of labelLines.slice(1)) {
-        itemLines.push(`      ${continuation.slice(0, continuationWidth)}`);
-      }
-
-      if (option.description?.trim()) {
-        for (const descriptionLine of this.wrapFormText(option.description, descriptionWidth)) {
-          itemLines.push(`    {gray-fg}${descriptionLine}{/gray-fg}`);
-        }
-      }
-
-      return itemLines;
-    });
-
-    if (renderedOptions.length === 0) {
-      return ["{gray-fg}Нет доступных вариантов.{/gray-fg}"];
-    }
-
-    let startIndex = 0;
-    let selectedStartLine = 0;
-    for (let index = 0; index < currentOptionIndex; index += 1) {
-      selectedStartLine += renderedOptions[index]?.length ?? 0;
-    }
-
-    let visibleLines = 0;
-    for (let index = 0; index < renderedOptions.length; index += 1) {
-      const itemHeight = renderedOptions[index]?.length ?? 0;
-      if (index < currentOptionIndex && selectedStartLine + itemHeight > availableLines) {
-        startIndex = index + 1;
-        selectedStartLine -= itemHeight;
-      }
-    }
-
-    const output: string[] = [];
-    for (let index = startIndex; index < renderedOptions.length; index += 1) {
-      const itemLines = renderedOptions[index] ?? [];
-      if (output.length > 0 && output.length + itemLines.length > availableLines) {
-        break;
-      }
-      if (output.length === 0 && itemLines.length > availableLines) {
-        output.push(...itemLines.slice(0, availableLines));
-        break;
-      }
-      output.push(...itemLines);
-      visibleLines += itemLines.length;
-      if (visibleLines >= availableLines) {
-        break;
-      }
-    }
-
-    return output;
-  }
-
   private renderActiveForm(): void {
     if (!this.activeFormSession) {
       this.formModal.hide();
       this.hideFormTextInput();
+      this.hideFormBooleanInput();
+      this.hideFormSelectInput();
       this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | Esc: close/interrupt | h: help | Tab: switch pane | q: exit ");
       this.requestRender();
       return;
@@ -1098,12 +1041,22 @@ export class InteractiveUi {
 
     if (field.type === "boolean") {
       this.hideFormTextInput();
+      this.hideFormSelectInput();
+      this.ensureFormBooleanInputVisible(headerLines.length, footerLines.length);
       const current = session.values[field.id] === true;
-      lines.push(`${current ? "[x]" : "[ ]"} ${field.label}`);
+      this.formBooleanInput.setText(field.label);
+      if (current) {
+        this.formBooleanInput.check();
+      } else {
+        this.formBooleanInput.uncheck();
+      }
+      lines.push("{cyan-fg}Use the checkbox below.{/cyan-fg}");
       lines.push("");
       lines.push("Space: toggle");
       lines.push("Enter/Tab: next field");
     } else if (field.type === "text") {
+      this.hideFormBooleanInput();
+      this.hideFormSelectInput();
       this.ensureFormTextInputVisible(field, headerLines.length, footerLines.length);
       const current = String(session.values[field.id] ?? "");
       this.formTextInput.setValue(current || field.placeholder || "");
@@ -1114,10 +1067,21 @@ export class InteractiveUi {
       lines.push("Tab: next field");
     } else {
       this.hideFormTextInput();
+      this.hideFormBooleanInput();
+      this.ensureFormSelectInputVisible(headerLines.length, footerLines.length);
       const currentOptionIndex = Math.min(session.currentOptionIndex, Math.max(0, field.options.length - 1));
       session.currentOptionIndex = currentOptionIndex;
-      const availableLines = Math.max(3, this.formModalInnerHeight() - headerLines.length - footerLines.length - 3);
-      lines.push(...this.renderSelectableFieldWindow(field, session.values[field.id], currentOptionIndex, availableLines));
+      const selectedValues = field.type === "single-select"
+        ? [String(session.values[field.id] ?? "")]
+        : Array.isArray(session.values[field.id]) ? (session.values[field.id] as string[]) : [];
+      const items = field.options.map((option) => {
+        const isSelected = selectedValues.includes(option.value);
+        const marker = isSelected ? "[x]" : "[ ]";
+        return `${marker} ${option.label}`;
+      });
+      this.formSelectInput.setItems(items);
+      this.formSelectInput.select(currentOptionIndex);
+      lines.push("{cyan-fg}Use the list below.{/cyan-fg}");
       lines.push("");
       lines.push("Up/Down: move");
       lines.push("Space: select/toggle");
@@ -1132,8 +1096,10 @@ export class InteractiveUi {
     this.formModal.setFront();
     if (field.type === "text") {
       this.formTextInput.focus();
+    } else if (field.type === "boolean") {
+      this.formBooleanInput.focus();
     } else {
-      this.formModal.focus();
+      this.formSelectInput.focus();
     }
     this.footer.setContent(" Form: Space select | Tab next | Shift+Tab prev | Ctrl+S submit | Esc cancel ");
     this.requestRender();
@@ -1144,6 +1110,8 @@ export class InteractiveUi {
       return;
     }
     this.syncActiveTextFieldValue();
+    this.syncActiveBooleanFieldValue();
+    this.syncActiveSelectFieldValue();
     const nextIndex = Math.min(
       this.activeFormSession.form.fields.length - 1,
       Math.max(0, this.activeFormSession.currentFieldIndex + delta),
@@ -1167,9 +1135,43 @@ export class InteractiveUi {
     this.formTextInput.focus();
   }
 
+  private ensureFormBooleanInputVisible(headerLineCount: number, footerLineCount: number): void {
+    const reservedTop = Math.max(1, headerLineCount + 1);
+    const availableHeight = Math.max(3, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
+    this.formBooleanInput.top = reservedTop;
+    this.formBooleanInput.left = 0;
+    this.formBooleanInput.width = Math.max(24, this.formModalInnerWidth() - 2);
+    this.formBooleanInput.height = Math.min(4, availableHeight);
+    this.formBooleanInput.show();
+    this.formBooleanInput.setFront();
+    this.formBooleanInput.focus();
+  }
+
+  private ensureFormSelectInputVisible(headerLineCount: number, footerLineCount: number): void {
+    const reservedTop = Math.max(1, headerLineCount + 1);
+    const availableHeight = Math.max(4, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
+    this.formSelectInput.top = reservedTop;
+    this.formSelectInput.left = 0;
+    this.formSelectInput.width = Math.max(24, this.formModalInnerWidth() - 2);
+    this.formSelectInput.height = availableHeight;
+    this.formSelectInput.show();
+    this.formSelectInput.setFront();
+    this.formSelectInput.focus();
+  }
+
   private hideFormTextInput(): void {
     this.formTextInput.hide();
     this.formTextInput.blur();
+  }
+
+  private hideFormBooleanInput(): void {
+    this.formBooleanInput.hide();
+    this.formBooleanInput.blur();
+  }
+
+  private hideFormSelectInput(): void {
+    this.formSelectInput.hide();
+    this.formSelectInput.blur();
   }
 
   private syncActiveTextFieldValue(): void {
@@ -1182,14 +1184,23 @@ export class InteractiveUi {
     session.values[field.id] = nextValue;
   }
 
-  private moveActiveFormOption(delta: 1 | -1): void {
+  private syncActiveBooleanFieldValue(): void {
+    const session = this.activeFormSession;
     const field = this.currentFormField();
-    if (!this.activeFormSession || !field || (field.type !== "single-select" && field.type !== "multi-select")) {
+    if (!session || !field || field.type !== "boolean") {
       return;
     }
-    const nextIndex = Math.min(field.options.length - 1, Math.max(0, this.activeFormSession.currentOptionIndex + delta));
-    this.activeFormSession.currentOptionIndex = nextIndex;
-    this.renderActiveForm();
+    session.values[field.id] = this.formBooleanInput.checked === true;
+  }
+
+  private syncActiveSelectFieldValue(): void {
+    const session = this.activeFormSession;
+    const field = this.currentFormField();
+    if (!session || !field || (field.type !== "single-select" && field.type !== "multi-select")) {
+      return;
+    }
+    const selectedIndex = this.formSelectInput.selected ?? session.currentOptionIndex;
+    session.currentOptionIndex = Math.max(0, Math.min(field.options.length - 1, selectedIndex));
   }
 
   private toggleActiveFormValue(): void {
@@ -1234,6 +1245,8 @@ export class InteractiveUi {
       return;
     }
     this.syncActiveTextFieldValue();
+    this.syncActiveBooleanFieldValue();
+    this.syncActiveSelectFieldValue();
     const session = this.activeFormSession;
     try {
       validateUserInputValues(session.form, session.values);
@@ -1245,6 +1258,8 @@ export class InteractiveUi {
       this.activeFormSession = null;
       this.formModal.hide();
       this.hideFormTextInput();
+      this.hideFormBooleanInput();
+      this.hideFormSelectInput();
       this.focusPane("flows");
       session.resolve(result);
       this.renderActiveForm();
@@ -1262,6 +1277,8 @@ export class InteractiveUi {
     this.activeFormSession = null;
     this.formModal.hide();
     this.hideFormTextInput();
+    this.hideFormBooleanInput();
+    this.hideFormSelectInput();
     this.focusPane("flows");
     session.reject(new TaskRunnerError(`User cancelled form '${session.form.formId}'.`));
     this.renderActiveForm();
@@ -1275,6 +1292,8 @@ export class InteractiveUi {
     this.activeFormSession = null;
     this.formModal.hide();
     this.hideFormTextInput();
+    this.hideFormBooleanInput();
+    this.hideFormSelectInput();
     this.focusPane("flows");
     session.reject(new FlowInterruptedError(message));
     this.renderActiveForm();
@@ -1328,11 +1347,15 @@ export class InteractiveUi {
     }
 
     if (key.name === "up") {
-      this.moveActiveFormOption(-1);
+      this.formSelectInput.up(1);
+      this.syncActiveSelectFieldValue();
+      this.requestRender();
       return;
     }
     if (key.name === "down") {
-      this.moveActiveFormOption(1);
+      this.formSelectInput.down(1);
+      this.syncActiveSelectFieldValue();
+      this.requestRender();
       return;
     }
     if (key.name === "space") {
