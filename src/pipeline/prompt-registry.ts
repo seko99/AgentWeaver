@@ -2,6 +2,7 @@ import {
   BUG_ANALYZE_PROMPT_TEMPLATE,
   COMMIT_MESSAGE_PROMPT_TEMPLATE,
   GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE,
+  GITLAB_REVIEW_PROMPT_TEMPLATE,
   BUG_FIX_PROMPT_TEMPLATE,
   IMPLEMENT_PROMPT_TEMPLATE,
   JIRA_DESCRIPTION_PROMPT_TEMPLATE,
@@ -22,6 +23,7 @@ export type PromptTemplateRef =
   | "bug-fix"
   | "commit-message"
   | "gitlab-diff-review"
+  | "gitlab-review"
   | "implement"
   | "task-describe"
   | "mr-description"
@@ -40,6 +42,7 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "bug-fix": BUG_FIX_PROMPT_TEMPLATE,
   "commit-message": COMMIT_MESSAGE_PROMPT_TEMPLATE,
   "gitlab-diff-review": GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE,
+  "gitlab-review": GITLAB_REVIEW_PROMPT_TEMPLATE,
   implement: IMPLEMENT_PROMPT_TEMPLATE,
   "task-describe": JIRA_DESCRIPTION_PROMPT_TEMPLATE,
   "mr-description": MR_DESCRIPTION_PROMPT_TEMPLATE,

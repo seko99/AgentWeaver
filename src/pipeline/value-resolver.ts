@@ -32,6 +32,8 @@ import {
   qaFile,
   qaJsonFile,
   readyToMergeFile,
+  reviewAssessmentFile,
+  reviewAssessmentJsonFile,
   reviewFile,
   reviewFixFile,
   reviewFixJsonFile,
@@ -198,6 +200,16 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
         throw new TaskRunnerError("review-json-file requires iteration");
       }
       return reviewJsonFile(taskKey, iteration);
+    case "review-assessment-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("review-assessment-file requires iteration");
+      }
+      return reviewAssessmentFile(taskKey, iteration);
+    case "review-assessment-json-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("review-assessment-json-file requires iteration");
+      }
+      return reviewAssessmentJsonFile(taskKey, iteration);
     case "review-fix-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("review-fix-file requires iteration");

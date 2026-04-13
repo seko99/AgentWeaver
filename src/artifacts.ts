@@ -299,6 +299,14 @@ export function reviewFixJsonFile(taskKey: string, iteration: number): string {
   return artifactJsonFile("review-fix", taskKey, iteration);
 }
 
+export function reviewAssessmentFile(taskKey: string, iteration: number): string {
+  return artifactFile("review-assessment", taskKey, iteration);
+}
+
+export function reviewAssessmentJsonFile(taskKey: string, iteration: number): string {
+  return artifactJsonFile("review-assessment", taskKey, iteration);
+}
+
 export function reviewFixSelectionJsonFile(taskKey: string, iteration: number): string {
   return artifactJsonFile("review-fix-selection", taskKey, iteration);
 }

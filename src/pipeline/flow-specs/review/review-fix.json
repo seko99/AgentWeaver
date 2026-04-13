@@ -19,6 +19,7 @@
                 "iteration": { "ref": "params.latestIteration" }
               }
             },
+            "reviewAssessmentJsonFile": { "ref": "params.reviewAssessmentJsonFile" },
             "formId": { "const": "review-fix-selection" },
             "title": { "const": "Review-Fix Selection" },
             "description": {
