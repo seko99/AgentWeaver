@@ -58,7 +58,6 @@ type FlowStatusState = {
 type ActiveFormSession = {
   form: UserInputFormDefinition;
   values: UserInputFormValues;
-  textCursorPositions: Record<string, number>;
   currentFieldIndex: number;
   currentOptionIndex: number;
   resolve: (result: UserInputResult) => void;
@@ -234,6 +233,7 @@ export class InteractiveUi {
   private readonly help: any;
   private readonly confirm: any;
   private readonly formModal: any;
+  private readonly formTextInput: any;
   private readonly flowMap: Map<string, InteractiveFlowDefinition>;
   private readonly flowTree: FlowTreeNode[];
   private readonly expandedFlowFolders = new Set<string>();
@@ -406,6 +406,28 @@ export class InteractiveUi {
       style: {
         border: { fg: "magenta" },
         bg: "black",
+        fg: "white",
+      },
+    });
+
+    this.formTextInput = blessed.textarea({
+      parent: this.formModal,
+      top: 0,
+      left: 0,
+      width: "100%-2",
+      height: 3,
+      hidden: true,
+      inputOnFocus: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      scrollbar: {
+        ch: " ",
+        inverse: true,
+      },
+      border: "line",
+      style: {
+        border: { fg: "cyan" },
         fg: "white",
       },
     });
@@ -923,37 +945,6 @@ export class InteractiveUi {
     return this.activeFormSession.form.fields[this.activeFormSession.currentFieldIndex] ?? null;
   }
 
-  private renderTextInputValue(value: string, cursorIndex: number, placeholder?: string, rows = 1): string[] {
-    const hasValue = value.length > 0;
-    const rawLines = (hasValue ? value : placeholder || "Введите текст").split("\n");
-    const maxRows = Math.max(1, rows);
-    const safeCursorIndex = Math.max(0, Math.min(cursorIndex, value.length));
-    const valueLines = hasValue ? value.split("\n") : [""];
-    const cursorLine = hasValue ? value.slice(0, safeCursorIndex).split("\n").length - 1 : 0;
-    const startLine = hasValue ? Math.max(0, Math.min(cursorLine, valueLines.length - maxRows)) : 0;
-    const visibleLines = rawLines.slice(startLine, startLine + maxRows);
-    const contentWidth = visibleLines.reduce((max, line) => Math.max(max, line.length + 1), 0);
-    const frameWidth = Math.max(36, contentWidth + 6);
-    const innerWidth = Math.max(32, frameWidth - 4);
-    const renderedRows = Array.from({ length: maxRows }, (_, index) => {
-      const rawLine = visibleLines[index] ?? "";
-      const plainVisibleText = rawLine.length > innerWidth - 2 ? `${rawLine.slice(0, innerWidth - 5)}...` : rawLine;
-      const color = hasValue ? "white-fg" : "gray-fg";
-      let visibleText = plainVisibleText;
-      if (hasValue && startLine + index === cursorLine) {
-        const lineStartIndex = valueLines.slice(0, cursorLine).reduce((total, line) => total + line.length + 1, 0);
-        const cursorColumn = Math.max(0, Math.min(safeCursorIndex - lineStartIndex, plainVisibleText.length));
-        const before = plainVisibleText.slice(0, cursorColumn);
-        const charAtCursor = plainVisibleText[cursorColumn] ?? " ";
-        const after = plainVisibleText.slice(cursorColumn + (plainVisibleText[cursorColumn] ? 1 : 0));
-        visibleText = `${before}{black-fg}{yellow-bg}${charAtCursor}{/yellow-bg}{/black-fg}${after}`;
-      }
-      return `{cyan-fg}│{/cyan-fg}{black-bg} ${index === 0 ? "{green-fg}>{/green-fg}" : " "} {${color}}${visibleText.padEnd(innerWidth - 2, " ")}{/${color}} {/black-bg}{cyan-fg}│{/cyan-fg}`;
-    });
-
-    return [`{cyan-fg}┌${"─".repeat(frameWidth - 2)}┐{/cyan-fg}`, ...renderedRows, `{cyan-fg}└${"─".repeat(frameWidth - 2)}┘{/cyan-fg}`];
-  }
-
   private formModalInnerHeight(): number {
     const rawHeight = typeof this.formModal.height === "number" ? this.formModal.height : this.formModal?.lpos?.yi
       ? this.formModal.lpos.yl - this.formModal.lpos.yi + 1
@@ -1077,6 +1068,7 @@ export class InteractiveUi {
   private renderActiveForm(): void {
     if (!this.activeFormSession) {
       this.formModal.hide();
+      this.hideFormTextInput();
       this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | Esc: close/interrupt | h: help | Tab: switch pane | q: exit ");
       this.requestRender();
       return;
@@ -1105,20 +1097,23 @@ export class InteractiveUi {
     const lines = [...headerLines];
 
     if (field.type === "boolean") {
+      this.hideFormTextInput();
       const current = session.values[field.id] === true;
       lines.push(`${current ? "[x]" : "[ ]"} ${field.label}`);
       lines.push("");
       lines.push("Space: toggle");
       lines.push("Enter/Tab: next field");
     } else if (field.type === "text") {
+      this.ensureFormTextInputVisible(field, headerLines.length, footerLines.length);
       const current = String(session.values[field.id] ?? "");
-      const cursorIndex = Math.max(0, Math.min(session.textCursorPositions[field.id] ?? current.length, current.length));
-      lines.push(...this.renderTextInputValue(current, cursorIndex, field.placeholder, field.multiline ? Math.max(1, field.rows ?? 3) : 1));
+      this.formTextInput.setValue(current || field.placeholder || "");
+      lines.push("{cyan-fg}Use the standard editor below.{/cyan-fg}");
       lines.push("");
-      lines.push(field.multiline ? "Type text, Enter: new line, Left/Right/Home/End: move cursor" : "Type text, Left/Right/Home/End: move cursor");
-      lines.push("Backspace/Delete: delete character");
+      lines.push(field.multiline ? "Enter: new line" : "Enter: next field");
+      lines.push("Arrow/Home/End, Backspace/Delete: native editor controls");
       lines.push("Tab: next field");
     } else {
+      this.hideFormTextInput();
       const currentOptionIndex = Math.min(session.currentOptionIndex, Math.max(0, field.options.length - 1));
       session.currentOptionIndex = currentOptionIndex;
       const availableLines = Math.max(3, this.formModalInnerHeight() - headerLines.length - footerLines.length - 3);
@@ -1135,7 +1130,11 @@ export class InteractiveUi {
     this.formModal.setScroll(0);
     this.formModal.show();
     this.formModal.setFront();
-    this.formModal.focus();
+    if (field.type === "text") {
+      this.formTextInput.focus();
+    } else {
+      this.formModal.focus();
+    }
     this.footer.setContent(" Form: Space select | Tab next | Shift+Tab prev | Ctrl+S submit | Esc cancel ");
     this.requestRender();
   }
@@ -1144,6 +1143,7 @@ export class InteractiveUi {
     if (!this.activeFormSession) {
       return;
     }
+    this.syncActiveTextFieldValue();
     const nextIndex = Math.min(
       this.activeFormSession.form.fields.length - 1,
       Math.max(0, this.activeFormSession.currentFieldIndex + delta),
@@ -1151,6 +1151,35 @@ export class InteractiveUi {
     this.activeFormSession.currentFieldIndex = nextIndex;
     this.activeFormSession.currentOptionIndex = 0;
     this.renderActiveForm();
+  }
+
+  private ensureFormTextInputVisible(field: UserInputFieldDefinition & { type: "text" }, headerLineCount: number, footerLineCount: number): void {
+    const reservedTop = Math.max(1, headerLineCount + 1);
+    const availableHeight = Math.max(3, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
+    const desiredRows = field.multiline ? Math.max(3, field.rows ?? 3) : 1;
+    const inputHeight = Math.min(availableHeight, desiredRows + 2);
+    this.formTextInput.top = reservedTop;
+    this.formTextInput.left = 0;
+    this.formTextInput.width = Math.max(24, this.formModalInnerWidth() - 2);
+    this.formTextInput.height = inputHeight;
+    this.formTextInput.show();
+    this.formTextInput.setFront();
+    this.formTextInput.focus();
+  }
+
+  private hideFormTextInput(): void {
+    this.formTextInput.hide();
+    this.formTextInput.blur();
+  }
+
+  private syncActiveTextFieldValue(): void {
+    const session = this.activeFormSession;
+    const field = this.currentFormField();
+    if (!session || !field || field.type !== "text") {
+      return;
+    }
+    const nextValue = String(this.formTextInput.getValue() ?? "");
+    session.values[field.id] = nextValue;
   }
 
   private moveActiveFormOption(delta: 1 | -1): void {
@@ -1200,77 +1229,11 @@ export class InteractiveUi {
     }
   }
 
-  private appendActiveFormText(ch: string, key: { name?: string; ctrl?: boolean; meta?: boolean }, appendNewline = false): void {
-    const session = this.activeFormSession;
-    const field = this.currentFormField();
-    if (!session || !field || field.type !== "text") {
-      return;
-    }
-    const current = String(session.values[field.id] ?? "");
-    const cursorIndex = Math.max(0, Math.min(session.textCursorPositions[field.id] ?? current.length, current.length));
-    if (key.name === "backspace") {
-      if (cursorIndex <= 0) {
-        return;
-      }
-      session.values[field.id] = `${current.slice(0, cursorIndex - 1)}${current.slice(cursorIndex)}`;
-      session.textCursorPositions[field.id] = cursorIndex - 1;
-      this.renderActiveForm();
-      return;
-    }
-    if (key.name === "delete") {
-      if (cursorIndex >= current.length) {
-        return;
-      }
-      session.values[field.id] = `${current.slice(0, cursorIndex)}${current.slice(cursorIndex + 1)}`;
-      session.textCursorPositions[field.id] = cursorIndex;
-      this.renderActiveForm();
-      return;
-    }
-    if (appendNewline) {
-      session.values[field.id] = `${current.slice(0, cursorIndex)}\n${current.slice(cursorIndex)}`;
-      session.textCursorPositions[field.id] = cursorIndex + 1;
-      this.renderActiveForm();
-      return;
-    }
-    if (key.ctrl || key.meta || !ch || ch === "\r" || ch === "\n" || ch === "\t") {
-      return;
-    }
-    session.values[field.id] = `${current.slice(0, cursorIndex)}${ch}${current.slice(cursorIndex)}`;
-    session.textCursorPositions[field.id] = cursorIndex + ch.length;
-    this.renderActiveForm();
-  }
-
-  private moveActiveFormTextCursor(delta: number): void {
-    const session = this.activeFormSession;
-    const field = this.currentFormField();
-    if (!session || !field || field.type !== "text") {
-      return;
-    }
-    const current = String(session.values[field.id] ?? "");
-    const cursorIndex = Math.max(0, Math.min(session.textCursorPositions[field.id] ?? current.length, current.length));
-    session.textCursorPositions[field.id] = Math.max(0, Math.min(current.length, cursorIndex + delta));
-    this.renderActiveForm();
-  }
-
-  private moveActiveFormTextCursorToBoundary(position: "start" | "end"): void {
-    const session = this.activeFormSession;
-    const field = this.currentFormField();
-    if (!session || !field || field.type !== "text") {
-      return;
-    }
-    const current = String(session.values[field.id] ?? "");
-    const cursorIndex = Math.max(0, Math.min(session.textCursorPositions[field.id] ?? current.length, current.length));
-    const lineStart = current.lastIndexOf("\n", Math.max(0, cursorIndex - 1)) + 1;
-    const lineEndIndex = current.indexOf("\n", cursorIndex);
-    const lineEnd = lineEndIndex === -1 ? current.length : lineEndIndex;
-    session.textCursorPositions[field.id] = position === "start" ? lineStart : lineEnd;
-    this.renderActiveForm();
-  }
-
   private submitActiveForm(): void {
     if (!this.activeFormSession) {
       return;
     }
+    this.syncActiveTextFieldValue();
     const session = this.activeFormSession;
     try {
       validateUserInputValues(session.form, session.values);
@@ -1281,6 +1244,7 @@ export class InteractiveUi {
       };
       this.activeFormSession = null;
       this.formModal.hide();
+      this.hideFormTextInput();
       this.focusPane("flows");
       session.resolve(result);
       this.renderActiveForm();
@@ -1297,6 +1261,7 @@ export class InteractiveUi {
     const session = this.activeFormSession;
     this.activeFormSession = null;
     this.formModal.hide();
+    this.hideFormTextInput();
     this.focusPane("flows");
     session.reject(new TaskRunnerError(`User cancelled form '${session.form.formId}'.`));
     this.renderActiveForm();
@@ -1309,6 +1274,7 @@ export class InteractiveUi {
     const session = this.activeFormSession;
     this.activeFormSession = null;
     this.formModal.hide();
+    this.hideFormTextInput();
     this.focusPane("flows");
     session.reject(new FlowInterruptedError(message));
     this.renderActiveForm();
@@ -1337,31 +1303,16 @@ export class InteractiveUi {
     }
 
     if (field.type === "text") {
-      if (key.name === "left") {
-        this.moveActiveFormTextCursor(-1);
-        return;
-      }
-      if (key.name === "right") {
-        this.moveActiveFormTextCursor(1);
-        return;
-      }
-      if (key.name === "home") {
-        this.moveActiveFormTextCursorToBoundary("start");
-        return;
-      }
-      if (key.name === "end") {
-        this.moveActiveFormTextCursorToBoundary("end");
-        return;
-      }
       if (key.name === "enter") {
-        if (field.multiline) {
-          this.appendActiveFormText(ch, key, true);
-        } else {
+        if (!field.multiline) {
+          this.syncActiveTextFieldValue();
           this.moveActiveFormField(1);
+          return;
         }
-        return;
       }
-      this.appendActiveFormText(ch, key);
+      if (key.name === "tab" || key.name === "backtab" || key.name === "escape") {
+        this.syncActiveTextFieldValue();
+      }
       return;
     }
 
@@ -1928,11 +1879,6 @@ export class InteractiveUi {
       this.activeFormSession = {
         form,
         values,
-        textCursorPositions: Object.fromEntries(
-          form.fields
-            .filter((field) => field.type === "text")
-            .map((field) => [field.id, String(values[field.id] ?? "").length]),
-        ),
         currentFieldIndex: 0,
         currentOptionIndex: 0,
         resolve,
