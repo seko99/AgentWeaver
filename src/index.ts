@@ -25,6 +25,8 @@ import {
   qaJsonFile,
   readyToMergeFile,
   requireArtifacts,
+  reviewAssessmentFile,
+  reviewAssessmentJsonFile,
   reviewFile,
   reviewFixSelectionJsonFile,
   reviewJsonFile,
@@ -734,7 +736,7 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   "gitlab-diff-review":
     "Requests GitLab MR URL via user-input, downloads merge request diff via API, and runs code review with markdown and structured JSON artifacts.",
   "gitlab-review":
-    "Requests GitLab MR URL via user-input, downloads code review comments via API, and saves markdown plus structured JSON artifact.",
+    "Requests GitLab MR URL via user-input, downloads code review comments via API, assesses which findings are fair and proposes fixes, then runs review-fix for the selected findings.",
   "bug-fix":
     "Takes bug-analyze results as source of truth and implements the bug fix in code.",
   "mr-description":
@@ -743,7 +745,7 @@ const FLOW_DESCRIPTIONS: Record<string, string> = {
   "task-describe": "Builds a brief task description either from Jira or from quick user-input without Jira.",
   implement: "Implements the task from approved design/plan artifacts and runs post-verify builds if needed.",
   review:
-    "Runs code review of current changes, validates structured findings, then prepares a reply to comments.",
+    "Runs code review of current changes and writes structured findings artifacts.",
   "review-fix":
     "Fixes issues after review-reply, updates code, and runs mandatory checks after modifications.",
   "review-loop":
@@ -1210,6 +1212,8 @@ async function executeCommand(
         iteration,
         gitlabReviewIteration,
         extraPrompt: config.extraPrompt,
+        reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, iteration),
+        reviewFixPoints: config.reviewFixPoints,
       },
       launchProfile ? { launchProfile } : {},
       requestUserInput,
@@ -1218,7 +1222,10 @@ async function executeCommand(
       runtime,
     );
     if (!config.dryRun) {
-      printSummary("GitLab Review", `Artifacts:\n${gitlabReviewFile(config.taskKey)}\n${gitlabReviewJsonFile(config.taskKey)}`);
+      printSummary(
+        "GitLab Review",
+        `Artifacts:\n${gitlabReviewFile(config.taskKey)}\n${gitlabReviewJsonFile(config.taskKey)}\n${reviewFile(config.taskKey, iteration)}\n${reviewJsonFile(config.taskKey, iteration)}\n${reviewAssessmentFile(config.taskKey, iteration)}\n${reviewAssessmentJsonFile(config.taskKey, iteration)}`,
+      );
     }
     return false;
   }
@@ -1348,6 +1355,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("review/review-fix.json", config, {
       taskKey: config.taskKey,
       latestIteration,
+      reviewAssessmentJsonFile: null,
       reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
       extraPrompt: config.extraPrompt,
       reviewFixPoints: config.reviewFixPoints,

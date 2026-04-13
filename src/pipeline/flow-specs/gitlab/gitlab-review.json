@@ -100,34 +100,72 @@
           ]
         },
         {
-          "id": "materialize_review_artifacts",
-          "node": "gitlab-review-artifacts",
+          "id": "assess_gitlab_review",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "node": "llm-prompt",
+          "prompt": {
+            "templateRef": "gitlab-review",
+            "vars": {
+              "gitlab_review_file": {
+                "artifact": {
+                  "kind": "gitlab-review-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.gitlabReviewIteration" }
+                }
+              },
+              "gitlab_review_json_file": {
+                "artifact": {
+                  "kind": "gitlab-review-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.gitlabReviewIteration" }
+                }
+              },
+              "review_file": {
+                "artifact": {
+                  "kind": "review-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_json_file": {
+                "artifact": {
+                  "kind": "review-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_assessment_file": {
+                "artifact": {
+                  "kind": "review-assessment-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_assessment_json_file": {
+                "artifact": {
+                  "kind": "review-assessment-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
           "params": {
-            "gitlabReviewJsonFile": {
-              "artifact": {
-                "kind": "gitlab-review-json-file",
-                "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "ref": "params.gitlabReviewIteration" }
-              }
-            },
-            "reviewFile": {
-              "artifact": {
-                "kind": "review-file",
-                "taskKey": { "ref": "params.taskKey" },
+            "labelText": {
+              "template": "Assessing GitLab findings and proposed fixes (iteration {iteration})",
+              "vars": {
                 "iteration": { "ref": "params.iteration" }
               }
             },
-            "reviewJsonFile": {
-              "artifact": {
-                "kind": "review-json-file",
-                "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "ref": "params.iteration" }
-              }
-            }
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
           },
           "expect": [
             {
               "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
               "paths": {
                 "list": [
                   {
@@ -136,13 +174,21 @@
                       "taskKey": { "ref": "params.taskKey" },
                       "iteration": { "ref": "params.iteration" }
                     }
+                  },
+                  {
+                    "artifact": {
+                      "kind": "review-assessment-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
                   }
                 ]
               },
-              "message": "GitLab review materialization did not produce the required review artifact."
+              "message": "GitLab review assessment did not produce the required artifacts."
             },
             {
               "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
@@ -153,11 +199,49 @@
                     }
                   },
                   "schemaId": "review-findings/v1"
+                },
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-assessment-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  },
+                  "schemaId": "review-assessment/v1"
                 }
               ],
-              "message": "GitLab review materialization produced invalid structured review artifacts."
+              "message": "GitLab review assessment produced invalid structured artifacts."
             }
           ]
+        },
+        {
+          "id": "run_review_fix",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "review-fix.json" },
+            "labelText": {
+              "template": "Running review-fix for GitLab review (iteration {iteration})",
+              "vars": {
+                "iteration": { "ref": "params.iteration" }
+              }
+            },
+            "taskKey": { "ref": "params.taskKey" },
+            "latestIteration": { "ref": "params.iteration" },
+            "reviewAssessmentJsonFile": {
+              "artifact": {
+                "kind": "review-assessment-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            },
+            "reviewFixSelectionJsonFile": { "ref": "params.reviewFixSelectionJsonFile" },
+            "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmModel": { "ref": "params.llmModel" },
+            "llmExecutor": { "ref": "params.llmExecutor" }
+          }
         }
       ]
     }

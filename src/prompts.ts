@@ -97,6 +97,17 @@ export const GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE =
   "Then write the derivative markdown version to {review_file}. " +
   "If ready_to_merge=true and there are no blockers, create the {ready_to_merge_file} file.";
 
+export const GITLAB_REVIEW_PROMPT_TEMPLATE =
+  "Validate GitLab merge request review comments. " +
+  "Use the structured GitLab review artifact {gitlab_review_json_file} as source of truth, and markdown {gitlab_review_file} only as a convenient human-readable representation. " +
+  "Determine which comments are valid actionable findings that should be addressed in the current code. " +
+  "Ignore comments that are obsolete, already resolved, duplicates, purely conversational, or not actionable. " +
+  "Normalize the remaining actionable findings into the review findings schema with accurate severities, concise titles, and concrete descriptions. " +
+  "For each remaining finding, assess whether the complaint is fair in the current code and propose a concrete fix. " +
+  `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
+  `Then write the structured assessment result to {review_assessment_json_file}. ${strictSchemaInstruction("{review_assessment_json_file}", "review-assessment/v1")}` +
+  "Then write the derivative markdown version to {review_file} and the derivative markdown assessment to {review_assessment_file}.";
+
 export const REVIEW_SUMMARY_PROMPT_TEMPLATE =
   "Look at {review_file}. " +
   "Create a brief list of comments without details, 3-7 items. " +
