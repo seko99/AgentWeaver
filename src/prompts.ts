@@ -116,10 +116,16 @@ export const TASK_SUMMARY_PROMPT_TEMPLATE =
   `First write the source-of-truth JSON to {task_summary_json_file}. ${strictSchemaInstruction("{task_summary_json_file}", "task-summary/v1")}Then write the markdown version to {task_summary_file}.`;
 
 export const JIRA_DESCRIPTION_PROMPT_TEMPLATE =
-  "Look at the task in {jira_task_file}. " +
+  "Review the task in {jira_task_file}. " +
+  "Be sure to use the original issue description and all useful issue comments from the Jira payload as source material; if comments clarify scope, expected behavior, edge cases, or acceptance criteria, reflect that context in the result. " +
+  "Analyze additional materials from Jira attachments manifest {jira_attachments_manifest_file} and text context {jira_attachments_context_file}; if attachments contain more detailed requirements or constraints, treat them as source of truth alongside the Jira issue. " +
+  "Study the repository code relevant to the task before writing the description. Verify whether the mentioned APIs, routes, handlers, modules, entities, or screens already exist and how they currently behave. For example, if the task mentions a route such as GET v1/task-templates, inspect the code that implements or should implement that route and use that understanding to add concise but useful context. " +
+  "The result must be richer than a paraphrase of the title: include context from the task description, comments, attachments, and relevant code, but do not invent requirements that are not supported by those sources. " +
   "Formulate a typical Jira task description in simple product language, without overloading with technical details. " +
   "Description structure: Problem, Context, What needs to be done, Acceptance criteria. " +
-  "Write only what helps understand the essence of the task and expected result; technical details, internal service names, data models, file names, REST methods, and implementation steps should only be mentioned if without them the task's meaning is lost. " +
+  "Add concrete implementation context when it is supported by the task and the code: mention where changes are likely needed, including specific routes, handlers, services, DTOs, API contracts, validation rules, repository methods, events, or UI screens. " +
+  "If the code already defines a relevant request/response contract or DTO, reflect that in the description at a high level so the task is actionable. " +
+  "Write only what helps understand the essence of the task and expected result; technical details, internal service names, data models, file names, REST methods, DTO names, contracts, and implementation steps should be mentioned when they add necessary context or make the task materially clearer. " +
   `First write the source-of-truth JSON to {jira_description_json_file}. ${strictSchemaInstruction("{jira_description_json_file}", "jira-description/v1")}Then write the markdown version to {jira_description_file}.`;
 
 export const RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE =
