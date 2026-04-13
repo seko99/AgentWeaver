@@ -72,11 +72,21 @@ function buildTaskDescribePromptSuffix(
 ): { promptSuffix: string; summaryText: string } {
   const jiraRef = typeof values.jira_ref === "string" ? values.jira_ref.trim() : "";
   const taskDescription = typeof values.task_description === "string" ? values.task_description.trim() : "";
+  const additionalInstructions =
+    typeof values.additional_instructions === "string" ? values.additional_instructions.trim() : "";
 
   if (jiraRef) {
     return {
-      promptSuffix: "",
-      summaryText: `Источник задачи: Jira\nJira: ${jiraRef}`,
+      promptSuffix: additionalInstructions
+        ? [
+            "Use the user-provided additional instructions together with the Jira task.",
+            `User input file: ${params.outputFile}`,
+            `Additional instructions:\n${additionalInstructions}`,
+          ].join("\n\n")
+        : "",
+      summaryText: additionalInstructions
+        ? `Источник задачи: Jira\nJira: ${jiraRef}\n\nДополнительные указания:\n${additionalInstructions}`
+        : `Источник задачи: Jira\nJira: ${jiraRef}`,
     };
   }
 
@@ -85,8 +95,13 @@ function buildTaskDescribePromptSuffix(
       "Use the user task description as source of truth.",
       `User input file: ${params.outputFile}`,
       `Task description:\n${taskDescription}`,
-    ].join("\n\n"),
-    summaryText: `Task source: user-input\n\n${taskDescription}`,
+      additionalInstructions ? `Additional instructions:\n${additionalInstructions}` : "",
+    ]
+      .filter((item) => item.trim().length > 0)
+      .join("\n\n"),
+    summaryText: additionalInstructions
+      ? `Task source: user-input\n\n${taskDescription}\n\nAdditional instructions:\n${additionalInstructions}`
+      : `Task source: user-input\n\n${taskDescription}`,
   };
 }
 
