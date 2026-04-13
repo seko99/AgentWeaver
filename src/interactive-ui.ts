@@ -58,6 +58,7 @@ type FlowStatusState = {
 type ActiveFormSession = {
   form: UserInputFormDefinition;
   values: UserInputFormValues;
+  textCursorPositions: Record<string, number>;
   currentFieldIndex: number;
   currentOptionIndex: number;
   resolve: (result: UserInputResult) => void;
@@ -922,16 +923,31 @@ export class InteractiveUi {
     return this.activeFormSession.form.fields[this.activeFormSession.currentFieldIndex] ?? null;
   }
 
-  private renderTextInputValue(value: string, placeholder?: string, rows = 1): string[] {
-    const rawLines = (value || placeholder || "Введите текст").split("\n");
-    const visibleLines = rawLines.slice(0, Math.max(1, rows));
-    const contentWidth = visibleLines.reduce((max, line) => Math.max(max, line.length), 0);
+  private renderTextInputValue(value: string, cursorIndex: number, placeholder?: string, rows = 1): string[] {
+    const hasValue = value.length > 0;
+    const rawLines = (hasValue ? value : placeholder || "Введите текст").split("\n");
+    const maxRows = Math.max(1, rows);
+    const safeCursorIndex = Math.max(0, Math.min(cursorIndex, value.length));
+    const valueLines = hasValue ? value.split("\n") : [""];
+    const cursorLine = hasValue ? value.slice(0, safeCursorIndex).split("\n").length - 1 : 0;
+    const startLine = hasValue ? Math.max(0, Math.min(cursorLine, valueLines.length - maxRows)) : 0;
+    const visibleLines = rawLines.slice(startLine, startLine + maxRows);
+    const contentWidth = visibleLines.reduce((max, line) => Math.max(max, line.length + 1), 0);
     const frameWidth = Math.max(36, contentWidth + 6);
     const innerWidth = Math.max(32, frameWidth - 4);
-    const renderedRows = Array.from({ length: Math.max(1, rows) }, (_, index) => {
+    const renderedRows = Array.from({ length: maxRows }, (_, index) => {
       const rawLine = visibleLines[index] ?? "";
-      const visibleText = rawLine.length > innerWidth - 2 ? `${rawLine.slice(0, innerWidth - 5)}...` : rawLine;
-      const color = value ? "white-fg" : "gray-fg";
+      const plainVisibleText = rawLine.length > innerWidth - 2 ? `${rawLine.slice(0, innerWidth - 5)}...` : rawLine;
+      const color = hasValue ? "white-fg" : "gray-fg";
+      let visibleText = plainVisibleText;
+      if (hasValue && startLine + index === cursorLine) {
+        const lineStartIndex = valueLines.slice(0, cursorLine).reduce((total, line) => total + line.length + 1, 0);
+        const cursorColumn = Math.max(0, Math.min(safeCursorIndex - lineStartIndex, plainVisibleText.length));
+        const before = plainVisibleText.slice(0, cursorColumn);
+        const charAtCursor = plainVisibleText[cursorColumn] ?? " ";
+        const after = plainVisibleText.slice(cursorColumn + (plainVisibleText[cursorColumn] ? 1 : 0));
+        visibleText = `${before}{black-fg}{yellow-bg}${charAtCursor}{/yellow-bg}{/black-fg}${after}`;
+      }
       return `{cyan-fg}│{/cyan-fg}{black-bg} ${index === 0 ? "{green-fg}>{/green-fg}" : " "} {${color}}${visibleText.padEnd(innerWidth - 2, " ")}{/${color}} {/black-bg}{cyan-fg}│{/cyan-fg}`;
     });
 
@@ -1096,9 +1112,11 @@ export class InteractiveUi {
       lines.push("Enter/Tab: next field");
     } else if (field.type === "text") {
       const current = String(session.values[field.id] ?? "");
-      lines.push(...this.renderTextInputValue(current, field.placeholder, field.multiline ? Math.max(1, field.rows ?? 3) : 1));
+      const cursorIndex = Math.max(0, Math.min(session.textCursorPositions[field.id] ?? current.length, current.length));
+      lines.push(...this.renderTextInputValue(current, cursorIndex, field.placeholder, field.multiline ? Math.max(1, field.rows ?? 3) : 1));
       lines.push("");
-      lines.push(field.multiline ? "Type text, Enter: new line, Backspace: delete" : "Type text, Backspace: delete");
+      lines.push(field.multiline ? "Type text, Enter: new line, Left/Right/Home/End: move cursor" : "Type text, Left/Right/Home/End: move cursor");
+      lines.push("Backspace/Delete: delete character");
       lines.push("Tab: next field");
     } else {
       const currentOptionIndex = Math.min(session.currentOptionIndex, Math.max(0, field.options.length - 1));
@@ -1189,20 +1207,63 @@ export class InteractiveUi {
       return;
     }
     const current = String(session.values[field.id] ?? "");
+    const cursorIndex = Math.max(0, Math.min(session.textCursorPositions[field.id] ?? current.length, current.length));
     if (key.name === "backspace") {
-      session.values[field.id] = current.slice(0, -1);
+      if (cursorIndex <= 0) {
+        return;
+      }
+      session.values[field.id] = `${current.slice(0, cursorIndex - 1)}${current.slice(cursorIndex)}`;
+      session.textCursorPositions[field.id] = cursorIndex - 1;
+      this.renderActiveForm();
+      return;
+    }
+    if (key.name === "delete") {
+      if (cursorIndex >= current.length) {
+        return;
+      }
+      session.values[field.id] = `${current.slice(0, cursorIndex)}${current.slice(cursorIndex + 1)}`;
+      session.textCursorPositions[field.id] = cursorIndex;
       this.renderActiveForm();
       return;
     }
     if (appendNewline) {
-      session.values[field.id] = `${current}\n`;
+      session.values[field.id] = `${current.slice(0, cursorIndex)}\n${current.slice(cursorIndex)}`;
+      session.textCursorPositions[field.id] = cursorIndex + 1;
       this.renderActiveForm();
       return;
     }
     if (key.ctrl || key.meta || !ch || ch === "\r" || ch === "\n" || ch === "\t") {
       return;
     }
-    session.values[field.id] = `${current}${ch}`;
+    session.values[field.id] = `${current.slice(0, cursorIndex)}${ch}${current.slice(cursorIndex)}`;
+    session.textCursorPositions[field.id] = cursorIndex + ch.length;
+    this.renderActiveForm();
+  }
+
+  private moveActiveFormTextCursor(delta: number): void {
+    const session = this.activeFormSession;
+    const field = this.currentFormField();
+    if (!session || !field || field.type !== "text") {
+      return;
+    }
+    const current = String(session.values[field.id] ?? "");
+    const cursorIndex = Math.max(0, Math.min(session.textCursorPositions[field.id] ?? current.length, current.length));
+    session.textCursorPositions[field.id] = Math.max(0, Math.min(current.length, cursorIndex + delta));
+    this.renderActiveForm();
+  }
+
+  private moveActiveFormTextCursorToBoundary(position: "start" | "end"): void {
+    const session = this.activeFormSession;
+    const field = this.currentFormField();
+    if (!session || !field || field.type !== "text") {
+      return;
+    }
+    const current = String(session.values[field.id] ?? "");
+    const cursorIndex = Math.max(0, Math.min(session.textCursorPositions[field.id] ?? current.length, current.length));
+    const lineStart = current.lastIndexOf("\n", Math.max(0, cursorIndex - 1)) + 1;
+    const lineEndIndex = current.indexOf("\n", cursorIndex);
+    const lineEnd = lineEndIndex === -1 ? current.length : lineEndIndex;
+    session.textCursorPositions[field.id] = position === "start" ? lineStart : lineEnd;
     this.renderActiveForm();
   }
 
@@ -1276,6 +1337,22 @@ export class InteractiveUi {
     }
 
     if (field.type === "text") {
+      if (key.name === "left") {
+        this.moveActiveFormTextCursor(-1);
+        return;
+      }
+      if (key.name === "right") {
+        this.moveActiveFormTextCursor(1);
+        return;
+      }
+      if (key.name === "home") {
+        this.moveActiveFormTextCursorToBoundary("start");
+        return;
+      }
+      if (key.name === "end") {
+        this.moveActiveFormTextCursorToBoundary("end");
+        return;
+      }
       if (key.name === "enter") {
         if (field.multiline) {
           this.appendActiveFormText(ch, key, true);
@@ -1847,9 +1924,15 @@ export class InteractiveUi {
       });
     }
     return new Promise<UserInputResult>((resolve, reject) => {
+      const values = buildInitialUserInputValues(form.fields);
       this.activeFormSession = {
         form,
-        values: buildInitialUserInputValues(form.fields),
+        values,
+        textCursorPositions: Object.fromEntries(
+          form.fields
+            .filter((field) => field.type === "text")
+            .map((field) => [field.id, String(values[field.id] ?? "").length]),
+        ),
         currentFieldIndex: 0,
         currentOptionIndex: 0,
         resolve,
