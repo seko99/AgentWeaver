@@ -34,6 +34,8 @@ export const ARTIFACT_REF_KINDS = [
   "ready-to-merge-file",
   "review-file",
   "review-json-file",
+  "review-assessment-file",
+  "review-assessment-json-file",
   "review-fix-file",
   "review-fix-json-file",
   "run-go-linter-result-json-file",

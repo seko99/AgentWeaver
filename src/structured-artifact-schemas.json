@@ -505,6 +505,28 @@
     },
     "required": ["summary", "ready_to_merge", "findings"]
   },
+  "review-assessment/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "assessments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "finding_title": { "type": "string", "nonEmpty": true },
+            "severity": { "type": "string", "nonEmpty": true },
+            "verdict": { "type": "string", "nonEmpty": true },
+            "rationale": { "type": "string", "nonEmpty": true },
+            "proposed_fix": { "type": "string", "nonEmpty": true },
+            "fix_required": { "type": "boolean" }
+          },
+          "required": ["finding_title", "severity", "verdict", "rationale", "proposed_fix", "fix_required"]
+        }
+      }
+    },
+    "required": ["summary", "assessments"]
+  },
   "review-fix-report/v1": {
     "type": "object",
     "properties": {
