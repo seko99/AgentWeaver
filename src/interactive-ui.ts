@@ -1143,7 +1143,10 @@ export class InteractiveUi {
       this.hideFormBooleanInput();
       helperLines.push("{cyan-fg}Use the list below.{/cyan-fg}");
       this.ensureFormSelectInputVisible(headerLines.length + helperLines.length, 0);
-      const currentOptionIndex = Math.min(session.currentOptionIndex, Math.max(0, field.options.length - 1));
+      const preferredOptionIndex = field.type === "single-select"
+        ? this.selectedOptionIndexForField(field)
+        : session.currentOptionIndex;
+      const currentOptionIndex = Math.min(preferredOptionIndex, Math.max(0, field.options.length - 1));
       session.currentOptionIndex = currentOptionIndex;
       const selectedValues = field.type === "single-select"
         ? [String(session.values[field.id] ?? "")]
@@ -1195,15 +1198,38 @@ export class InteractiveUi {
       Math.max(0, this.activeFormSession.currentFieldIndex + delta),
     );
     this.activeFormSession.currentFieldIndex = nextIndex;
-    this.activeFormSession.currentOptionIndex = 0;
     const nextField = this.activeFormSession.form.fields[nextIndex];
     if (nextField?.type === "text") {
       const current = String(this.activeFormSession.values[nextField.id] ?? "");
       this.activeFormSession.currentTextCursorIndex = current.length;
+      this.activeFormSession.currentOptionIndex = 0;
+    } else if (nextField?.type === "single-select" || nextField?.type === "multi-select") {
+      this.activeFormSession.currentTextCursorIndex = 0;
+      this.activeFormSession.currentOptionIndex = this.selectedOptionIndexForField(nextField);
     } else {
       this.activeFormSession.currentTextCursorIndex = 0;
+      this.activeFormSession.currentOptionIndex = 0;
     }
     this.renderActiveForm();
+  }
+
+  private selectedOptionIndexForField(
+    field: UserInputFieldDefinition & { type: "single-select" | "multi-select" },
+  ): number {
+    const session = this.activeFormSession;
+    if (!session || field.options.length === 0) {
+      return 0;
+    }
+
+    if (field.type === "single-select") {
+      const selectedValue = String(session.values[field.id] ?? "");
+      const selectedIndex = field.options.findIndex((option) => option.value === selectedValue);
+      return selectedIndex >= 0 ? selectedIndex : 0;
+    }
+
+    const selectedValues = Array.isArray(session.values[field.id]) ? (session.values[field.id] as string[]) : [];
+    const selectedIndex = field.options.findIndex((option) => selectedValues.includes(option.value));
+    return selectedIndex >= 0 ? selectedIndex : 0;
   }
 
   private confirmActiveFormField(): void {
@@ -1703,13 +1729,6 @@ export class InteractiveUi {
     }
     if (key.name === "enter") {
       this.syncActiveSelectFieldValue();
-      if (field.type === "single-select") {
-        const session = this.activeFormSession;
-        const option = session ? field.options[session.currentOptionIndex] : null;
-        if (session && option) {
-          session.values[field.id] = option.value;
-        }
-      }
       this.confirmActiveFormField();
     }
   }
@@ -2245,11 +2264,22 @@ export class InteractiveUi {
       const values = buildInitialUserInputValues(form.fields);
       const firstField = form.fields[0];
       const initialCursorIndex = firstField?.type === "text" ? String(values[firstField.id] ?? "").length : 0;
+      const initialOptionIndex =
+        firstField?.type === "single-select"
+          ? Math.max(0, firstField.options.findIndex((option) => option.value === String(values[firstField.id] ?? "")))
+          : firstField?.type === "multi-select"
+            ? Math.max(
+              0,
+              firstField.options.findIndex((option) =>
+                Array.isArray(values[firstField.id]) && (values[firstField.id] as string[]).includes(option.value)
+              ),
+            )
+            : 0;
       this.activeFormSession = {
         form,
         values,
         currentFieldIndex: 0,
-        currentOptionIndex: 0,
+        currentOptionIndex: initialOptionIndex,
         currentTextCursorIndex: initialCursorIndex,
         resolve,
         reject,
