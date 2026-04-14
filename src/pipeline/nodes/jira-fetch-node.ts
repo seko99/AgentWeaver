@@ -35,6 +35,9 @@ export const jiraFetchNode: PipelineNodeDefinition<JiraFetchNodeParams, JiraFetc
     if (params.attachmentsContextFile) {
       outputs.push({ kind: "artifact", path: params.attachmentsContextFile, required: true });
     }
+    if (value.enrichedFile) {
+      outputs.push({ kind: "artifact", path: value.enrichedFile, required: false });
+    }
     return {
       value,
       outputs,

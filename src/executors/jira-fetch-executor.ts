@@ -22,6 +22,7 @@ export type JiraFetchExecutorResult = {
   attachmentsContextFile?: string;
   downloadedAttachments: number;
   planningContextAttachments: number;
+  enrichedFile?: string;
 };
 
 export const jiraFetchExecutor: ExecutorDefinition<
@@ -45,6 +46,7 @@ export const jiraFetchExecutor: ExecutorDefinition<
       planningContextAttachments: artifacts.planningContextAttachments,
       ...(artifacts.attachmentsManifestFile ? { attachmentsManifestFile: artifacts.attachmentsManifestFile } : {}),
       ...(artifacts.attachmentsContextFile ? { attachmentsContextFile: artifacts.attachmentsContextFile } : {}),
+      ...(artifacts.enrichedFile ? { enrichedFile: artifacts.enrichedFile } : {}),
     };
   },
 };
