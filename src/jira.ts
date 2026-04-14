@@ -44,12 +44,29 @@ type JiraAttachmentManifest = {
   attachments: JiraAttachmentManifestItem[];
 };
 
+export type NormalizedIssue = {
+  key: string;
+  type: string;
+  summary: string;
+  description: string;
+};
+
+export type JiraEnrichedArtifact = {
+  issue: NormalizedIssue;
+  parent?: NormalizedIssue | null;
+  context: {
+    scopeSource: string;
+    businessContextSource: string;
+  };
+};
+
 export type JiraFetchArtifacts = {
   issueFile: string;
   attachmentsManifestFile?: string;
   attachmentsContextFile?: string;
   downloadedAttachments: number;
   planningContextAttachments: number;
+  enrichedFile?: string;
 };
 
 type JiraResolvedAuthMode = "basic" | "bearer";
@@ -150,6 +167,46 @@ async function fetchAuthorizedBuffer(url: string, accept: string): Promise<Buffe
   return Buffer.from(await response.arrayBuffer());
 }
 
+type JiraRawIssue = {
+  key?: string;
+  fields?: {
+    summary?: string;
+    description?: string;
+    issuetype?: {
+      subtask?: boolean;
+      name?: string;
+    };
+    parent?: {
+      key?: string;
+    };
+  };
+};
+
+function isSubtask(issue: JiraRawIssue): boolean {
+  return issue.fields?.issuetype?.subtask === true;
+}
+
+function getParentKey(issue: JiraRawIssue): string | null {
+  if (!issue.fields?.parent?.key) {
+    return null;
+  }
+  return issue.fields.parent.key;
+}
+
+function normalizeIssue(jiraRaw: object): NormalizedIssue | null {
+  const issue = jiraRaw as JiraRawIssue;
+  const key = issue.key ?? null;
+  const summary = typeof issue.fields?.summary === "string" ? issue.fields.summary : "";
+  const description = typeof issue.fields?.description === "string" ? issue.fields.description : "";
+  const type = typeof issue.fields?.issuetype?.name === "string" ? issue.fields.issuetype.name : "";
+
+  if (!key) {
+    return null;
+  }
+
+  return { key, type, summary, description };
+}
+
 function toTextAttachmentContent(fileName: string, body: Buffer): string {
   return [
     `=== Attachment: ${fileName} ===`,
@@ -207,6 +264,45 @@ export async function fetchJiraIssue(
   const body = await fetchAuthorizedBuffer(jiraApiUrl, "application/json");
   mkdirSync(path.dirname(jiraTaskFile), { recursive: true });
   await writeFile(jiraTaskFile, body);
+
+  let enrichedFile: string | undefined;
+  try {
+    const rawIssue = JSON.parse(body.toString("utf8")) as JiraRawIssue;
+    const normalizedChild = normalizeIssue(rawIssue);
+
+    if (normalizedChild && isSubtask(rawIssue)) {
+      const parentKey = getParentKey(rawIssue);
+      let parentNormalized: NormalizedIssue | null = null;
+
+      if (parentKey) {
+        try {
+          const parentUrl = buildJiraApiUrl(parentKey);
+          const parentBody = await fetchAuthorizedBuffer(parentUrl, "application/json");
+          const parentRaw = JSON.parse(parentBody.toString("utf8")) as JiraRawIssue;
+          parentNormalized = normalizeIssue(parentRaw);
+        } catch {
+          parentNormalized = null;
+        }
+      }
+
+      if (normalizedChild) {
+        const enrichedArtifact: JiraEnrichedArtifact = {
+          issue: normalizedChild,
+          parent: parentNormalized,
+          context: {
+            scopeSource: normalizedChild.key,
+            businessContextSource: parentNormalized?.key ?? normalizedChild.key,
+          },
+        };
+
+        const parsedPath = path.parse(jiraTaskFile);
+        enrichedFile = path.join(parsedPath.dir, `${parsedPath.name}-enriched${parsedPath.ext}`);
+        await writeFile(enrichedFile, `${JSON.stringify(enrichedArtifact, null, 2)}\n`, "utf8");
+      }
+    }
+  } catch {
+    // Non-JSON response or parse error - skip enrichment
+  }
 
   const attachments = parseJiraAttachments(body);
   const manifestItems: JiraAttachmentManifestItem[] = [];
@@ -282,6 +378,7 @@ export async function fetchJiraIssue(
     planningContextAttachments: manifest.summary.planningContextCount,
     ...(attachmentsManifestFile ? { attachmentsManifestFile } : {}),
     ...(attachmentsContextFile ? { attachmentsContextFile } : {}),
+    ...(enrichedFile ? { enrichedFile } : {}),
   };
 }
 
