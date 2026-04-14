@@ -48,10 +48,11 @@ export async function runCommand(
     verbose?: boolean;
     label?: string;
     printFailureOutput?: boolean;
+    stdin?: string;
     signal?: AbortSignal;
   } = {},
 ): Promise<string> {
-  const { env, dryRun = false, verbose = false, label, printFailureOutput = true, signal } = options;
+  const { env, dryRun = false, verbose = false, label, printFailureOutput = true, stdin, signal } = options;
   const outputAdapter = getOutputAdapter();
 
   if (signal?.aborted) {
@@ -68,9 +69,12 @@ export async function runCommand(
   if (verbose && outputAdapter.supportsPassthrough) {
     await new Promise<void>((resolve, reject) => {
       const child = spawn(argv[0] ?? "", argv.slice(1), {
-        stdio: "inherit",
+        stdio: [stdin !== undefined ? "pipe" : "inherit", "inherit", "inherit"],
         env,
       });
+      if (stdin !== undefined) {
+        child.stdin?.end(stdin);
+      }
       let abortTimer: NodeJS.Timeout | null = null;
       const abortHandler = () => {
         child.kill("SIGTERM");
@@ -109,9 +113,12 @@ export async function runCommand(
 
   const child = spawn(argv[0] ?? "", argv.slice(1), {
     env,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: [stdin !== undefined ? "pipe" : "ignore", "pipe", "pipe"],
   });
   setCurrentExecutor(statusLabel);
+  if (stdin !== undefined) {
+    child.stdin?.end(stdin);
+  }
 
   child.stdout?.on("data", (chunk) => {
     const text = String(chunk);

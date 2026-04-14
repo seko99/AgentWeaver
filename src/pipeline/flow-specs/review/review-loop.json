@@ -98,6 +98,7 @@
             },
             "taskKey": { "ref": "params.taskKey" },
             "latestIteration": { "const": 1 },
+            "reviewAssessmentJsonFile": { "const": null },
             "reviewFixSelectionJsonFile": {
               "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
               "vars": {
@@ -234,6 +235,7 @@
                 },
                 "taskKey": { "ref": "params.taskKey" },
                 "latestIteration": { "ref": "repeat.iteration" },
+                "reviewAssessmentJsonFile": { "const": null },
                 "reviewFixSelectionJsonFile": {
                   "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
                   "vars": {
