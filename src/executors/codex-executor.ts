@@ -43,9 +43,10 @@ export const codexExecutor: ExecutorDefinition<
     const result = await processExecutor.execute(
       context,
       {
-        argv: [command, config.subcommand, "--model", model, config.fullAutoFlag, input.prompt],
+        argv: [command, config.subcommand, "--model", model, config.fullAutoFlag, "-"],
         env,
         label: `codex:${model}`,
+        stdin: input.prompt,
       },
       processExecutor.defaultConfig,
     );

@@ -11,6 +11,7 @@ export type ProcessExecutorInput = {
   dryRun?: boolean;
   verbose?: boolean;
   label?: string;
+  stdin?: string;
 };
 
 export type ProcessExecutorResult = {
@@ -32,6 +33,9 @@ export const processExecutor: ExecutorDefinition<ProcessExecutorConfig, ProcessE
     }
     if (input.label) {
       options.label = input.label;
+    }
+    if (input.stdin !== undefined) {
+      options.stdin = input.stdin;
     }
     const output = await context.runtime.runCommand(input.argv, options);
     return { output };
