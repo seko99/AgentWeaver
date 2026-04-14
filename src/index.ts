@@ -326,14 +326,11 @@ function launchProfileSelectionForm(): UserInputFormDefinition {
         type: "single-select",
         label: "Executor",
         required: true,
-        default: "default",
-        options: [
-          { value: "default", label: `default (${defaultExecutor})` },
-          ...LLM_EXECUTOR_IDS.map((id) => ({
-            value: id,
-            label: id === defaultExecutor ? `${id} [default]` : id,
-          })),
-        ],
+        default: defaultExecutor,
+        options: LLM_EXECUTOR_IDS.map((id) => ({
+          value: id,
+          label: id === defaultExecutor ? `${id} [default]` : id,
+        })),
       },
     ],
   };
@@ -342,15 +339,10 @@ function launchProfileSelectionForm(): UserInputFormDefinition {
 function launchModelSelectionForm(executor: LaunchProfileSelection["executor"]): UserInputFormDefinition {
   const resolvedExecutor = executor === "default" ? DEFAULT_LAUNCH_PROFILE.executor : executor;
   const defaultModel = defaultModelForExecutor(resolvedExecutor);
-  const options = executor === "default"
-    ? [{ value: "default", label: `default (${DEFAULT_LAUNCH_PROFILE.model})` }]
-    : [
-      { value: "default", label: `default (${defaultModel})` },
-      ...ALLOWED_MODELS_BY_EXECUTOR[executor].map((model) => ({
-        value: model,
-        label: model === defaultModel ? `${model} [default]` : model,
-      })),
-    ];
+  const options = ALLOWED_MODELS_BY_EXECUTOR[resolvedExecutor].map((model) => ({
+    value: model,
+    label: model === defaultModel ? `${model} [default]` : model,
+  }));
   return {
     formId: "flow-launch-model",
     title: "Настройки запуска LLM",
@@ -362,29 +354,42 @@ function launchModelSelectionForm(executor: LaunchProfileSelection["executor"]):
         type: "single-select",
         label: "Model",
         required: true,
-        default: "default",
+        default: defaultModel,
         options,
       },
     ],
   };
 }
 
+function isFormCancellation(error: unknown, formId: string): boolean {
+  return error instanceof TaskRunnerError && error.message === `User cancelled form '${formId}'.`;
+}
+
 async function requestInteractiveLaunchProfile(requestUserInput: UserInputRequester): Promise<ResolvedLaunchProfile> {
-  const executorFormResult = await requestUserInput(launchProfileSelectionForm());
-  const rawExecutor = String(executorFormResult.values.executor ?? "default");
-  const executor = rawExecutor === "default" ? "default" : LLM_EXECUTOR_IDS.find((id) => id === rawExecutor);
-  if (!executor) {
-    throw new TaskRunnerError(`Unsupported launch executor '${rawExecutor}'.`);
+  for (;;) {
+    const executorFormResult = await requestUserInput(launchProfileSelectionForm());
+    const rawExecutor = String(executorFormResult.values.executor ?? DEFAULT_LAUNCH_PROFILE.executor);
+    const executor = LLM_EXECUTOR_IDS.find((id) => id === rawExecutor);
+    if (!executor) {
+      throw new TaskRunnerError(`Unsupported launch executor '${rawExecutor}'.`);
+    }
+    try {
+      const modelFormResult = await requestUserInput(launchModelSelectionForm(executor));
+      const rawModel = String(modelFormResult.values.model ?? defaultModelForExecutor(executor)).trim();
+      return resolveLaunchProfile(
+        {
+          executor,
+          model: rawModel.length > 0 ? rawModel : defaultModelForExecutor(executor),
+        },
+        DEFAULT_LAUNCH_PROFILE,
+      );
+    } catch (error) {
+      if (isFormCancellation(error, "flow-launch-model")) {
+        continue;
+      }
+      throw error;
+    }
   }
-  const modelFormResult = await requestUserInput(launchModelSelectionForm(executor));
-  const rawModel = String(modelFormResult.values.model ?? "default").trim();
-  return resolveLaunchProfile(
-    {
-      executor,
-      model: rawModel.length > 0 ? rawModel : "default",
-    },
-    DEFAULT_LAUNCH_PROFILE,
-  );
 }
 
 type FlowResumeLookup = {
