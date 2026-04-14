@@ -60,6 +60,7 @@ type ActiveFormSession = {
   values: UserInputFormValues;
   currentFieldIndex: number;
   currentOptionIndex: number;
+  currentTextCursorIndex: number;
   resolve: (result: UserInputResult) => void;
   reject: (error: Error) => void;
 };
@@ -121,6 +122,31 @@ function makeFolderKey(pathSegments: string[]): string {
 
 function makeFlowKey(flowId: string): string {
   return `flow:${flowId}`;
+}
+
+function escapeBlessedTags(text: string): string {
+  return text.replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
+}
+
+function textIndexToLineColumn(value: string, index: number): { line: number; column: number } {
+  const boundedIndex = Math.max(0, Math.min(value.length, index));
+  const beforeCursor = value.slice(0, boundedIndex);
+  const lines = beforeCursor.split("\n");
+  return {
+    line: Math.max(0, lines.length - 1),
+    column: (lines[lines.length - 1] ?? "").length,
+  };
+}
+
+function textLineColumnToIndex(value: string, line: number, column: number): number {
+  const lines = value.split("\n");
+  const boundedLine = Math.max(0, Math.min(lines.length - 1, line));
+  let index = 0;
+  for (let currentLine = 0; currentLine < boundedLine; currentLine += 1) {
+    index += (lines[currentLine] ?? "").length + 1;
+  }
+  const targetLine = lines[boundedLine] ?? "";
+  return index + Math.max(0, Math.min(targetLine.length, column));
 }
 
 function buildFlowTree(flows: InteractiveFlowDefinition[]): FlowTreeNode[] {
@@ -233,9 +259,11 @@ export class InteractiveUi {
   private readonly help: any;
   private readonly confirm: any;
   private readonly formModal: any;
+  private readonly formLineInput: any;
   private readonly formTextInput: any;
   private readonly formBooleanInput: any;
   private readonly formSelectInput: any;
+  private readonly formHint: any;
   private readonly flowMap: Map<string, InteractiveFlowDefinition>;
   private readonly flowTree: FlowTreeNode[];
   private readonly expandedFlowFolders = new Set<string>();
@@ -412,21 +440,30 @@ export class InteractiveUi {
       },
     });
 
-    this.formTextInput = blessed.textarea({
+    this.formLineInput = blessed.box({
       parent: this.formModal,
       top: 0,
       left: 0,
       width: "100%-2",
       height: 3,
       hidden: true,
-      inputOnFocus: true,
-      mouse: true,
-      keys: true,
-      vi: true,
-      scrollbar: {
-        ch: " ",
-        inverse: true,
+      tags: true,
+      border: "line",
+      style: {
+        border: { fg: "cyan" },
+        fg: "white",
       },
+    });
+
+    this.formTextInput = blessed.box({
+      parent: this.formModal,
+      top: 0,
+      left: 0,
+      width: "100%-2",
+      height: 3,
+      hidden: true,
+      tags: true,
+      mouse: true,
       border: "line",
       style: {
         border: { fg: "cyan" },
@@ -472,6 +509,19 @@ export class InteractiveUi {
           fg: "black",
           bg: "green",
         },
+      },
+    });
+
+    this.formHint = blessed.box({
+      parent: this.formModal,
+      top: 0,
+      left: 1,
+      width: "100%-4",
+      height: 2,
+      hidden: true,
+      tags: true,
+      style: {
+        fg: "gray",
       },
     });
 
@@ -1009,9 +1059,11 @@ export class InteractiveUi {
   private renderActiveForm(): void {
     if (!this.activeFormSession) {
       this.formModal.hide();
+      this.hideFormLineInput();
       this.hideFormTextInput();
       this.hideFormBooleanInput();
       this.hideFormSelectInput();
+      this.hideFormHint();
       this.footer.setContent(" Up/Down: select | Left/Right: fold | Enter: toggle/run | Esc: close/interrupt | h: help | Tab: switch pane | q: exit ");
       this.requestRender();
       return;
@@ -1022,6 +1074,7 @@ export class InteractiveUi {
     if (!field) {
       return;
     }
+    const isLastField = session.currentFieldIndex >= session.form.fields.length - 1;
 
     const headerLines: string[] = [`{bold}${session.form.title}{/bold}`];
     if (session.form.description?.trim()) {
@@ -1035,14 +1088,17 @@ export class InteractiveUi {
       headerLines.push(field.help.trim());
     }
     headerLines.push("");
-
-    const footerLines: string[] = ["", "{green-fg}Ctrl+S{/green-fg}: submit", "{magenta-fg}Shift+Tab{/magenta-fg}: previous field", "{red-fg}Esc{/red-fg}: cancel"];
+    const helperLines: string[] = [];
     const lines = [...headerLines];
+    let footerHint = ` Form: Enter ${isLastField ? "submit" : "confirm"} | Tab next | Shift+Tab prev | Esc cancel `;
+    let hintLines: string[] = [];
 
     if (field.type === "boolean") {
+      this.hideFormLineInput();
       this.hideFormTextInput();
       this.hideFormSelectInput();
-      this.ensureFormBooleanInputVisible(headerLines.length, footerLines.length);
+      helperLines.push("{cyan-fg}Use the checkbox below.{/cyan-fg}");
+      this.ensureFormBooleanInputVisible(headerLines.length + helperLines.length, 0);
       const current = session.values[field.id] === true;
       this.formBooleanInput.setText(field.label);
       if (current) {
@@ -1050,25 +1106,43 @@ export class InteractiveUi {
       } else {
         this.formBooleanInput.uncheck();
       }
-      lines.push("{cyan-fg}Use the checkbox below.{/cyan-fg}");
-      lines.push("");
-      lines.push("Space: toggle");
-      lines.push("Enter/Tab: next field");
+      hintLines = [
+        `Space: toggle | Enter: ${isLastField ? "submit" : "confirm and next"}`,
+        "Tab/Shift+Tab: switch field | Esc: cancel",
+      ];
+      footerHint = ` Form: Space toggle | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel `;
     } else if (field.type === "text") {
       this.hideFormBooleanInput();
       this.hideFormSelectInput();
-      this.ensureFormTextInputVisible(field, headerLines.length, footerLines.length);
+      helperLines.push("{cyan-fg}Use the standard editor below.{/cyan-fg}");
       const current = String(session.values[field.id] ?? "");
-      this.formTextInput.setValue(current || field.placeholder || "");
-      lines.push("{cyan-fg}Use the standard editor below.{/cyan-fg}");
-      lines.push("");
-      lines.push(field.multiline ? "Enter: new line" : "Enter: next field");
-      lines.push("Arrow/Home/End, Backspace/Delete: native editor controls");
-      lines.push("Tab: next field");
+      if (field.multiline) {
+        this.hideFormLineInput();
+        this.ensureFormTextInputVisible(field, headerLines.length + helperLines.length, 0);
+        session.currentTextCursorIndex = Math.max(0, Math.min(current.length, session.currentTextCursorIndex));
+        this.renderFormMultilineInput(current || field.placeholder || "", current.length === 0 && Boolean(field.placeholder));
+        hintLines = [
+          "Enter: newline | Tab/Shift+Tab: switch field",
+          `Ctrl+S: submit | Esc: cancel`,
+        ];
+        footerHint = " Form: Enter newline | Tab switch | Ctrl+S submit | Esc cancel ";
+      } else {
+        this.hideFormTextInput();
+        this.ensureFormLineInputVisible(headerLines.length + helperLines.length, 0);
+        session.currentTextCursorIndex = Math.max(0, Math.min(current.length, session.currentTextCursorIndex));
+        this.renderFormLineInput(current);
+        hintLines = [
+          `Left/Right/Home/End: move | Enter: ${isLastField ? "submit" : "confirm and next"}`,
+          "Tab/Shift+Tab: switch field | Esc: cancel",
+        ];
+        footerHint = ` Form: Type text | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel `;
+      }
     } else {
+      this.hideFormLineInput();
       this.hideFormTextInput();
       this.hideFormBooleanInput();
-      this.ensureFormSelectInputVisible(headerLines.length, footerLines.length);
+      helperLines.push("{cyan-fg}Use the list below.{/cyan-fg}");
+      this.ensureFormSelectInputVisible(headerLines.length + helperLines.length, 0);
       const currentOptionIndex = Math.min(session.currentOptionIndex, Math.max(0, field.options.length - 1));
       session.currentOptionIndex = currentOptionIndex;
       const selectedValues = field.type === "single-select"
@@ -1081,27 +1155,31 @@ export class InteractiveUi {
       });
       this.formSelectInput.setItems(items);
       this.formSelectInput.select(currentOptionIndex);
-      lines.push("{cyan-fg}Use the list below.{/cyan-fg}");
-      lines.push("");
-      lines.push("Up/Down: move");
-      lines.push("Space: select/toggle");
-      lines.push("Enter/Tab: next field");
+      hintLines = [
+        `Up/Down: move | Space: ${field.type === "single-select" ? "pick" : "toggle"} | Enter: ${isLastField ? "submit" : "confirm and next"}`,
+        "Tab/Shift+Tab: switch field | Esc: cancel",
+      ];
+      footerHint = ` Form: Up/Down move | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel `;
     }
-
-    lines.push(...footerLines);
+    lines.push(...helperLines);
 
     this.formModal.setContent(lines.join("\n"));
     this.formModal.setScroll(0);
     this.formModal.show();
     this.formModal.setFront();
     if (field.type === "text") {
-      this.formTextInput.focus();
+      if (field.multiline) {
+        this.formTextInput.focus();
+      } else {
+        this.formLineInput.focus();
+      }
     } else if (field.type === "boolean") {
       this.formBooleanInput.focus();
     } else {
       this.formSelectInput.focus();
     }
-    this.footer.setContent(" Form: Space select | Tab next | Shift+Tab prev | Ctrl+S submit | Esc cancel ");
+    this.showFormHint(hintLines);
+    this.footer.setContent(footerHint);
     this.requestRender();
   }
 
@@ -1118,45 +1196,157 @@ export class InteractiveUi {
     );
     this.activeFormSession.currentFieldIndex = nextIndex;
     this.activeFormSession.currentOptionIndex = 0;
+    const nextField = this.activeFormSession.form.fields[nextIndex];
+    if (nextField?.type === "text") {
+      const current = String(this.activeFormSession.values[nextField.id] ?? "");
+      this.activeFormSession.currentTextCursorIndex = current.length;
+    } else {
+      this.activeFormSession.currentTextCursorIndex = 0;
+    }
     this.renderActiveForm();
   }
 
+  private confirmActiveFormField(): void {
+    const session = this.activeFormSession;
+    if (!session) {
+      return;
+    }
+    this.syncActiveTextFieldValue();
+    this.syncActiveBooleanFieldValue();
+    this.syncActiveSelectFieldValue();
+    if (session.currentFieldIndex >= session.form.fields.length - 1) {
+      this.submitActiveForm();
+      return;
+    }
+    this.moveActiveFormField(1);
+  }
+
+  private ensureFormLineInputVisible(headerLineCount: number, footerLineCount: number): void {
+    const reservedTop = Math.max(1, headerLineCount + 2);
+    const availableHeight = Math.max(5, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
+    this.formLineInput.top = reservedTop;
+    this.formLineInput.left = 1;
+    this.formLineInput.width = Math.max(24, this.formModalInnerWidth() - 4);
+    this.formLineInput.height = Math.min(3, availableHeight);
+    this.formLineInput.show();
+    this.formLineInput.setFront();
+    this.formLineInput.focus();
+    this.positionFormHint(this.formLineInput.top + this.formLineInput.height);
+  }
+
   private ensureFormTextInputVisible(field: UserInputFieldDefinition & { type: "text" }, headerLineCount: number, footerLineCount: number): void {
-    const reservedTop = Math.max(1, headerLineCount + 1);
-    const availableHeight = Math.max(3, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
+    const reservedTop = Math.max(1, headerLineCount + 2);
+    const availableHeight = Math.max(5, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
     const desiredRows = field.multiline ? Math.max(3, field.rows ?? 3) : 1;
-    const inputHeight = Math.min(availableHeight, desiredRows + 2);
+    const inputHeight = Math.min(Math.max(3, availableHeight - 2), desiredRows + 2);
     this.formTextInput.top = reservedTop;
-    this.formTextInput.left = 0;
-    this.formTextInput.width = Math.max(24, this.formModalInnerWidth() - 2);
+    this.formTextInput.left = 1;
+    this.formTextInput.width = Math.max(24, this.formModalInnerWidth() - 4);
     this.formTextInput.height = inputHeight;
     this.formTextInput.show();
     this.formTextInput.setFront();
     this.formTextInput.focus();
+    this.positionFormHint(this.formTextInput.top + this.formTextInput.height);
+  }
+
+  private renderFormLineInput(value: string): void {
+    const session = this.activeFormSession;
+    if (!session) {
+      return;
+    }
+    const totalWidth = typeof this.formLineInput.width === "number" ? this.formLineInput.width : this.formModalInnerWidth();
+    const innerWidth = Math.max(1, totalWidth - 2);
+    const cursorIndex = Math.max(0, Math.min(value.length, session.currentTextCursorIndex));
+    session.currentTextCursorIndex = cursorIndex;
+    const visibleStart = Math.max(0, cursorIndex - innerWidth + 1);
+    const visibleValue = value.slice(visibleStart, visibleStart + innerWidth);
+    const cursorOffset = cursorIndex - visibleStart;
+    const beforeCursor = escapeBlessedTags(visibleValue.slice(0, Math.max(0, cursorOffset)));
+    const cursorChar = visibleValue[cursorOffset] ?? " ";
+    const afterCursor = escapeBlessedTags(visibleValue.slice(Math.min(visibleValue.length, cursorOffset + 1)));
+    this.formLineInput.setContent(`${beforeCursor}{inverse}${escapeBlessedTags(cursorChar)}{/inverse}${afterCursor}`);
+  }
+
+  private renderFormMultilineInput(value: string, dimmed = false): void {
+    const session = this.activeFormSession;
+    if (!session) {
+      return;
+    }
+    const totalWidth = typeof this.formTextInput.width === "number" ? this.formTextInput.width : this.formModalInnerWidth();
+    const totalHeight = typeof this.formTextInput.height === "number" ? this.formTextInput.height : 3;
+    const innerWidth = Math.max(1, totalWidth - 2);
+    const innerHeight = Math.max(1, totalHeight - 2);
+    const cursorIndex = Math.max(0, Math.min(value.length, session.currentTextCursorIndex));
+    session.currentTextCursorIndex = cursorIndex;
+
+    const cursor = textIndexToLineColumn(value, cursorIndex);
+    const sourceLines = value.split("\n");
+    const visibleStartLine = Math.max(0, cursor.line - innerHeight + 1);
+    const visibleLines = sourceLines.slice(visibleStartLine, visibleStartLine + innerHeight);
+
+    const renderedLines = visibleLines.map((lineText, visibleLineIndex) => {
+      const absoluteLineIndex = visibleStartLine + visibleLineIndex;
+      const isCursorLine = absoluteLineIndex === cursor.line;
+      const startColumn = isCursorLine && cursor.column >= innerWidth ? cursor.column - innerWidth + 1 : 0;
+      const visibleText = lineText.slice(startColumn, startColumn + innerWidth);
+      if (!isCursorLine) {
+        return escapeBlessedTags(visibleText);
+      }
+      const cursorOffset = cursor.column - startColumn;
+      const beforeCursor = escapeBlessedTags(visibleText.slice(0, Math.max(0, cursorOffset)));
+      const cursorChar = visibleText[cursorOffset] ?? " ";
+      const afterCursor = escapeBlessedTags(visibleText.slice(Math.min(visibleText.length, cursorOffset + 1)));
+      return `${beforeCursor}{inverse}${escapeBlessedTags(cursorChar)}{/inverse}${afterCursor}`;
+    });
+
+    const rendered = renderedLines.join("\n");
+    this.formTextInput.setContent(dimmed ? `{gray-fg}${rendered}{/gray-fg}` : rendered);
   }
 
   private ensureFormBooleanInputVisible(headerLineCount: number, footerLineCount: number): void {
-    const reservedTop = Math.max(1, headerLineCount + 1);
-    const availableHeight = Math.max(3, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
+    const reservedTop = Math.max(1, headerLineCount + 2);
+    const availableHeight = Math.max(5, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
     this.formBooleanInput.top = reservedTop;
-    this.formBooleanInput.left = 0;
-    this.formBooleanInput.width = Math.max(24, this.formModalInnerWidth() - 2);
+    this.formBooleanInput.left = 1;
+    this.formBooleanInput.width = Math.max(24, this.formModalInnerWidth() - 4);
     this.formBooleanInput.height = Math.min(4, availableHeight);
     this.formBooleanInput.show();
     this.formBooleanInput.setFront();
     this.formBooleanInput.focus();
+    this.positionFormHint(this.formBooleanInput.top + this.formBooleanInput.height);
   }
 
   private ensureFormSelectInputVisible(headerLineCount: number, footerLineCount: number): void {
-    const reservedTop = Math.max(1, headerLineCount + 1);
-    const availableHeight = Math.max(4, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
+    const reservedTop = Math.max(1, headerLineCount + 2);
+    const availableHeight = Math.max(6, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
     this.formSelectInput.top = reservedTop;
-    this.formSelectInput.left = 0;
-    this.formSelectInput.width = Math.max(24, this.formModalInnerWidth() - 2);
-    this.formSelectInput.height = availableHeight;
+    this.formSelectInput.left = 1;
+    this.formSelectInput.width = Math.max(24, this.formModalInnerWidth() - 4);
+    this.formSelectInput.height = Math.max(4, availableHeight - 2);
     this.formSelectInput.show();
     this.formSelectInput.setFront();
     this.formSelectInput.focus();
+    this.positionFormHint(this.formSelectInput.top + this.formSelectInput.height);
+  }
+
+  private positionFormHint(top: number): void {
+    this.formHint.top = top;
+    this.formHint.left = 1;
+    this.formHint.width = Math.max(24, this.formModalInnerWidth() - 4);
+    this.formHint.height = 2;
+  }
+
+  private showFormHint(lines: string[]): void {
+    this.formHint.setContent(lines.join("\n"));
+    this.formHint.show();
+    this.formHint.setFront();
+  }
+
+  private hideFormLineInput(): void {
+    this.formLineInput.hide();
+    if (typeof this.formLineInput.blur === "function") {
+      this.formLineInput.blur();
+    }
   }
 
   private hideFormTextInput(): void {
@@ -1180,14 +1370,16 @@ export class InteractiveUi {
     }
   }
 
+  private hideFormHint(): void {
+    this.formHint.hide();
+  }
+
   private syncActiveTextFieldValue(): void {
     const session = this.activeFormSession;
     const field = this.currentFormField();
     if (!session || !field || field.type !== "text") {
       return;
     }
-    const nextValue = String(this.formTextInput.getValue() ?? "");
-    session.values[field.id] = nextValue;
   }
 
   private syncActiveBooleanFieldValue(): void {
@@ -1221,6 +1413,8 @@ export class InteractiveUi {
       this.renderActiveForm();
       return;
     }
+
+    this.syncActiveSelectFieldValue();
 
     if (field.type === "single-select") {
       const option = field.options[session.currentOptionIndex];
@@ -1263,6 +1457,7 @@ export class InteractiveUi {
       };
       this.activeFormSession = null;
       this.formModal.hide();
+      this.hideFormLineInput();
       this.hideFormTextInput();
       this.hideFormBooleanInput();
       this.hideFormSelectInput();
@@ -1282,6 +1477,7 @@ export class InteractiveUi {
     const session = this.activeFormSession;
     this.activeFormSession = null;
     this.formModal.hide();
+    this.hideFormLineInput();
     this.hideFormTextInput();
     this.hideFormBooleanInput();
     this.hideFormSelectInput();
@@ -1297,6 +1493,7 @@ export class InteractiveUi {
     const session = this.activeFormSession;
     this.activeFormSession = null;
     this.formModal.hide();
+    this.hideFormLineInput();
     this.hideFormTextInput();
     this.hideFormBooleanInput();
     this.hideFormSelectInput();
@@ -1328,15 +1525,152 @@ export class InteractiveUi {
     }
 
     if (field.type === "text") {
-      if (key.name === "enter") {
-        if (!field.multiline) {
-          this.syncActiveTextFieldValue();
-          this.moveActiveFormField(1);
+      if (!field.multiline) {
+        const session = this.activeFormSession;
+        if (!session) {
           return;
         }
+        const current = String(session.values[field.id] ?? "");
+        if (key.name === "enter") {
+          this.confirmActiveFormField();
+          return;
+        }
+        if (key.name === "left") {
+          session.currentTextCursorIndex = Math.max(0, session.currentTextCursorIndex - 1);
+          this.renderFormLineInput(current);
+          this.requestRender();
+          return;
+        }
+        if (key.name === "right") {
+          session.currentTextCursorIndex = Math.min(current.length, session.currentTextCursorIndex + 1);
+          this.renderFormLineInput(current);
+          this.requestRender();
+          return;
+        }
+        if (key.name === "home") {
+          session.currentTextCursorIndex = 0;
+          this.renderFormLineInput(current);
+          this.requestRender();
+          return;
+        }
+        if (key.name === "end") {
+          session.currentTextCursorIndex = current.length;
+          this.renderFormLineInput(current);
+          this.requestRender();
+          return;
+        }
+        if (key.name === "backspace") {
+          if (session.currentTextCursorIndex > 0) {
+            const nextValue = `${current.slice(0, session.currentTextCursorIndex - 1)}${current.slice(session.currentTextCursorIndex)}`;
+            session.currentTextCursorIndex -= 1;
+            session.values[field.id] = nextValue;
+            this.renderFormLineInput(nextValue);
+            this.requestRender();
+          }
+          return;
+        }
+        if (key.name === "delete") {
+          if (session.currentTextCursorIndex < current.length) {
+            const nextValue = `${current.slice(0, session.currentTextCursorIndex)}${current.slice(session.currentTextCursorIndex + 1)}`;
+            session.values[field.id] = nextValue;
+            this.renderFormLineInput(nextValue);
+            this.requestRender();
+          }
+          return;
+        }
+        if (ch && !key.ctrl && !key.meta && !/^[\x00-\x1f\x7f]$/.test(ch)) {
+          const nextValue = `${current.slice(0, session.currentTextCursorIndex)}${ch}${current.slice(session.currentTextCursorIndex)}`;
+          session.currentTextCursorIndex += ch.length;
+          session.values[field.id] = nextValue;
+          this.renderFormLineInput(nextValue);
+          this.requestRender();
+        }
+        return;
       }
-      if (key.name === "tab" || key.name === "backtab" || key.name === "escape") {
-        this.syncActiveTextFieldValue();
+      if (key.name === "enter") {
+        const session = this.activeFormSession;
+        if (!session) {
+          return;
+        }
+        const current = String(session.values[field.id] ?? "");
+        const nextValue = `${current.slice(0, session.currentTextCursorIndex)}\n${current.slice(session.currentTextCursorIndex)}`;
+        session.currentTextCursorIndex += 1;
+        session.values[field.id] = nextValue;
+        this.renderFormMultilineInput(nextValue);
+        this.requestRender();
+        return;
+      }
+      const session = this.activeFormSession;
+      if (!session) {
+        return;
+      }
+      const current = String(session.values[field.id] ?? "");
+      if (key.name === "left") {
+        session.currentTextCursorIndex = Math.max(0, session.currentTextCursorIndex - 1);
+        this.renderFormMultilineInput(current);
+        this.requestRender();
+        return;
+      }
+      if (key.name === "right") {
+        session.currentTextCursorIndex = Math.min(current.length, session.currentTextCursorIndex + 1);
+        this.renderFormMultilineInput(current);
+        this.requestRender();
+        return;
+      }
+      if (key.name === "home") {
+        const { line } = textIndexToLineColumn(current, session.currentTextCursorIndex);
+        session.currentTextCursorIndex = textLineColumnToIndex(current, line, 0);
+        this.renderFormMultilineInput(current);
+        this.requestRender();
+        return;
+      }
+      if (key.name === "end") {
+        const { line } = textIndexToLineColumn(current, session.currentTextCursorIndex);
+        const lineText = current.split("\n")[line] ?? "";
+        session.currentTextCursorIndex = textLineColumnToIndex(current, line, lineText.length);
+        this.renderFormMultilineInput(current);
+        this.requestRender();
+        return;
+      }
+      if (key.name === "up") {
+        const { line, column } = textIndexToLineColumn(current, session.currentTextCursorIndex);
+        session.currentTextCursorIndex = textLineColumnToIndex(current, Math.max(0, line - 1), column);
+        this.renderFormMultilineInput(current);
+        this.requestRender();
+        return;
+      }
+      if (key.name === "down") {
+        const { line, column } = textIndexToLineColumn(current, session.currentTextCursorIndex);
+        session.currentTextCursorIndex = textLineColumnToIndex(current, line + 1, column);
+        this.renderFormMultilineInput(current);
+        this.requestRender();
+        return;
+      }
+      if (key.name === "backspace") {
+        if (session.currentTextCursorIndex > 0) {
+          const nextValue = `${current.slice(0, session.currentTextCursorIndex - 1)}${current.slice(session.currentTextCursorIndex)}`;
+          session.currentTextCursorIndex -= 1;
+          session.values[field.id] = nextValue;
+          this.renderFormMultilineInput(nextValue);
+          this.requestRender();
+        }
+        return;
+      }
+      if (key.name === "delete") {
+        if (session.currentTextCursorIndex < current.length) {
+          const nextValue = `${current.slice(0, session.currentTextCursorIndex)}${current.slice(session.currentTextCursorIndex + 1)}`;
+          session.values[field.id] = nextValue;
+          this.renderFormMultilineInput(nextValue);
+          this.requestRender();
+        }
+        return;
+      }
+      if (ch && !key.ctrl && !key.meta && !/^[\x00-\x1f\x7f]$/.test(ch)) {
+        const nextValue = `${current.slice(0, session.currentTextCursorIndex)}${ch}${current.slice(session.currentTextCursorIndex)}`;
+        session.currentTextCursorIndex += ch.length;
+        session.values[field.id] = nextValue;
+        this.renderFormMultilineInput(nextValue);
+        this.requestRender();
       }
       return;
     }
@@ -1347,32 +1681,36 @@ export class InteractiveUi {
         return;
       }
       if (key.name === "enter") {
-        this.moveActiveFormField(1);
+        this.confirmActiveFormField();
       }
       return;
     }
 
     if (key.name === "up") {
-      this.formSelectInput.up(1);
       this.syncActiveSelectFieldValue();
       this.requestRender();
       return;
     }
     if (key.name === "down") {
-      this.formSelectInput.down(1);
       this.syncActiveSelectFieldValue();
       this.requestRender();
       return;
     }
     if (key.name === "space") {
+      this.syncActiveSelectFieldValue();
       this.toggleActiveFormValue();
       return;
     }
     if (key.name === "enter") {
+      this.syncActiveSelectFieldValue();
       if (field.type === "single-select") {
-        this.toggleActiveFormValue();
+        const session = this.activeFormSession;
+        const option = session ? field.options[session.currentOptionIndex] : null;
+        if (session && option) {
+          session.values[field.id] = option.value;
+        }
       }
-      this.moveActiveFormField(1);
+      this.confirmActiveFormField();
     }
   }
 
@@ -1905,11 +2243,14 @@ export class InteractiveUi {
     }
     return new Promise<UserInputResult>((resolve, reject) => {
       const values = buildInitialUserInputValues(form.fields);
+      const firstField = form.fields[0];
+      const initialCursorIndex = firstField?.type === "text" ? String(values[firstField.id] ?? "").length : 0;
       this.activeFormSession = {
         form,
         values,
         currentFieldIndex: 0,
         currentOptionIndex: 0,
+        currentTextCursorIndex: initialCursorIndex,
         resolve,
         reject,
       };
