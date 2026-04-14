@@ -184,6 +184,10 @@ export function jiraTaskFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `${taskKey}.json`);
 }
 
+export function jiraTaskEnrichedFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `${taskKey}-enriched.json`);
+}
+
 export function jiraAttachmentsDir(taskKey: string): string {
   return path.join(taskArtifactsDir(taskKey), "jira-attachments");
 }
