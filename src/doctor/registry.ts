@@ -19,6 +19,10 @@ class CheckRegistry {
     return this.checks.find((check) => check.id === id);
   }
 
+  getByTitle(title: string): DoctorCheck | undefined {
+    return this.checks.find((check) => check.title === title);
+  }
+
   getDependencyOrder(): DoctorCheck[] {
     const result: DoctorCheck[] = [];
     const visited = new Set<string>();

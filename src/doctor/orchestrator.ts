@@ -1,6 +1,7 @@
 import type { DoctorCheck, DoctorReport, DoctorResult } from "./types.js";
 import { DoctorStatus, ReadinessStatus } from "./types.js";
 import { REGISTRY } from "./registry.js";
+import { SOFT_CHECK_IDS } from "./checks/cwd-context.js";
 
 class DoctorOrchestrator {
   async run(checks?: DoctorCheck[], filter?: string): Promise<DoctorReport> {
@@ -17,7 +18,12 @@ class DoctorOrchestrator {
         if (byId) {
           checksToRun = [byId];
         } else {
-          checksToRun = [];
+          const byTitle = REGISTRY.getByTitle(filter);
+          if (byTitle) {
+            checksToRun = [byTitle];
+          } else {
+            checksToRun = [];
+          }
         }
       }
     } else {
@@ -69,7 +75,7 @@ class DoctorOrchestrator {
     if (results.some((r) => r.status === DoctorStatus.Fail)) {
       return ReadinessStatus.NotReady;
     }
-    if (results.some((r) => r.status === DoctorStatus.Warn)) {
+    if (results.some((r) => r.status === DoctorStatus.Warn && !SOFT_CHECK_IDS.includes(r.id))) {
       return ReadinessStatus.ReadyWithWarnings;
     }
     return ReadinessStatus.Ready;

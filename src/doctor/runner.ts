@@ -2,6 +2,8 @@ import { DoctorStatus, ReadinessStatus } from "./types.js";
 import { REGISTRY } from "./registry.js";
 import { DoctorOrchestrator } from "./orchestrator.js";
 
+import "./checks/register.js";
+
 const STATUS_ICONS: Record<DoctorStatus, string> = {
   [DoctorStatus.Ok]: "✓",
   [DoctorStatus.Warn]: "⚠",
@@ -15,10 +17,16 @@ const READINESS_LABELS: Record<ReadinessStatus, string> = {
 };
 
 async function runDoctorCommand(args: string[]): Promise<number> {
-  const filter = args[0];
+  const jsonMode = args.includes("--json");
+  const filter = args.find((arg) => arg !== "--json");
   const orchestrator = new DoctorOrchestrator();
 
   const report = await orchestrator.run(undefined, filter);
+
+  if (jsonMode) {
+    process.stdout.write(JSON.stringify(report, null, 2));
+    return report.overall === ReadinessStatus.NotReady ? 1 : 0;
+  }
 
   for (const result of report.checks) {
     const icon = STATUS_ICONS[result.status];
