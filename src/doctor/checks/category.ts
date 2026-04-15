@@ -3,4 +3,5 @@ export const CATEGORY = {
   NODE_VERSION: "node-version",
   AGENTWEAVER_HOME: "agentweaver-home",
   CWD_CONTEXT: "cwd-context",
+  EXECUTORS: "executors",
 } as const;
