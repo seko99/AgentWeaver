@@ -4,4 +4,5 @@ export const CATEGORY = {
   AGENTWEAVER_HOME: "agentweaver-home",
   CWD_CONTEXT: "cwd-context",
   EXECUTORS: "executors",
+  ENV_DIAGNOSTICS: "env-diagnostics",
 } as const;
