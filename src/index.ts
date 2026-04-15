@@ -84,6 +84,7 @@ import {
 } from "./tui.js";
 import { requestUserInputInTerminal, type UserInputRequester } from "./user-input.js";
 import type { UserInputFormDefinition } from "./user-input.js";
+import { runDoctorCommand } from "./doctor/index.js";
 import {
   attachJiraContext,
   detectGitBranchName,
@@ -99,6 +100,7 @@ const COMMANDS = [
   "auto-reset",
   "bug-analyze",
   "bug-fix",
+  "doctor",
   "git-commit",
   "gitlab-diff-review",
   "gitlab-review",
@@ -136,6 +138,7 @@ type BaseConfig = {
   mdLang?: "en" | "ru" | null;
   dryRun: boolean;
   verbose: boolean;
+  doctorArgs?: string[];
 
 };
 
@@ -162,6 +165,7 @@ type ParsedArgs = {
   autoFromPhase?: string;
   mdLang?: "en" | "ru";
   helpPhases: boolean;
+  doctorArgs?: string[];
 };
 
 type FlowLaunchMode = "resume" | "restart";
@@ -221,6 +225,7 @@ function usage(): string {
   agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver doctor [<category>|<check-id>] [--json]
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [<jira-browse-url|jira-issue-key>]
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
@@ -615,6 +620,7 @@ function buildBaseConfig(
     mdLang?: "en" | "ru" | null;
     dryRun?: boolean;
     verbose?: boolean;
+    doctorArgs?: string[];
   } = {},
 ): BaseConfig {
   return {
@@ -627,6 +633,7 @@ function buildBaseConfig(
     mdLang: options.mdLang ?? null,
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
+    ...(options.doctorArgs !== undefined ? { doctorArgs: options.doctorArgs } : {}),
   };
 }
 
@@ -1052,6 +1059,11 @@ async function executeCommand(
   launchProfile?: ResolvedLaunchProfile,
   runtime: RuntimeServices = runtimeServices,
 ): Promise<boolean> {
+  if (baseConfig.command === "doctor") {
+    const exitCode = await runDoctorCommand(baseConfig.doctorArgs ?? []);
+    return exitCode === 0;
+  }
+
   const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
   if (config.command === "auto-golang") {
     requireJiraConfig(config);
@@ -1457,6 +1469,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   let helpPhases = false;
   let jiraRef: string | undefined;
   let mdLang: "en" | "ru" | undefined;
+  const doctorArgs: string[] = [];
 
   for (let index = 1; index < argv.length; index += 1) {
     const token = argv[index] ?? "";
@@ -1508,7 +1521,11 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       }
       continue;
     }
-    jiraRef = token;
+    if (command === "doctor") {
+      doctorArgs.push(token);
+    } else {
+      jiraRef = token;
+    }
   }
 
   if (command === "auto-golang" && helpPhases) {
@@ -1530,6 +1547,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     ...(prompt !== undefined ? { prompt } : {}),
     ...(autoFromPhase !== undefined ? { autoFromPhase } : {}),
     ...(mdLang !== undefined ? { mdLang } : {}),
+    ...(doctorArgs.length > 0 ? { doctorArgs } : {}),
   };
 }
 
@@ -1542,6 +1560,7 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
     ...(args.mdLang !== undefined ? { mdLang: args.mdLang } : {}),
     dryRun: args.dry,
     verbose: args.verbose,
+    ...(args.doctorArgs !== undefined ? { doctorArgs: args.doctorArgs } : {}),
   });
 }
 
