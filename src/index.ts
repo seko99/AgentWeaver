@@ -225,7 +225,7 @@ function usage(): string {
   agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
-  agentweaver doctor [<category>|<check-id>]
+  agentweaver doctor [<category>|<check-id>] [--json]
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [<jira-browse-url|jira-issue-key>]
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]

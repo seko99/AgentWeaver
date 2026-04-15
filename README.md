@@ -85,6 +85,7 @@ User-invokable built-in commands currently map to these flow specs:
 - `run-go-linter-loop`
 - `auto-golang`
 - `auto-common`
+- `doctor`
 
 There are also built-in nested/helper flows that are loaded declaratively but are not direct top-level CLI commands, for example `review-project`.
 
@@ -215,6 +216,9 @@ agentweaver run-go-tests-loop DEMO-1234
 agentweaver run-go-linter-loop DEMO-1234
 agentweaver auto-golang DEMO-1234
 agentweaver auto-common DEMO-1234
+agentweaver doctor
+agentweaver doctor --json
+agentweaver doctor <category>|<check-id>
 ```
 
 From a source checkout:
@@ -237,6 +241,8 @@ agentweaver auto-common --help-phases
 agentweaver auto-golang --from <phase> DEMO-1234
 agentweaver auto-status DEMO-1234
 agentweaver auto-reset DEMO-1234
+agentweaver doctor
+agentweaver doctor --json
 ```
 
 Notes:
