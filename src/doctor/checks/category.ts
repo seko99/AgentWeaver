@@ -5,4 +5,5 @@ export const CATEGORY = {
   CWD_CONTEXT: "cwd-context",
   EXECUTORS: "executors",
   ENV_DIAGNOSTICS: "env-diagnostics",
+  FLOW_READINESS: "flow-readiness",
 } as const;

@@ -5,6 +5,7 @@ import { agentweaverHomeCheck } from "./agentweaver-home.js";
 import { cwdContextCheck } from "./cwd-context.js";
 import { codexExecutorCheck, opencodeExecutorCheck } from "./executors.js";
 import { envDiagnosticsCheck } from "./env-diagnostics.js";
+import { flowReadinessCheck } from "./flow-readiness.js";
 
 REGISTRY.register(nodeVersionCheck);
 
@@ -17,3 +18,4 @@ REGISTRY.register(cwdContextCheck);
 REGISTRY.register(codexExecutorCheck);
 REGISTRY.register(opencodeExecutorCheck);
 REGISTRY.register(envDiagnosticsCheck);
+REGISTRY.register(flowReadinessCheck);
