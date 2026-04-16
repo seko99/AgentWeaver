@@ -371,7 +371,7 @@ function isFormCancellation(error: unknown, formId: string): boolean {
 }
 
 async function requestInteractiveLaunchProfile(requestUserInput: UserInputRequester): Promise<ResolvedLaunchProfile> {
-  for (;;) {
+  for (; ;) {
     const executorFormResult = await requestUserInput(launchProfileSelectionForm());
     const rawExecutor = String(executorFormResult.values.executor ?? DEFAULT_LAUNCH_PROFILE.executor);
     const executor = LLM_EXECUTOR_IDS.find((id) => id === rawExecutor);
@@ -545,15 +545,18 @@ function scopeWithRestoredJiraContext(scope: ResolvedScope, state: FlowRunState 
   return resolveProjectScope(null, state.jiraRef);
 }
 
+function buildInteractiveBaseConfig(flowId: string, scope: ResolvedScope): BaseConfig {
+  return buildBaseConfig(flowId, {
+    ...(scope.jiraRef ? { jiraRef: scope.jiraRef } : {}),
+  });
+}
+
 function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): FlowResumeLookup {
   const directState = loadFlowRunState(currentScope.scopeKey, flowEntry.id);
   if (directState && hasResumableFlowState(directState)) {
     try {
       const effectiveScope = scopeWithRestoredJiraContext(currentScope, directState);
-      const baseConfig = buildBaseConfig(flowEntry.id, {
-        ...(effectiveScope.jiraRef ? { jiraRef: effectiveScope.jiraRef } : {}),
-        scopeName: effectiveScope.scopeKey,
-      });
+      const baseConfig = buildInteractiveBaseConfig(flowEntry.id, effectiveScope);
       const config = buildRuntimeConfig(baseConfig, effectiveScope);
       validateDeclarativeFlowResumeState(flowEntry, config, directState, directState.launchProfile);
       return {
@@ -680,7 +683,7 @@ async function resolveScopeForCommand(
       if (error instanceof TaskRunnerError && error.message.includes("no TTY is available")) {
         throw new TaskRunnerError(
           `Command '${config.command}' requires a Jira task.\n` +
-            "Pass Jira issue key / browse URL as an argument, or run the command in an interactive terminal.",
+          "Pass Jira issue key / browse URL as an argument, or run the command in an interactive terminal.",
         );
       }
       throw error;
@@ -1576,16 +1579,13 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             throw new TaskRunnerError("Resume is impossible because launch profile was not saved. Use restart.");
           }
           const previousScopeKey = currentScope.scopeKey;
-          const baseConfig = buildBaseConfig(flowId, {
-            ...(currentScope.jiraRef ? { jiraRef: currentScope.jiraRef } : {}),
-            scopeName: currentScope.scopeKey,
-          });
+          const baseConfig = buildInteractiveBaseConfig(flowId, currentScope);
           if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
             const nextScope = await resolveScopeForCommand(baseConfig, (form) => ui.requestUserInput(form));
             currentScope = nextScope;
           } else if (flowRequiresTaskScope(flowEntry) && !currentScope.jiraRef) {
             const jiraContext = await requestJiraContext((form) => ui.requestUserInput(form));
-            currentScope = resolveProjectScope(currentScope.scopeKey, jiraContext.jiraRef);
+            currentScope = resolveProjectScope(null, jiraContext.jiraRef);
           }
           ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null);
           if (previousScopeKey !== currentScope.scopeKey || currentScope.jiraIssueKey) {
