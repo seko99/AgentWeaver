@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 const distIndex = path.resolve(process.cwd(), "dist/index.js");
+const distRoot = path.resolve(process.cwd(), "dist");
 
 const VALID_DESIGN = {
   summary: "Design summary",
@@ -95,16 +96,32 @@ function writePlanningRun(taskKey, iteration, options = {}) {
   }
 }
 
-function runDesignReview(issueKey) {
-  return spawnSync("node", [distIndex, "design-review", "--dry", issueKey], {
+function runDesignReview(issueKey, options = {}) {
+  const args = ["node", distIndex, "design-review"];
+  if (options.dry !== false) {
+    args.push("--dry");
+  }
+  args.push(issueKey);
+  return spawnSync(args[0], args.slice(1), {
     cwd: tempDir,
     encoding: "utf8",
     timeout: 15000,
     env: {
       ...process.env,
-      CODEX_BIN: "/bin/echo",
+      CODEX_BIN: options.codexBin ?? "/bin/echo",
+      ...(options.env ?? {}),
     },
   });
+}
+
+function collectStructuredSchemaIds(spec) {
+  return spec.phases.flatMap((phase) =>
+    phase.steps.flatMap((step) =>
+      (step.expect ?? [])
+        .filter((entry) => entry.kind === "require-structured-artifacts")
+        .flatMap((entry) => entry.items.map((item) => item.schemaId)),
+    ),
+  );
 }
 
 beforeEach(() => {
@@ -140,5 +157,31 @@ describe("design-review CLI flow", () => {
     const result = runDesignReview(issueKey);
 
     assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  });
+
+  it("validates design-review against design-review/v1 without migrating other review flows", () => {
+    const designReviewSpec = JSON.parse(
+      readFileSync(path.join(distRoot, "pipeline/flow-specs/design-review.json"), "utf8"),
+    );
+    const reviewSpec = JSON.parse(
+      readFileSync(path.join(distRoot, "pipeline/flow-specs/review/review.json"), "utf8"),
+    );
+    const gitlabReviewSpec = JSON.parse(
+      readFileSync(path.join(distRoot, "pipeline/flow-specs/gitlab/gitlab-review.json"), "utf8"),
+    );
+    const gitlabDiffReviewSpec = JSON.parse(
+      readFileSync(path.join(distRoot, "pipeline/flow-specs/gitlab/gitlab-diff-review.json"), "utf8"),
+    );
+
+    const designReviewSchemaIds = collectStructuredSchemaIds(designReviewSpec);
+    const reviewSchemaIds = collectStructuredSchemaIds(reviewSpec);
+    const gitlabReviewSchemaIds = collectStructuredSchemaIds(gitlabReviewSpec);
+    const gitlabDiffReviewSchemaIds = collectStructuredSchemaIds(gitlabDiffReviewSpec);
+
+    assert.equal(designReviewSchemaIds.includes("design-review/v1"), true);
+    assert.equal(designReviewSchemaIds.includes("review-findings/v1"), false);
+    assert.equal(reviewSchemaIds.includes("review-findings/v1"), true);
+    assert.equal(gitlabReviewSchemaIds.includes("review-findings/v1"), true);
+    assert.equal(gitlabDiffReviewSchemaIds.includes("review-findings/v1"), true);
   });
 });

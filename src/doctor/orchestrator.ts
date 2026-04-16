@@ -52,10 +52,12 @@ class DoctorOrchestrator {
 
   private async executeCheck(check: DoctorCheck): Promise<DoctorResult> {
     const timeout = check.timeout ?? 30000;
+    let timeoutHandle: NodeJS.Timeout | undefined;
 
     try {
       const timeoutPromise = new Promise<DoctorResult>((_, reject) => {
-        setTimeout(() => reject(new Error(`Check '${check.id}' timed out after ${timeout}ms`)), timeout);
+        timeoutHandle = setTimeout(() => reject(new Error(`Check '${check.id}' timed out after ${timeout}ms`)), timeout);
+        timeoutHandle.unref?.();
       });
 
       const result = await Promise.race([check.execute(), timeoutPromise]);
@@ -68,6 +70,10 @@ class DoctorOrchestrator {
         message: error instanceof Error ? error.message : "Unknown error occurred",
         hint: `Check execution failed: ${check.id}`,
       };
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
     }
   }
 

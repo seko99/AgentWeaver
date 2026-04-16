@@ -1,7 +1,7 @@
 {
   "kind": "design-review-flow",
   "version": 1,
-  "description": "Performs structured critique of the latest completed planning artifacts against the task context available in the scope. Produces structured review findings with severity levels and a ready-to-merge verdict.",
+  "description": "Performs a structured planning critique of the latest completed planning artifacts against the task context available in the scope. Produces a verdict-oriented design review artifact and treats approved_with_warnings as ready to proceed.",
   "phases": [
     {
       "id": "phase_1_load_contract",
@@ -199,7 +199,7 @@
                       "iteration": { "ref": "params.iteration" }
                     }
                   },
-                  "schemaId": "review-findings/v1"
+                  "schemaId": "design-review/v1"
                 }
               ],
               "message": "Design review produced invalid structured artifacts."
@@ -222,7 +222,7 @@
               }
             },
             "panelTitle": { "const": "Ready To Merge" },
-            "foundMessage": { "const": "Design and plan are approved. File ready-to-merge.md has been created." },
+            "foundMessage": { "const": "Design review is ready to proceed. File ready-to-merge.md has been created." },
             "tone": { "const": "green" }
           }
         },

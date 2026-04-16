@@ -10,6 +10,8 @@ Typical usage looks like:
 
 The important part is not that exact chain. The point is that AgentWeaver lets you design, operate, and evolve durable agent harnesses instead of accumulating one-off prompts and shell glue.
 
+Для planning-heavy задач типовой путь теперь может включать и `plan -> design-review -> implement`, где `design-review` проверяет качество артефактов планирования до начала кодинга.
+
 ## What It Does
 
 - Fetches Jira issue context by issue key or browse URL
@@ -70,6 +72,7 @@ This keeps workflow design in JSON while keeping implementation details in typed
 User-invokable built-in commands currently map to these flow specs:
 
 - `plan` — fetches Jira task with attachments, generates clarifying questions for the developer, collects answers, and produces design, implementation plan, and QA plan as structured JSON and markdown artifacts
+- `design-review` — выполняет структурированную критику planning artifacts и пишет dedicated artifact `design-review/v1`; статус `approved_with_warnings` считается ready-to-proceed и по-прежнему допускает `ready-to-merge.md`
 - `task-describe` — generates a brief task description from a Jira issue or from manual input; when Jira is provided, fetches the issue and summarizes it; otherwise accepts free-form text and analyzes the codebase to produce a richer description
 - `implement` — runs LLM-backed implementation based on previously approved design and plan artifacts; executes code changes locally in the project working directory
 - `review` — performs code review of current changes against the task design and plan; produces structured review findings with severity levels and a ready-to-merge verdict
@@ -201,6 +204,7 @@ Direct flow execution:
 
 ```bash
 agentweaver plan DEMO-1234
+agentweaver design-review DEMO-1234
 agentweaver task-describe DEMO-1234
 agentweaver implement DEMO-1234
 agentweaver review DEMO-1234
@@ -225,6 +229,7 @@ From a source checkout:
 
 ```bash
 node dist/index.js plan DEMO-1234
+node dist/index.js design-review DEMO-1234
 node dist/index.js implement DEMO-1234
 node dist/index.js review DEMO-1234
 node dist/index.js auto-golang DEMO-1234

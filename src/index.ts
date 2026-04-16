@@ -72,6 +72,7 @@ import { loadTieredEnv } from "./runtime/env-loader.js";
 import { agentweaverHome } from "./runtime/agentweaver-home.js";
 import { runCommand } from "./runtime/process-runner.js";
 import { resolveDesignReviewInputContract } from "./runtime/design-review-input-contract.js";
+import { clearReadyToMergeFile } from "./runtime/ready-to-merge.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
 import {
   bye,
@@ -1186,6 +1187,9 @@ async function executeCommand(
   if (config.command === "design-review") {
     const iteration = nextDesignReviewIterationForTask(config.taskKey);
     const inputContract = resolveDesignReviewInputContract(config.taskKey);
+    if (!config.dryRun) {
+      clearReadyToMergeFile(config.taskKey);
+    }
     await runDeclarativeFlowBySpecFile(
       "design-review.json",
       config,
@@ -1748,7 +1752,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
 
     const parsedArgs = parseCliArgs(args);
-    await executeCommand(buildConfigFromArgs(parsedArgs));
+    const commandCompleted = await executeCommand(buildConfigFromArgs(parsedArgs));
+    if (parsedArgs.command === "doctor") {
+      return commandCompleted ? 0 : 1;
+    }
     return 0;
   } catch (error) {
     if (error instanceof TaskRunnerError) {

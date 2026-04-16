@@ -28,6 +28,9 @@ function schemaLabel(node: StructuredArtifactSchemaNode): string {
   }
   switch (node.type) {
     case "string":
+      if (node.enum && node.enum.length > 0) {
+        return `one of: ${node.enum.join(", ")}`;
+      }
       return node.nonEmpty ? "a non-empty string" : "a string";
     case "boolean":
       return "a boolean";
@@ -60,6 +63,9 @@ function validateNode(value: unknown, schema: StructuredArtifactSchemaNode, curr
   switch (schema.type) {
     case "string":
       if (typeof value !== "string" || (schema.nonEmpty && value.trim().length === 0)) {
+        return [`${currentPath} must be ${schemaLabel(schema)}`];
+      }
+      if (schema.enum && !schema.enum.includes(value)) {
         return [`${currentPath} must be ${schemaLabel(schema)}`];
       }
       return [];

@@ -83,17 +83,22 @@ export const REVIEW_PROMPT_TEMPLATE =
   "If ready_to_merge=true and there are no blockers preventing merge - create the ready-to-merge.md file.";
 
 export const DESIGN_REVIEW_PROMPT_TEMPLATE =
-  "Conduct a structured critique of planning artifacts. " +
+  "Conduct a structured planning critique as a specification critic, not as an implementer. " +
   "Use structured JSON artifacts as the source of truth for semantics. " +
   "Required planning inputs: design markdown {design_file}, design JSON {design_json_file}, implementation plan markdown {plan_file}, implementation plan JSON {plan_json_file}. " +
   "Review the markdown files as derivative human-readable renderings of the same planning run, but do not let markdown override the structured JSON. " +
   "Optional supplemental context is provided through these variables and may contain the literal value 'not provided' when absent: QA markdown {qa_file}, QA JSON {qa_json_file}, Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}. " +
   "When an optional variable is 'not provided', treat that source as unavailable and do not invent details from it. " +
-  "Evaluate whether the design, implementation plan, and optional QA/context artifacts fully address the documented requirements, constraints, edge cases, and acceptance criteria that are available. " +
-  "Identify gaps, inconsistencies, missing coverage, drift between markdown and JSON views, or over-engineering. " +
-  `First write the structured review findings to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
+  "Evaluate completeness, consistency, implementation readiness, risk coverage, QA coverage, and scope discipline across the available planning artifacts and optional context. " +
+  "Identify blocking findings, major non-blocking findings, warnings, missing information, consistency check results, QA coverage gaps, and concise recommended actions. " +
+  "Use exactly one status value: approved, approved_with_warnings, or needs_revision. " +
+  "Set status to needs_revision when any blocking finding exists or when required information is missing in a way that blocks safe implementation start. " +
+  "Set status to approved_with_warnings when there are no blocking findings, but there are major findings, warnings, non-blocking missing information items, QA coverage gaps, or non-blocking consistency issues. " +
+  "Set status to approved only when there are no unresolved blocking findings, major findings, warnings, missing information items, or QA coverage gaps. " +
+  `First write the structured design review to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "design-review/v1")}` +
   "Then write the derivative markdown version to {review_file}. " +
-  "If ready_to_merge=true and there are no blockers preventing merge - create the ready-to-merge.md file.";
+  "Create ready-to-merge.md only when status is approved or approved_with_warnings. " +
+  "Do not create ready-to-merge.md when status is needs_revision.";
 
 export const REVIEW_PROJECT_PROMPT_TEMPLATE =
   "Conduct a code review of current changes in the project without Jira context. " +
