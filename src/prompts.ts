@@ -83,10 +83,14 @@ export const REVIEW_PROMPT_TEMPLATE =
   "If ready_to_merge=true and there are no blockers preventing merge - create the ready-to-merge.md file.";
 
 export const DESIGN_REVIEW_PROMPT_TEMPLATE =
-  "Conduct a structured critique of planning artifacts against Jira task requirements. " +
-  "Use only structured artifacts as source of truth: the task in {jira_task_file}, design in {design_json_file}, plan in {plan_json_file}, and QA plan in {qa_json_file}. " +
-  "Evaluate whether the design, implementation plan, and QA plan fully address the requirements, constraints, and acceptance criteria from the Jira issue. " +
-  "Identify gaps, inconsistencies, missing coverage, or over-engineering. " +
+  "Conduct a structured critique of planning artifacts. " +
+  "Use structured JSON artifacts as the source of truth for semantics. " +
+  "Required planning inputs: design markdown {design_file}, design JSON {design_json_file}, implementation plan markdown {plan_file}, implementation plan JSON {plan_json_file}. " +
+  "Review the markdown files as derivative human-readable renderings of the same planning run, but do not let markdown override the structured JSON. " +
+  "Optional supplemental context is provided through these variables and may contain the literal value 'not provided' when absent: QA markdown {qa_file}, QA JSON {qa_json_file}, Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}. " +
+  "When an optional variable is 'not provided', treat that source as unavailable and do not invent details from it. " +
+  "Evaluate whether the design, implementation plan, and optional QA/context artifacts fully address the documented requirements, constraints, edge cases, and acceptance criteria that are available. " +
+  "Identify gaps, inconsistencies, missing coverage, drift between markdown and JSON views, or over-engineering. " +
   `First write the structured review findings to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
   "Then write the derivative markdown version to {review_file}. " +
   "If ready_to_merge=true and there are no blockers preventing merge - create the ready-to-merge.md file.";

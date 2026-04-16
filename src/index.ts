@@ -71,6 +71,7 @@ import { resolveCmd } from "./runtime/command-resolution.js";
 import { loadTieredEnv } from "./runtime/env-loader.js";
 import { agentweaverHome } from "./runtime/agentweaver-home.js";
 import { runCommand } from "./runtime/process-runner.js";
+import { resolveDesignReviewInputContract } from "./runtime/design-review-input-contract.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
 import {
   bye,
@@ -1183,17 +1184,36 @@ async function executeCommand(
   }
 
   if (config.command === "design-review") {
-    requireJiraConfig(config);
     const iteration = nextDesignReviewIterationForTask(config.taskKey);
+    const inputContract = resolveDesignReviewInputContract(config.taskKey);
     await runDeclarativeFlowBySpecFile(
       "design-review.json",
       config,
       {
         taskKey: config.taskKey,
         iteration,
-        designIteration: nextArtifactIteration(config.taskKey, "design"),
-        planIteration: nextArtifactIteration(config.taskKey, "plan"),
-        qaIteration: nextArtifactIteration(config.taskKey, "qa"),
+        planningIteration: inputContract.planningIteration,
+        designFile: inputContract.designFile,
+        designJsonFile: inputContract.designJsonFile,
+        planFile: inputContract.planFile,
+        planJsonFile: inputContract.planJsonFile,
+        hasQaArtifacts: inputContract.hasQaArtifacts,
+        qaFilePath: inputContract.qaFilePath,
+        qaJsonFilePath: inputContract.qaJsonFilePath,
+        qaFile: inputContract.qaFile,
+        qaJsonFile: inputContract.qaJsonFile,
+        hasJiraTaskFile: inputContract.hasJiraTaskFile,
+        jiraTaskFilePath: inputContract.jiraTaskFilePath,
+        jiraTaskFile: inputContract.jiraTaskFile,
+        hasJiraAttachmentsManifestFile: inputContract.hasJiraAttachmentsManifestFile,
+        jiraAttachmentsManifestFilePath: inputContract.jiraAttachmentsManifestFilePath,
+        jiraAttachmentsManifestFile: inputContract.jiraAttachmentsManifestFile,
+        hasJiraAttachmentsContextFile: inputContract.hasJiraAttachmentsContextFile,
+        jiraAttachmentsContextFilePath: inputContract.jiraAttachmentsContextFilePath,
+        jiraAttachmentsContextFile: inputContract.jiraAttachmentsContextFile,
+        hasPlanningAnswersJsonFile: inputContract.hasPlanningAnswersJsonFile,
+        planningAnswersJsonFilePath: inputContract.planningAnswersJsonFilePath,
+        planningAnswersJsonFile: inputContract.planningAnswersJsonFile,
         extraPrompt: config.extraPrompt,
       },
       launchProfile ? { launchProfile } : {},
