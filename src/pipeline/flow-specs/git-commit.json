@@ -1,6 +1,7 @@
 {
   "kind": "git-commit-flow",
   "version": 1,
+  "description": "Four-phase commit workflow: collects git status and diff, generates a commit message via LLM, presents a file selection form, then shows the editable message for confirmation and executes the commit.",
   "phases": [
     {
       "id": "collect_status",

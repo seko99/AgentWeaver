@@ -1,6 +1,7 @@
 {
   "kind": "run-go-tests-loop-flow",
   "version": 1,
+  "description": "Runs run_go_tests.py and analyzes failures. If tests fail, sends the error output to LLM for a fix and retries. Repeats up to 5 attempts, stopping early on success. Asserts success after the final attempt.",
   "phases": [
     {
       "id": "run_go_tests_try_1",
@@ -70,7 +71,7 @@
               "appendPrompt": {
                 "base": { "ref": "params.extraPrompt" },
                 "suffix": {
-                  "template": "Последний результат run_go_tests.py сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
+                  "template": "Latest run_go_tests.py result saved in {result_file}. exitCode={exit_code}, summary={summary}.\nFull raw output of the last run:\n{raw_output}\nFix only what prevents the check from passing.",
                   "vars": {
                     "result_file": {
                       "artifact": {
@@ -197,7 +198,7 @@
                   "appendPrompt": {
                     "base": { "ref": "params.extraPrompt" },
                     "suffix": {
-                      "template": "Последний результат run_go_tests.py сохранён в {result_file}. exitCode={exit_code}, summary={summary}.\nПолный raw-вывод последнего запуска:\n{raw_output}\nИсправь только то, что мешает успешному прохождению проверки.",
+                      "template": "Latest run_go_tests.py result saved in {result_file}. exitCode={exit_code}, summary={summary}.\nFull raw output of the last run:\n{raw_output}\nFix only what prevents the check from passing.",
                       "vars": {
                         "result_file": {
                           "artifact": {

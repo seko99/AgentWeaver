@@ -157,6 +157,7 @@ export type RepeatPhaseSpec = {
 export type DeclarativeFlowSpec = {
   kind: string;
   version: number;
+  description?: string;
   constants?: Record<string, JsonValue>;
   phases: Array<DeclarativePhaseSpec | RepeatPhaseSpec>;
 };

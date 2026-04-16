@@ -1,6 +1,7 @@
 {
   "kind": "review-fix-flow",
   "version": 1,
+  "description": "Takes review findings, auto-selects blockers and criticals (or lets the developer pick manually), builds a targeted fix prompt, and applies fixes locally. Runs mandatory checks after modifications.",
   "constants": {
     "autoReviewFixExtraPrompt": "Fix only blockers and criticals"
   },

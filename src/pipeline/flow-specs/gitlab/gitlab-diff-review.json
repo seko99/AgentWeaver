@@ -1,6 +1,7 @@
 {
   "kind": "gitlab-diff-review-flow",
   "version": 1,
+  "description": "Prompts for a GitLab merge request URL, fetches the MR diff via GitLab API, and runs LLM-backed code review producing structured findings with severity levels and a ready-to-merge verdict.",
   "phases": [
     {
       "id": "gitlab_diff_review",
@@ -11,14 +12,14 @@
           "params": {
             "formId": { "const": "gitlab-diff-review-input" },
             "title": { "const": "GitLab Diff Review" },
-            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить diff и запустить код-ревью." },
+            "description": { "const": "Provide a GitLab merge request URL to fetch the diff and run code review." },
             "fields": {
               "const": [
                 {
                   "id": "merge_request_url",
                   "type": "text",
                   "label": "GitLab MR URL",
-                  "help": "Например: https://gitlab.example.com/group/project/-/merge_requests/123",
+                  "help": "Example: https://gitlab.example.com/group/project/-/merge_requests/123",
                   "required": true,
                   "placeholder": "https://gitlab.example.com/group/project/-/merge_requests/123"
                 }

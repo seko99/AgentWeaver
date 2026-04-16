@@ -69,25 +69,25 @@ This keeps workflow design in JSON while keeping implementation details in typed
 
 User-invokable built-in commands currently map to these flow specs:
 
-- `plan`
-- `task-describe`
-- `implement`
-- `review`
-- `review-fix`
-- `review-loop`
-- `bug-analyze`
-- `bug-fix`
-- `git-commit`
-- `gitlab-diff-review`
-- `gitlab-review`
-- `mr-description`
-- `run-go-tests-loop`
-- `run-go-linter-loop`
-- `auto-golang`
-- `auto-common`
-- `doctor`
+- `plan` — fetches Jira task with attachments, generates clarifying questions for the developer, collects answers, and produces design, implementation plan, and QA plan as structured JSON and markdown artifacts
+- `task-describe` — generates a brief task description from a Jira issue or from manual input; when Jira is provided, fetches the issue and summarizes it; otherwise accepts free-form text and analyzes the codebase to produce a richer description
+- `implement` — runs LLM-backed implementation based on previously approved design and plan artifacts; executes code changes locally in the project working directory
+- `review` — performs code review of current changes against the task design and plan; produces structured review findings with severity levels and a ready-to-merge verdict
+- `review-fix` — takes review findings, auto-selects blockers and criticals (or lets the developer pick manually), builds a targeted fix prompt, and applies fixes locally; runs mandatory checks after modifications
+- `review-loop` — iteratively runs review → review-fix cycles up to 5 times; stops early when ready-to-merge is achieved; each iteration auto-selects blockers and critical findings for fixing
+- `bug-analyze` — fetches a Bug-type Jira issue, validates the issue type, generates or reuses a cached task summary, and produces structured bug analysis: root cause hypothesis, fix design, and step-by-step fix plan
+- `bug-fix` — applies the fix designed in bug-analyze; uses the root cause hypothesis, fix design, and fix plan artifacts as the source of truth to implement code changes locally
+- `git-commit` — four-phase commit workflow: collects git status and diff, generates a commit message via LLM, presents a file selection form, then shows the editable message for confirmation and executes the commit
+- `gitlab-diff-review` — prompts for a GitLab merge request URL, fetches the MR diff via GitLab API, and runs LLM-backed code review producing structured findings with severity levels and a ready-to-merge verdict
+- `gitlab-review` — prompts for a GitLab merge request URL, fetches existing code review comments via GitLab API, assesses which findings are fair and which can be dismissed, then runs review-fix to apply fixes for the accepted findings
+- `mr-description` — generates a concise merge request description based on the task context and current code changes; produces both markdown and structured JSON artifacts
+- `run-go-tests-loop` — runs `run_go_tests.py` and analyzes failures; if tests fail, sends the error output to LLM for a fix and retries; repeats up to 5 attempts, stopping early on success
+- `run-go-linter-loop` — runs `run_go_linter.py` and analyzes output; if the linter reports issues, sends them to LLM for a fix and retries; repeats up to 5 attempts, stopping early on success
+- `auto-golang` — end-to-end resumable pipeline for Go projects: plan → implement → linter loop → test loop → review loop → final linter loop → final test loop; supports `--from` to restart from a specific phase and `auto-status`/`auto-reset` for state management
+- `auto-common` — end-to-end resumable pipeline without language-specific checks: plan → implement → review loop; simplified alternative to auto-golang for projects that do not need Go linter/test loops
+- `doctor` — diagnostics command that runs system, executor, and flow readiness health checks; supports filtering by category or check ID and JSON output
 
-There are also built-in nested/helper flows that are loaded declaratively but are not direct top-level CLI commands, for example `review-project`.
+There are also built-in nested/helper flows that are loaded declaratively but are not direct top-level CLI commands, for example `review-project` (project-level code review used internally when no prior design/plan artifacts are present).
 
 ## Requirements
 

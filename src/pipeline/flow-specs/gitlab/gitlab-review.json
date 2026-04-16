@@ -1,6 +1,7 @@
 {
   "kind": "gitlab-review-flow",
   "version": 1,
+  "description": "Prompts for a GitLab merge request URL, fetches existing code review comments via GitLab API, assesses which findings are fair and which can be dismissed, then runs review-fix to apply fixes for the accepted findings.",
   "phases": [
     {
       "id": "gitlab_review",
@@ -11,14 +12,14 @@
           "params": {
             "formId": { "const": "gitlab-review-input" },
             "title": { "const": "GitLab Review" },
-            "description": { "const": "Укажи ссылку на GitLab merge request, чтобы загрузить комментарии код-ревью." },
+            "description": { "const": "Provide a GitLab merge request URL to fetch code review comments." },
             "fields": {
               "const": [
                 {
                   "id": "merge_request_url",
                   "type": "text",
                   "label": "GitLab MR URL",
-                  "help": "Например: https://gitlab.example.com/group/project/-/merge_requests/123",
+                  "help": "Example: https://gitlab.example.com/group/project/-/merge_requests/123",
                   "required": true,
                   "placeholder": "https://gitlab.example.com/group/project/-/merge_requests/123"
                 }

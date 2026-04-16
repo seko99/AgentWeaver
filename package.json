@@ -18,7 +18,7 @@
     "type": "git",
     "url": "git+https://github.com/seko99/AgentWeaver.git"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "exports": "./dist/index.js",
@@ -28,6 +28,7 @@
   "files": [
     "dist",
     "README.md",
+    "LICENSE",
     "run_go_tests.py",
     "run_go_linter.py",
     "run_go_coverage.sh"

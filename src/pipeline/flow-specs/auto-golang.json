@@ -1,8 +1,9 @@
 {
   "kind": "auto-flow",
   "version": 1,
+  "description": "End-to-end resumable pipeline for Go projects. Runs the full sequence: plan (with Jira fetch and Q&A) → implement → linter loop → test loop → review loop → final linter loop → final test loop. Supports --from to restart from a specific phase and auto-status/auto-reset for state management.",
   "constants": {
-    "autoReviewFixExtraPrompt": "Исправлять только блокеры, критикалы и важные"
+    "autoReviewFixExtraPrompt": "Fix only blockers, criticals, and important findings"
   },
   "phases": [
     {

@@ -1,6 +1,7 @@
 {
   "kind": "plan-flow",
   "version": 1,
+  "description": "Fetches Jira task with attachments, generates clarifying questions for the developer, collects answers, and produces design, implementation plan, and QA plan as structured JSON and markdown artifacts.",
   "phases": [
     {
       "id": "plan",
@@ -158,7 +159,7 @@
             "formId": { "const": "planning-questions" },
             "title": { "const": "Planning Questions" },
             "description": {
-              "const": "Ответьте на вопросы модели, если они нужны для точного design/plan. Если вопросов нет, шаг завершится автоматически."
+              "const": "Answer the model's questions if they are needed for an accurate design/plan. If there are no questions, this step will complete automatically."
             }
           }
         },

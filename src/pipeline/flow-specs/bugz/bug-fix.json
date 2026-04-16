@@ -1,6 +1,7 @@
 {
   "kind": "bug-fix-flow",
   "version": 1,
+  "description": "Applies the fix designed in bug-analyze. Uses the root cause hypothesis, fix design, and fix plan artifacts as the source of truth to implement code changes locally.",
   "phases": [
     {
       "id": "bug_fix",

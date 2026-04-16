@@ -221,7 +221,7 @@ export const gitStatusNode: PipelineNodeDefinition<GitStatusNodeParams, GitStatu
     const files = parsePorcelain(porcelainOutput);
 
     if (files.length === 0) {
-      throw new TaskRunnerError("Нет изменённых файлов для коммита.");
+      throw new TaskRunnerError("No changed files to commit.");
     }
 
     const diff = await context.runtime.runCommand(

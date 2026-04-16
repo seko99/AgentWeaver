@@ -1,6 +1,7 @@
 {
   "kind": "review-loop-flow",
   "version": 1,
+  "description": "Iteratively runs review → review-fix cycles up to 5 times. Stops early when ready-to-merge is achieved. Each iteration auto-selects blockers and critical findings for fixing.",
   "constants": {
     "autoReviewFixExtraPrompt": "Fix only blockers and criticals. Skip minor and warning severity."
   },

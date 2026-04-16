@@ -136,7 +136,7 @@ export async function runCommand(
   });
 
   if (outputAdapter.renderAuxiliaryOutput !== false) {
-    printFramedBlock("Запуск", formatLaunchDetails(statusLabel), "cyan");
+    printFramedBlock("Launch", formatLaunchDetails(statusLabel), "cyan");
   }
 
   try {
@@ -160,7 +160,7 @@ export async function runCommand(
     });
 
     if (outputAdapter.renderAuxiliaryOutput !== false) {
-      printInfo(`Закончили работу: ${statusLabel} (${formatDuration(Date.now() - startedAt)})`);
+      printInfo(`Finished: ${statusLabel} (${formatDuration(Date.now() - startedAt)})`);
     }
 
     if (signal?.aborted) {

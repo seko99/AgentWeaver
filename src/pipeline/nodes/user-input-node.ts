@@ -85,8 +85,8 @@ function buildTaskDescribePromptSuffix(
           ].join("\n\n")
         : "",
       summaryText: additionalInstructions
-        ? `Источник задачи: Jira\nJira: ${jiraRef}\n\nДополнительные указания:\n${additionalInstructions}`
-        : `Источник задачи: Jira\nJira: ${jiraRef}`,
+        ? `Task source: Jira\nJira: ${jiraRef}\n\nAdditional instructions:\n${additionalInstructions}`
+        : `Task source: Jira\nJira: ${jiraRef}`,
     };
   }
 

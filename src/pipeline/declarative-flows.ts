@@ -14,6 +14,7 @@ export type DeclarativeFlowRef =
 export type LoadedDeclarativeFlow = {
   kind: string;
   version: number;
+  description?: string;
   constants: Record<string, unknown>;
   phases: ExpandedPhaseSpec[];
   source: FlowSpecSource["source"];
@@ -45,9 +46,10 @@ export function loadDeclarativeFlow(flow: DeclarativeFlowRef | string): LoadedDe
   });
   const phases = compileFlowSpec(spec);
   validateExpandedPhases(phases);
-  const loaded = {
+  const loaded: LoadedDeclarativeFlow = {
     kind: spec.kind,
     version: spec.version,
+    ...(spec.description !== undefined ? { description: spec.description } : {}),
     constants: spec.constants ?? {},
     phases,
     source: ref.source,
