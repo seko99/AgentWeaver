@@ -82,6 +82,15 @@ export const REVIEW_PROMPT_TEMPLATE =
   "Then write the derivative markdown version to {review_file}. " +
   "If ready_to_merge=true and there are no blockers preventing merge - create the ready-to-merge.md file.";
 
+export const DESIGN_REVIEW_PROMPT_TEMPLATE =
+  "Conduct a structured critique of planning artifacts against Jira task requirements. " +
+  "Use only structured artifacts as source of truth: the task in {jira_task_file}, design in {design_json_file}, plan in {plan_json_file}, and QA plan in {qa_json_file}. " +
+  "Evaluate whether the design, implementation plan, and QA plan fully address the requirements, constraints, and acceptance criteria from the Jira issue. " +
+  "Identify gaps, inconsistencies, missing coverage, or over-engineering. " +
+  `First write the structured review findings to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
+  "Then write the derivative markdown version to {review_file}. " +
+  "If ready_to_merge=true and there are no blockers preventing merge - create the ready-to-merge.md file.";
+
 export const REVIEW_PROJECT_PROMPT_TEMPLATE =
   "Conduct a code review of current changes in the project without Jira context. " +
   "Evaluate the quality of changes based on current code, tests, regression risks, and overall engineering quality. " +

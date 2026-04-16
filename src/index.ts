@@ -100,6 +100,7 @@ const COMMANDS = [
   "auto-reset",
   "bug-analyze",
   "bug-fix",
+  "design-review",
   "doctor",
   "git-commit",
   "gitlab-diff-review",
@@ -225,6 +226,7 @@ function usage(): string {
   agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver design-review [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver doctor [<category>|<check-id>] [--json]
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [<jira-browse-url|jira-issue-key>]
@@ -645,6 +647,7 @@ function commandRequiresTask(command: string): boolean {
     command === "plan" ||
     command === "bug-analyze" ||
     command === "bug-fix" ||
+    command === "design-review" ||
     command === "mr-description" ||
     command === "auto-golang" ||
     command === "auto-common" ||
@@ -1185,6 +1188,29 @@ async function executeCommand(
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
     }, launchProfile ? { launchProfile } : {}, requestUserInput, setSummary, launchMode, runtime);
+    return false;
+  }
+
+  if (config.command === "design-review") {
+    requireJiraConfig(config);
+    const iteration = nextReviewIterationForTask(config.taskKey);
+    await runDeclarativeFlowBySpecFile(
+      "design-review.json",
+      config,
+      {
+        taskKey: config.taskKey,
+        iteration,
+        designIteration: nextArtifactIteration(config.taskKey, "design"),
+        planIteration: nextArtifactIteration(config.taskKey, "plan"),
+        qaIteration: nextArtifactIteration(config.taskKey, "qa"),
+        extraPrompt: config.extraPrompt,
+      },
+      launchProfile ? { launchProfile } : {},
+      requestUserInput,
+      undefined,
+      launchMode,
+      runtime,
+    );
     return false;
   }
 

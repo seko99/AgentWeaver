@@ -1,0 +1,238 @@
+{
+  "kind": "design-review-flow",
+  "version": 1,
+  "description": "Performs structured critique of implementation-design, implementation-plan, and qa-plan artifacts against the Jira task requirements. Produces structured review findings with severity levels and a ready-to-merge verdict.",
+  "phases": [
+    {
+      "id": "phase_1_load_artifacts",
+      "steps": [
+        {
+          "id": "load_jira_context",
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "attachmentsManifestFile": {
+              "artifact": {
+                "kind": "jira-attachments-manifest-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "attachmentsContextFile": {
+              "artifact": {
+                "kind": "jira-attachments-context-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
+            }
+          ]
+        },
+        {
+          "id": "validate_design_artifact",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "design-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.designIteration" }
+              }
+            },
+            "panelTitle": { "const": "Design Artifact" },
+            "foundMessage": { "const": "Design artifact found and will be reviewed." },
+            "tone": { "const": "cyan" }
+          }
+        },
+        {
+          "id": "validate_plan_artifact",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "plan-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.planIteration" }
+              }
+            },
+            "panelTitle": { "const": "Plan Artifact" },
+            "foundMessage": { "const": "Implementation plan artifact found and will be reviewed." },
+            "tone": { "const": "cyan" }
+          }
+        },
+        {
+          "id": "validate_qa_artifact",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "qa-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.qaIteration" }
+              }
+            },
+            "panelTitle": { "const": "QA Artifact" },
+            "foundMessage": { "const": "QA plan artifact found and will be reviewed." },
+            "tone": { "const": "cyan" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "phase_2_review",
+      "steps": [
+        {
+          "id": "run_design_review",
+          "node": "llm-prompt",
+          "prompt": {
+            "templateRef": "design-review",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "design_json_file": {
+                "artifact": {
+                  "kind": "design-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.designIteration" }
+                }
+              },
+              "plan_json_file": {
+                "artifact": {
+                  "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.planIteration" }
+                }
+              },
+              "qa_json_file": {
+                "artifact": {
+                  "kind": "qa-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.qaIteration" }
+                }
+              },
+              "review_file": {
+                "artifact": {
+                  "kind": "review-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_json_file": {
+                "artifact": {
+                  "kind": "review-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "template": "Running design review (iteration {iteration})",
+              "vars": {
+                "iteration": { "ref": "params.iteration" }
+              }
+            },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "review-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
+                }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "review-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  }
+                ]
+              },
+              "message": "Design review did not produce the required review artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "review-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  },
+                  "schemaId": "review-findings/v1"
+                }
+              ],
+              "message": "Design review produced invalid structured artifacts."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_3_finalize",
+      "steps": [
+        {
+          "id": "check_ready_to_merge",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Design and plan are approved. File ready-to-merge.md has been created." },
+            "notFoundMessage": { "const": "Review findings require attention before merging." },
+            "tone": { "const": "green" }
+          }
+        },
+        {
+          "id": "notify_review_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": { "const": "Design review phase complete" }
+          }
+        }
+      ]
+    }
+  ]
+}
