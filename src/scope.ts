@@ -70,7 +70,7 @@ export function detectProjectRoot(): string {
   return gitOutput(["rev-parse", "--show-toplevel"]) ?? process.cwd();
 }
 
-export function buildProjectScopeKey(explicitScope?: string | null): {
+export function buildProjectScopeKey(explicitScope?: string | null, jiraIssueKey?: string | null): {
   scopeKey: string;
   gitBranchName: string | null;
   worktreeHash: string;
@@ -81,6 +81,14 @@ export function buildProjectScopeKey(explicitScope?: string | null): {
   if (explicitScope?.trim()) {
     return {
       scopeKey: sanitizeScopeName(explicitScope),
+      gitBranchName: detectGitBranchName(),
+      worktreeHash,
+      projectRoot,
+    };
+  }
+  if (jiraIssueKey?.trim()) {
+    return {
+      scopeKey: `${sanitizeScopeName(jiraIssueKey)}@${worktreeHash}`,
       gitBranchName: detectGitBranchName(),
       worktreeHash,
       projectRoot,
@@ -107,7 +115,8 @@ export function parseJiraContext(jiraRef: string): RequestedJiraContext {
 }
 
 export function resolveProjectScope(explicitScope?: string | null, jiraRef?: string | null): ResolvedScope {
-  const { scopeKey, gitBranchName, worktreeHash, projectRoot } = buildProjectScopeKey(explicitScope);
+  const jiraIssueKey = jiraRef?.trim() ? extractIssueKey(jiraRef) : undefined;
+  const { scopeKey, gitBranchName, worktreeHash, projectRoot } = buildProjectScopeKey(explicitScope, jiraIssueKey);
   ensureScopeWorkspaceDir(scopeKey);
   const baseScope: ResolvedScope = {
     scopeType: "project",
