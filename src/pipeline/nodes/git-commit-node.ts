@@ -21,7 +21,7 @@ export const gitCommitNode: PipelineNodeDefinition<GitCommitNodeParams, GitCommi
     printInfo(params.labelText ?? "Committing changes");
 
     if (context.dryRun) {
-      printInfo("DRY RUN: git commit не выполнен");
+      printInfo("DRY RUN: git commit was not executed");
       return {
         value: {
           output: "",

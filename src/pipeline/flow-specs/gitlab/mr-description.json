@@ -1,6 +1,7 @@
 {
   "kind": "mr-description-flow",
   "version": 1,
+  "description": "Generates a concise merge request description based on the task context and current code changes. Produces both markdown and structured JSON artifacts.",
   "phases": [
     {
       "id": "mr_description",

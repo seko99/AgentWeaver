@@ -1,6 +1,7 @@
 {
   "kind": "review-project-flow",
   "version": 1,
+  "description": "Project-level code review. Runs a single LLM review step using the review-project prompt template. Used internally by the review command when no prior design/plan artifacts are present.",
   "phases": [
     {
       "id": "review",

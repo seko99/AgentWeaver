@@ -1,6 +1,7 @@
 {
   "kind": "bug-analyze-flow",
   "version": 1,
+  "description": "Fetches a Bug-type Jira issue, validates the issue type, generates or reuses a cached task summary, and produces structured bug analysis: root cause hypothesis, fix design, and step-by-step fix plan.",
   "phases": [
     {
       "id": "bug_analyze",

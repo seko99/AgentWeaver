@@ -339,7 +339,7 @@ export class InteractiveUi {
       top: 3,
       left: 0,
       width: "34%",
-      height: "50%-1",
+      height: "50%-4",
       tags: true,
       label: " Current Flow ",
       padding: {
@@ -359,10 +359,10 @@ export class InteractiveUi {
 
     this.flowList = blessed.list({
       parent: this.screen,
-      top: "50%+2",
+      top: "50%-1",
       left: 0,
       width: "34%",
-      bottom: 11,
+      bottom: 14,
       keys: true,
       vi: true,
       mouse: true,
@@ -530,7 +530,7 @@ export class InteractiveUi {
       bottom: 6,
       left: 0,
       width: "34%",
-      height: 5,
+      height: 8,
       tags: true,
       label: " Flow Description ",
       padding: {
@@ -978,19 +978,19 @@ export class InteractiveUi {
         [
           "AgentWeaver interactive mode",
           "",
-          "Клавиши:",
-          "Up / Down    выбрать папку или flow",
-          "Right        раскрыть папку",
-          "Left         свернуть папку или перейти к родителю",
-          "Enter        раскрыть папку или открыть запуск flow",
-          "Enter        подтвердить запуск в модалке",
-          "Esc          закрыть help/модалку или прервать running flow",
-          "F1           открыть или закрыть help",
-          "Tab          переключить pane",
-          "Ctrl+L       очистить лог",
-          "q / Ctrl+C   выйти",
+          "Keys:",
+          "Up / Down    select folder or flow",
+          "Right        expand folder",
+          "Left         collapse folder or go to parent",
+          "Enter        expand folder or launch flow",
+          "Enter        confirm launch in modal",
+          "Esc          close help/modal or interrupt running flow",
+          "F1           open or close help",
+          "Tab          switch pane",
+          "Ctrl+L       clear log",
+          "q / Ctrl+C   exit",
           "",
-          "Доступные flow:",
+          "Available flows:",
           ...this.options.flows.map((flow) => flow.treePath.join("/")),
         ].join("\n"),
       ),
@@ -1743,21 +1743,21 @@ export class InteractiveUi {
     if (selectedItem.kind === "folder") {
       const kindLabel = selectedItem.pathSegments[0] === "custom" ? "project-local" : "built-in";
       const folderDescription = [
-        `Папка flow \`${selectedItem.pathSegments.join("/")}\`.`,
+        `Flow folder \`${selectedItem.pathSegments.join("/")}\`.`,
         "",
-        `Источник: ${kindLabel}`,
-        `Статус: ${this.expandedFlowFolders.has(selectedItem.key) ? "развёрнута" : "свёрнута"}`,
+        `Source: ${kindLabel}`,
+        `State: ${this.expandedFlowFolders.has(selectedItem.key) ? "expanded" : "collapsed"}`,
       ].join("\n");
       this.description.setContent(renderMarkdownToTerminal(stripAnsi(folderDescription)));
       return;
     }
 
     const { flow } = selectedItem;
-    const description = flow.description?.trim() || "Описание для этого flow пока не задано.";
+    const description = flow.description?.trim() || "No description available for this flow.";
     const details = [
-      `Путь: ${flow.treePath.join("/")}`,
-      `Источник: ${flow.source === "project-local" ? "project-local" : "built-in"}`,
-      flow.source === "project-local" && flow.sourcePath ? `Файл: ${flow.sourcePath}` : "",
+      `Path: ${flow.treePath.join("/")}`,
+      `Source: ${flow.source === "project-local" ? "project-local" : "built-in"}`,
+      flow.source === "project-local" && flow.sourcePath ? `File: ${flow.sourcePath}` : "",
     ]
       .filter((line) => line.length > 0)
       .join("\n");
@@ -1805,7 +1805,7 @@ export class InteractiveUi {
   private renderProgress(): void {
     const flow = this.progressFlowDefinition();
     if (!flow) {
-      this.progress.setContent("Выберите конкретный flow в дереве, чтобы увидеть его прогресс.");
+      this.progress.setContent("Select a flow in the tree to see its progress.");
       return;
     }
 
@@ -2236,7 +2236,7 @@ export class InteractiveUi {
       flowId,
       resumeAvailable: true,
       hasExistingState: true,
-      details: "Текущий flow будет остановлен. Состояние сохранится, и его можно будет продолжить через Resume.",
+      details: "The current flow will be stopped. State will be saved and can be continued via Resume.",
       selectedAction: "stop",
     };
     this.renderConfirm();

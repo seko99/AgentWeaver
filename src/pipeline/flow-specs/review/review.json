@@ -1,6 +1,7 @@
 {
   "kind": "review-flow",
   "version": 1,
+  "description": "Performs code review of current changes against the task design and plan. Produces structured review findings with severity levels and a ready-to-merge verdict.",
   "phases": [
     {
       "id": "review",
@@ -116,7 +117,7 @@
               }
             },
             "panelTitle": { "const": "Ready To Merge" },
-            "foundMessage": { "const": "Изменения готовы к merge\nФайл ready-to-merge.md создан." },
+            "foundMessage": { "const": "Changes are ready to merge.\nFile ready-to-merge.md has been created." },
             "tone": { "const": "green" }
           }
         }

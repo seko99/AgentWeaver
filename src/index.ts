@@ -208,7 +208,7 @@ function formatProcessFailure(error: ProcessFailureLike): string {
   if (!preview) {
     return baseMessage;
   }
-  return `${baseMessage}\nПричина:\n${preview}`;
+  return `${baseMessage}\nReason:\n${preview}`;
 }
 
 function escapeRegExp(value: string): string {
@@ -322,8 +322,8 @@ function launchProfileSelectionForm(): UserInputFormDefinition {
   const defaultExecutor = DEFAULT_LAUNCH_PROFILE.executor;
   return {
     formId: "flow-launch-profile",
-    title: "Настройки запуска LLM",
-    description: `Выберите executor для запуска flow. Текущий default: ${defaultExecutor}.`,
+    title: "LLM Launch Settings",
+    description: `Select an executor for the flow. Current default: ${defaultExecutor}.`,
     submitLabel: "Continue",
     fields: [
       {
@@ -350,8 +350,8 @@ function launchModelSelectionForm(executor: LaunchProfileSelection["executor"]):
   }));
   return {
     formId: "flow-launch-model",
-    title: "Настройки запуска LLM",
-    description: `Выберите модель для запуска flow. Текущий default для ${resolvedExecutor}: ${defaultModel}.`,
+    title: "LLM Launch Settings",
+    description: `Select a model for the flow. Current default for ${resolvedExecutor}: ${defaultModel}.`,
     submitLabel: "Start",
     fields: [
       {
@@ -739,45 +739,12 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
   };
 }
 
-const FLOW_DESCRIPTIONS: Record<string, string> = {
-  "auto-golang": "Full task pipeline: planning, implementation, checks, review, review replies, and repeated iterations until ready to merge.",
-  "bug-analyze":
-    "Analyzes bug from Jira and creates structured artifacts: root cause hypothesis, fix design, and implementation plan.",
-  "git-commit":
-    "Collects git status/diff, generates commit message via LLM, allows file selection and commit confirmation.",
-  "gitlab-diff-review":
-    "Requests GitLab MR URL via user-input, downloads merge request diff via API, and runs code review with markdown and structured JSON artifacts.",
-  "gitlab-review":
-    "Requests GitLab MR URL via user-input, downloads code review comments via API, assesses which findings are fair and proposes fixes, then runs review-fix for the selected findings.",
-  "bug-fix":
-    "Takes bug-analyze results as source of truth and implements the bug fix in code.",
-  "mr-description":
-    "Prepares a brief intent description for a merge request based on the task and current changes.",
-  plan: "Loads task from Jira and creates design, implementation plan, and QA plan in structured JSON and markdown.",
-  "task-describe": "Builds a brief task description either from Jira or from quick user-input without Jira.",
-  implement: "Implements the task from approved design/plan artifacts and runs post-verify builds if needed.",
-  review:
-    "Runs code review of current changes and writes structured findings artifacts.",
-  "review-fix":
-    "Fixes issues after review-reply, updates code, and runs mandatory checks after modifications.",
-  "review-loop":
-    "Iteratively runs review and review-fix cycles up to 5 times until ready-to-merge is achieved.",
-  "run-go-tests-loop":
-    "Cycles through `./run_go_tests.py` locally, analyzes the last error, and fixes code until successful or attempts exhausted.",
-  "run-go-linter-loop":
-    "Cycles through `./run_go_linter.py` locally, fixes linter or generation issues, and retries until success.",
-};
-
-function flowDescription(id: string): string {
-  return FLOW_DESCRIPTIONS[id] ?? "Описание для этого flow пока не задано.";
-}
-
 function interactiveFlowDefinition(entry: FlowCatalogEntry): InteractiveFlowDefinition {
   const flow = entry.flow;
   return {
     id: entry.id,
     label: entry.id,
-    description: flowDescription(entry.id),
+    description: flow.description ?? "No description available for this flow.",
     source: entry.source,
     treePath: [...entry.treePath],
     ...(entry.source === "project-local" ? { sourcePath: entry.absolutePath } : {}),

@@ -97,8 +97,8 @@ export const reviewFindingsFormNode: PipelineNodeDefinition<ReviewFindingsFormNo
       {
         id: "apply_all",
         type: "boolean",
-        label: "Исправить все findings в этой итерации",
-        help: "Если включено, выбор списка ниже не ограничивает scope исправлений.",
+        label: "Fix all findings in this iteration",
+        help: "If enabled, the selection list below does not limit the scope of fixes.",
         default: selectableFindings.length === 0,
       },
     ];
@@ -107,8 +107,8 @@ export const reviewFindingsFormNode: PipelineNodeDefinition<ReviewFindingsFormNo
       fields.push({
         id: "selected_findings",
         type: "multi-select",
-        label: "Какие findings исправить сейчас",
-        help: "Space переключает пункт. Если apply_all=false, выберите хотя бы один finding.",
+        label: "Which findings to fix now",
+        help: "Space toggles an item. If apply_all is off, select at least one finding.",
         options: selectableFindings.map((finding) => ({
           value: finding.title,
           label: `${finding.title} | ${finding.severity || "-"}`,
@@ -131,10 +131,10 @@ export const reviewFindingsFormNode: PipelineNodeDefinition<ReviewFindingsFormNo
     fields.push({
       id: "extra_notes",
       type: "text",
-      label: "Дополнительные указания",
-      help: "Короткий комментарий для этой итерации review-fix.",
+      label: "Additional instructions",
+      help: "Short comment for this review-fix iteration.",
       default: "",
-      placeholder: "Например: исправить только блокеры",
+      placeholder: "e.g. fix only blockers",
     });
 
     return {
@@ -142,7 +142,7 @@ export const reviewFindingsFormNode: PipelineNodeDefinition<ReviewFindingsFormNo
         formId: params.formId,
         title: params.title,
         ...(params.description ? { description: params.description } : {}),
-        submitLabel: "Запустить review-fix",
+        submitLabel: "Run review-fix",
         fields,
         findingCount: selectableFindings.length,
       },

@@ -141,14 +141,14 @@ export function buildJiraTaskInputForm(): UserInputFormDefinition {
   return {
     formId: "jira-task-input",
     title: "Jira Task",
-    description: "Укажи Jira issue key или browse URL для task-driven flow.",
+    description: "Provide a Jira issue key or browse URL for a task-driven flow.",
     submitLabel: "Continue",
     fields: [
       {
         id: "jira_ref",
         type: "text",
         label: "Jira issue key or browse URL",
-        help: "Например: DEMO-3288 или https://jira.example.ru/browse/DEMO-3288",
+        help: "Example: DEMO-3288 or https://jira.example.com/browse/DEMO-3288",
         required: true,
       },
     ],

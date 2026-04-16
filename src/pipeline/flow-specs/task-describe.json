@@ -1,6 +1,7 @@
 {
   "kind": "task-describe-flow",
   "version": 1,
+  "description": "Generates a brief task description from a Jira issue or from manual input. When Jira is provided, fetches the issue and summarizes it; otherwise accepts free-form text and analyzes the codebase to produce a richer description.",
   "phases": [
     {
       "id": "task_describe",
@@ -12,7 +13,7 @@
             "formId": { "const": "task-describe-source-input" },
             "title": { "const": "Task Describe Source" },
             "description": {
-              "const": "Укажи либо Jira issue key / browse URL, либо кратко опиши задачу вручную."
+              "const": "Provide a Jira issue key / browse URL, or describe the task manually."
             },
             "submitLabel": { "const": "Generate description" },
             "fields": {
@@ -22,7 +23,7 @@
                     "id": "jira_ref",
                     "type": "text",
                     "label": "Jira issue key or browse URL",
-                    "help": "Например: DEMO-3288 или https://jira.example.ru/browse/DEMO-3288. Оставь пустым, если опишешь задачу вручную.",
+                    "help": "Example: DEMO-3288 or https://jira.example.com/browse/DEMO-3288. Leave empty to describe the task manually.",
                     "required": false
                   }
                 },
@@ -31,11 +32,11 @@
                     "id": "additional_instructions",
                     "type": "text",
                     "label": "Additional instructions",
-                    "help": "Необязательные указания для генерации описания. Например: ссылка на другой локальный репозиторий, связанный проект, ограничения или полезный контекст.",
+                    "help": "Optional instructions for description generation. Example: link to another local repo, related project, constraints, or useful context.",
                     "required": false,
                     "multiline": true,
                     "rows": 4,
-                    "placeholder": "Например: смотри также ../billing-service, описание API есть в docs/task-templates.md"
+                    "placeholder": "e.g. see also ../billing-service, API docs in docs/task-templates.md"
                   }
                 },
                 {
@@ -43,11 +44,11 @@
                     "id": "task_description",
                     "type": "text",
                     "label": "Task description",
-                    "help": "Кратко опиши задачу своими словами. Заполни это поле только если Jira нет.",
+                    "help": "Briefly describe the task in your own words. Fill this field only if Jira is not used.",
                     "required": false,
                     "multiline": true,
                     "rows": 3,
-                    "placeholder": "Например: добавить фильтр по статусу в список заказов и сохранить выбранное значение в URL"
+                    "placeholder": "e.g. add a status filter to the order list and persist the selected value in the URL"
                   }
                 }
               ]
