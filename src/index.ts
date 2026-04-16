@@ -542,7 +542,7 @@ function scopeWithRestoredJiraContext(scope: ResolvedScope, state: FlowRunState 
   if (scope.jiraRef || !state?.jiraRef?.trim()) {
     return scope;
   }
-  return attachJiraContext(scope, state.jiraRef);
+  return resolveProjectScope(null, state.jiraRef);
 }
 
 function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): FlowResumeLookup {
@@ -1585,7 +1585,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             currentScope = nextScope;
           } else if (flowRequiresTaskScope(flowEntry) && !currentScope.jiraRef) {
             const jiraContext = await requestJiraContext((form) => ui.requestUserInput(form));
-            currentScope = attachJiraContext(currentScope, jiraContext.jiraRef);
+            currentScope = resolveProjectScope(currentScope.scopeKey, jiraContext.jiraRef);
           }
           ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null);
           if (previousScopeKey !== currentScope.scopeKey || currentScope.jiraIssueKey) {
