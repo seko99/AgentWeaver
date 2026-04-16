@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import type { RuntimeServices } from "./executors/types.js";
 import {
-  REVIEW_FILE_RE,
   bugAnalyzeArtifacts,
   bugAnalyzeJsonFile,
   bugFixDesignJsonFile,
   bugFixPlanJsonFile,
+  designReviewFile,
+  designReviewJsonFile,
   designJsonFile,
   gitlabDiffFile,
   gitlabDiffJsonFile,
@@ -597,21 +598,11 @@ function printAutoCommonPhasesHelp(): void {
 }
 
 function nextReviewIterationForTask(taskKey: string): number {
-  let maxIndex = 0;
-  const workspaceDir = scopeWorkspaceDir(taskKey);
-  if (!existsSync(workspaceDir)) {
-    return 1;
-  }
-  for (const entry of readdirSync(workspaceDir, { withFileTypes: true })) {
-    if (!entry.isFile()) {
-      continue;
-    }
-    const match = REVIEW_FILE_RE.exec(entry.name);
-    if (match && match[1] === taskKey) {
-      maxIndex = Math.max(maxIndex, Number.parseInt(match[2] ?? "0", 10));
-    }
-  }
-  return maxIndex + 1;
+  return nextArtifactIteration(taskKey, "review");
+}
+
+function nextDesignReviewIterationForTask(taskKey: string): number {
+  return nextArtifactIteration(taskKey, "design-review");
 }
 
 function buildBaseConfig(
@@ -1193,7 +1184,7 @@ async function executeCommand(
 
   if (config.command === "design-review") {
     requireJiraConfig(config);
-    const iteration = nextReviewIterationForTask(config.taskKey);
+    const iteration = nextDesignReviewIterationForTask(config.taskKey);
     await runDeclarativeFlowBySpecFile(
       "design-review.json",
       config,
@@ -1211,6 +1202,12 @@ async function executeCommand(
       launchMode,
       runtime,
     );
+    if (!config.dryRun) {
+      printSummary(
+        "Design Review",
+        `Artifacts:\n${designReviewFile(config.taskKey, iteration)}\n${designReviewJsonFile(config.taskKey, iteration)}`,
+      );
+    }
     return false;
   }
 

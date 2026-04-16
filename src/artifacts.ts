@@ -3,8 +3,6 @@ import path from "node:path";
 import process from "node:process";
 
 import { TaskRunnerError } from "./errors.js";
-
-export const REVIEW_FILE_RE = /^review-(.+)-(\d+)\.md$/;
 export const READY_TO_MERGE_FILE = "ready-to-merge.md";
 
 export function scopesRootDir(): string {
@@ -293,6 +291,14 @@ export function reviewFile(taskKey: string, iteration: number): string {
 
 export function reviewJsonFile(taskKey: string, iteration: number): string {
   return artifactJsonFile("review", taskKey, iteration);
+}
+
+export function designReviewFile(taskKey: string, iteration: number): string {
+  return artifactFile("design-review", taskKey, iteration);
+}
+
+export function designReviewJsonFile(taskKey: string, iteration: number): string {
+  return artifactJsonFile("design-review", taskKey, iteration);
 }
 
 export function reviewFixFile(taskKey: string, iteration: number): string {
