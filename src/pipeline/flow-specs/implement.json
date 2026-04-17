@@ -1,7 +1,7 @@
 {
   "kind": "implement-flow",
   "version": 1,
-  "description": "Runs LLM-backed implementation based on previously approved design and plan artifacts. Executes code changes locally in the project working directory.",
+  "description": "Runs LLM-backed implementation based on previously approved design, plan, and QA artifacts. Executes code changes locally in the project working directory.",
   "phases": [
     {
       "id": "implement",
@@ -33,6 +33,18 @@
               "plan_json_file": {
                 "artifact": {
                   "kind": "plan-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "qa_file": {
+                "artifact": {
+                  "kind": "qa-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "qa_json_file": {
+                "artifact": {
+                  "kind": "qa-json-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               }
