@@ -70,6 +70,7 @@ describe("doctor command", () => {
     ok(typeof report.overall === "string");
     ok(Array.isArray(report.checks));
     ok(typeof report.timestamp === "string");
+    ok(report.checks.every((check) => typeof check.impact === "string"));
   });
 
   it("JSON has stable structure with keys: overall, checks, timestamp", async () => {
@@ -83,6 +84,22 @@ describe("doctor command", () => {
     const result = await runDoctor(["system"]);
     notEqual(result.exitCode, -1);
     ok(result.stdout.includes("System"));
+  });
+
+  it("renders workflow continuity as an advisory section", async () => {
+    const result = await runDoctor(["flow-readiness-01"]);
+    ok(result.stdout.includes("## Workflow Continuity"), "should render workflow continuity section");
+    ok(result.stdout.includes("workflow-continuity"), "should include workflow continuity check title");
+  });
+
+  it("includes structured workflow continuity data in JSON mode", async () => {
+    const result = await runDoctor(["flow-readiness-01", "--json"]);
+    const report = JSON.parse(result.stdout);
+    const workflowContinuity = report.checks.find((check) => check.id === "flow-readiness-01");
+    ok(workflowContinuity, "should include workflow continuity check");
+    ok(workflowContinuity.title === "workflow-continuity");
+    ok(workflowContinuity.data && workflowContinuity.data.kind === "workflow-continuity");
+    ok(Array.isArray(workflowContinuity.data.entries));
   });
 
   it("exits 0 for ready_with_warnings", async () => {
