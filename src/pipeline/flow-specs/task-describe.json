@@ -235,10 +235,37 @@
                 }
               },
               "message": "Task describe mode did not produce the Jira description artifact."
+            }
+          ]
+        },
+        {
+          "id": "ensure_task_describe_json_from_jira_markdown",
+          "node": "ensure-summary-json",
+          "when": {
+            "all": [
+              { "ref": "steps.task_describe.collect_task_source.value.values.jira_ref" },
+              { "not": { "ref": "context.dryRun" } }
+            ]
+          },
+          "params": {
+            "markdownFile": {
+              "artifact": {
+                "kind": "jira-description-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
             },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-description-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            }
+          },
+          "expect": [
             {
               "kind": "require-structured-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
@@ -330,10 +357,41 @@
                 }
               },
               "message": "Task describe mode did not produce the Jira description artifact."
+            }
+          ]
+        },
+        {
+          "id": "ensure_task_describe_json_from_input_markdown",
+          "node": "ensure-summary-json",
+          "when": {
+            "all": [
+              {
+                "not": {
+                  "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"
+                }
+              },
+              { "not": { "ref": "context.dryRun" } }
+            ]
+          },
+          "params": {
+            "markdownFile": {
+              "artifact": {
+                "kind": "jira-description-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
             },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-description-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            }
+          },
+          "expect": [
             {
               "kind": "require-structured-artifacts",
-              "when": { "not": { "ref": "context.dryRun" } },
               "items": [
                 {
                   "path": {
