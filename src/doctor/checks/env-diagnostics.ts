@@ -1,17 +1,33 @@
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DoctorStatus } from "../types.js";
+import { DoctorImpact, DoctorStatus } from "../types.js";
 import { CATEGORY } from "./category.js";
+import { detectJiraDeployment } from "../../jira.js";
 
 type EnvSource = "shell" | "project-local" | "global" | "default" | "missing";
+type EnvState = "configured" | "defaulted" | "unset" | "invalid";
 
 interface EnvKeyInfo {
   key: string;
   source: EnvSource;
-  value: string | null;
-  maskedValue: string | null;
+  state: EnvState;
   isSecret: boolean;
+  note?: string;
+}
+
+interface EnvDiagnosticsData {
+  kind: "env-config";
+  summary: {
+    checked: number;
+    configured: number;
+    defaulted: number;
+    unset: number;
+    invalid: number;
+    secrets: number;
+  };
+  warnings: string[];
+  keys: EnvKeyInfo[];
 }
 
 const MONITORED_KEYS = [
@@ -28,22 +44,18 @@ const MONITORED_KEYS = [
 ] as const;
 
 const SECRET_KEYS = new Set(["JIRA_API_KEY", "GITLAB_TOKEN"]);
-
 const JIRA_AUTH_MODE_ALLOWED_VALUES = ["auto", "basic", "bearer"];
 
-function maskSecret(value: string): string {
-  if (value.length <= 6) {
-    if (value.length <= 3) {
-      return "***";
-    }
-    const start = value.slice(0, Math.ceil(value.length / 2));
-    const end = value.slice(Math.ceil(value.length / 2));
-    return `${start}***${end}`;
-  }
-  const start = value.slice(0, 3);
-  const end = value.slice(-3);
-  return `${start}***${end}`;
-}
+const KEY_NOTES: Partial<Record<(typeof MONITORED_KEYS)[number], string>> = {
+  JIRA_API_KEY: "Required for Jira-backed flows.",
+  JIRA_USERNAME: "Required only for Jira Cloud basic auth.",
+  GITLAB_TOKEN: "Required for GitLab-backed flows.",
+  AGENTWEAVER_HOME: "Optional override for the AgentWeaver package home.",
+  CODEX_BIN: "Optional override for the codex executable path.",
+  CODEX_MODEL: "Optional fallback model override for Codex-backed executors.",
+  OPENCODE_BIN: "Optional override for the opencode executable path.",
+  OPENCODE_MODEL: "Optional fallback model override for OpenCode-backed executors.",
+};
 
 function globalConfigDir(): string {
   return path.join(os.homedir(), ".agentweaver");
@@ -91,124 +103,240 @@ function getGlobalEnvPath(): string {
 function determineSource(
   key: string,
   shellSnapshot: Record<string, string>,
-  currentValue: string | null
+  projectEnv: Record<string, string>,
+  globalEnv: Record<string, string>,
+  currentValue: string | null,
 ): EnvSource {
   if (currentValue === null) {
     return "missing";
   }
 
-  const isInShellSnapshot = shellSnapshot.hasOwnProperty(key);
-
-  if (isInShellSnapshot) {
+  if (Object.prototype.hasOwnProperty.call(shellSnapshot, key)) {
     return "shell";
   }
 
-  const globalEnv = parseEnvFileRaw(getGlobalEnvPath());
-  if (globalEnv.hasOwnProperty(key)) {
-    return "global";
+  if (Object.prototype.hasOwnProperty.call(projectEnv, key)) {
+    return "project-local";
   }
 
-  const projectEnv = parseEnvFileRaw(getProjectEnvPath());
-  if (projectEnv.hasOwnProperty(key)) {
-    return "project-local";
+  if (Object.prototype.hasOwnProperty.call(globalEnv, key)) {
+    return "global";
   }
 
   return "shell";
 }
 
-function getDefaultValue(key: string): string | null {
-  switch (key) {
-    case "AGENTWEAVER_HOME":
-      return path.join(os.homedir(), ".agentweaver");
-    default:
-      return null;
+function defaultNote(key: string): string | null {
+  if (key === "JIRA_AUTH_MODE") {
+    return "Defaults to auto.";
   }
+  return null;
 }
-
-type EnvDiagnosticsStatus = DoctorStatus;
 
 function validateJiraAuthMode(value: string | null): boolean {
   if (value === null) {
     return true;
   }
-  return JIRA_AUTH_MODE_ALLOWED_VALUES.includes(value);
+  return JIRA_AUTH_MODE_ALLOWED_VALUES.includes(value.trim().toLowerCase());
 }
 
-function checkEnvDiagnostics(): { id: string; status: DoctorStatus; title: string; message: string; hint?: string; details?: string } {
+function keyNote(key: (typeof MONITORED_KEYS)[number]): string | undefined {
+  return KEY_NOTES[key];
+}
+
+function formatKeyLine(info: EnvKeyInfo): string {
+  const source = info.state === "unset" ? "unset" : info.source === "default" ? "default" : info.source;
+  const secretLabel = info.isSecret ? ", secret" : "";
+  const noteLabel = info.note ? `, ${info.note}` : "";
+  return `- ${info.key} (${source}${secretLabel}${noteLabel})`;
+}
+
+function buildDetails(
+  configured: EnvKeyInfo[],
+  defaulted: EnvKeyInfo[],
+  unset: EnvKeyInfo[],
+  invalid: EnvKeyInfo[],
+  warnings: string[],
+): string {
+  const lines: string[] = [];
+
+  if (warnings.length > 0) {
+    lines.push("warnings:");
+    for (const warning of warnings) {
+      lines.push(`- ${warning}`);
+    }
+  }
+
+  if (configured.length > 0) {
+    if (lines.length > 0) {
+      lines.push("");
+    }
+    lines.push("configured:");
+    for (const info of configured) {
+      lines.push(formatKeyLine(info));
+    }
+  }
+
+  if (defaulted.length > 0) {
+    if (lines.length > 0) {
+      lines.push("");
+    }
+    lines.push("defaulted:");
+    for (const info of defaulted) {
+      lines.push(formatKeyLine(info));
+    }
+  }
+
+  if (unset.length > 0) {
+    if (lines.length > 0) {
+      lines.push("");
+    }
+    lines.push("unset:");
+    for (const info of unset) {
+      lines.push(formatKeyLine(info));
+    }
+  }
+
+  if (invalid.length > 0) {
+    if (lines.length > 0) {
+      lines.push("");
+    }
+    lines.push("invalid:");
+    for (const info of invalid) {
+      lines.push(formatKeyLine(info));
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function checkEnvDiagnostics() {
   const shellSnapshot: Record<string, string> = {};
   for (const key of Object.keys(process.env)) {
-    shellSnapshot[key] = process.env[key] as string;
+    const value = process.env[key];
+    if (value !== undefined) {
+      shellSnapshot[key] = value;
+    }
   }
 
   const projectEnv = parseEnvFileRaw(getProjectEnvPath());
   const globalEnv = parseEnvFileRaw(getGlobalEnvPath());
 
   const keyInfos: EnvKeyInfo[] = [];
-  let hasWarnings = false;
+  const warnings: string[] = [];
+
+  const jiraApiKey = process.env.JIRA_API_KEY?.trim() || null;
+  const jiraUsername = process.env.JIRA_USERNAME?.trim() || null;
+  const jiraAuthModeRaw = process.env.JIRA_AUTH_MODE?.trim() || null;
+  const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim() || null;
 
   for (const key of MONITORED_KEYS) {
-    const currentValue = process.env[key] ?? null;
-    const source = determineSource(key, shellSnapshot, currentValue);
+    const currentValue = process.env[key]?.trim() || null;
     const isSecret = SECRET_KEYS.has(key);
+    const source = determineSource(key, shellSnapshot, projectEnv, globalEnv, currentValue);
+    const defaultHint = currentValue === null ? defaultNote(key) : null;
 
-    let maskedValue: string | null = null;
-    if (currentValue !== null && isSecret) {
-      maskedValue = maskSecret(currentValue);
-    } else if (currentValue !== null) {
-      maskedValue = currentValue;
+    let state: EnvState = "configured";
+    if (currentValue === null && defaultHint) {
+      state = "defaulted";
+    } else if (currentValue === null) {
+      state = "unset";
     }
 
-    const keyInfo: EnvKeyInfo = {
+    if (key === "JIRA_AUTH_MODE" && currentValue !== null && !validateJiraAuthMode(currentValue)) {
+      state = "invalid";
+    }
+
+    const note = state === "defaulted" ? defaultHint ?? undefined : keyNote(key);
+    keyInfos.push({
       key,
-      source,
-      value: currentValue,
-      maskedValue,
+      source: state === "defaulted" ? "default" : source,
+      state,
       isSecret,
-    };
-    keyInfos.push(keyInfo);
+      ...(note ? { note } : {}),
+    });
+  }
 
-    if (source === "missing") {
-      hasWarnings = true;
+  const jiraHasAnyConfig = !!(jiraApiKey || jiraBaseUrl || jiraUsername || jiraAuthModeRaw);
+  const jiraHasCorePair = !!(jiraApiKey && jiraBaseUrl);
+
+  if ((jiraApiKey && !jiraBaseUrl) || (!jiraApiKey && jiraBaseUrl)) {
+    warnings.push("Jira configuration is partial: set both JIRA_API_KEY and JIRA_BASE_URL for Jira-backed flows.");
+  }
+
+  if (jiraAuthModeRaw !== null && !validateJiraAuthMode(jiraAuthModeRaw)) {
+    warnings.push("JIRA_AUTH_MODE must be one of: auto, basic, bearer.");
+  }
+
+  if (jiraHasCorePair && jiraBaseUrl) {
+    const authMode = jiraAuthModeRaw?.toLowerCase() || "auto";
+    const isCloud = detectJiraDeployment(jiraBaseUrl) === "cloud";
+    const usesBasicAuth = authMode === "basic" || (authMode === "auto" && isCloud);
+    if (usesBasicAuth && !jiraUsername) {
+      warnings.push("JIRA_USERNAME is required for Jira Cloud basic auth with the current Jira URL and auth mode.");
     }
-
-    if (key === "JIRA_AUTH_MODE" && currentValue !== null) {
-      if (!validateJiraAuthMode(currentValue)) {
-        hasWarnings = true;
-      }
-    }
+  } else if (jiraHasAnyConfig && jiraUsername && !jiraApiKey && !jiraBaseUrl) {
+    warnings.push("JIRA_USERNAME is set without the Jira API key/base URL pair.");
   }
 
-  const status = hasWarnings ? DoctorStatus.Warn : DoctorStatus.Ok;
+  const configured = keyInfos.filter((info) => info.state === "configured");
+  const defaulted = keyInfos.filter((info) => info.state === "defaulted");
+  const unset = keyInfos.filter((info) => info.state === "unset");
+  const invalid = keyInfos.filter((info) => info.state === "invalid");
 
-  const keyCount = keyInfos.length;
-  const missingCount = keyInfos.filter(k => k.source === "missing").length;
-  const secretCount = keyInfos.filter(k => k.isSecret).length;
-
-  const summaryParts: string[] = [];
-  summaryParts.push(`${keyCount} keys checked`);
-  if (missingCount > 0) {
-    summaryParts.push(`${missingCount} missing`);
-  }
-  if (secretCount > 0) {
-    summaryParts.push(`${secretCount} secrets`);
-  }
-
-  const result: { id: string; status: DoctorStatus; title: string; message: string; hint?: string; details?: string } = {
-    id: "env-diagnostics-01",
-    status,
-    title: "env-config",
-    message: summaryParts.join(", "),
-    ...(missingCount > 0 ? { hint: `${missingCount} configuration keys are missing` } : {}),
-    details: JSON.stringify(keyInfos),
+  const status = warnings.length > 0 ? DoctorStatus.Warn : DoctorStatus.Ok;
+  const summary = {
+    checked: keyInfos.length,
+    configured: configured.length,
+    defaulted: defaulted.length,
+    unset: unset.length,
+    invalid: invalid.length,
+    secrets: keyInfos.filter((info) => info.isSecret).length,
   };
 
-  return result;
+  const messageParts = [
+    `${summary.checked} keys checked`,
+    `${summary.configured} configured`,
+  ];
+  if (summary.defaulted > 0) {
+    messageParts.push(`${summary.defaulted} defaulted`);
+  }
+  if (summary.unset > 0) {
+    messageParts.push(`${summary.unset} unset`);
+  }
+  if (summary.invalid > 0) {
+    messageParts.push(`${summary.invalid} invalid`);
+  }
+
+  const details = buildDetails(configured, defaulted, unset, invalid, warnings);
+  const data: EnvDiagnosticsData = {
+    kind: "env-config",
+    summary,
+    warnings,
+    keys: keyInfos,
+  };
+
+  return {
+    id: "env-diagnostics-01",
+    impact: DoctorImpact.Advisory,
+    status,
+    title: "env-config",
+    message: messageParts.join(", "),
+    ...(warnings.length > 0
+      ? { hint: `${warnings.length} configuration issue${warnings.length === 1 ? "" : "s"} detected` }
+      : unset.length > 0
+        ? { hint: "Unset keys are optional unless you use the related integrations or overrides" }
+        : {}),
+    details,
+    data,
+  };
 }
 
 export const envDiagnosticsCheck = {
   id: "env-diagnostics-01",
   category: CATEGORY.ENV_DIAGNOSTICS,
   title: "env-config",
+  impact: DoctorImpact.Advisory,
   dependencies: [],
   execute: async () => {
     return checkEnvDiagnostics();
