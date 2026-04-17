@@ -1,8 +1,6 @@
 import { accessSync, constants, existsSync } from "node:fs";
-import { DoctorStatus } from "../types.js";
+import { DoctorImpact, DoctorStatus } from "../types.js";
 import { CATEGORY } from "./category.js";
-
-const SOFT_CHECK_ID = "cwd-context-01";
 
 export const cwdContextCheck = {
   id: "cwd-context-01",
@@ -40,6 +38,7 @@ export const cwdContextCheck = {
     if (permissionStatus === DoctorStatus.Ok && gitStatus === DoctorStatus.Ok) {
       return {
         id: "cwd-context-01",
+        impact: DoctorImpact.Blocking,
         status: DoctorStatus.Ok,
         title: "cwd-context",
         message: `${permissionMessage}; ${gitStatusMessage}`,
@@ -50,6 +49,7 @@ export const cwdContextCheck = {
     if (permissionStatus === DoctorStatus.Ok && gitStatus === DoctorStatus.Warn) {
       return {
         id: "cwd-context-01",
+        impact: DoctorImpact.Advisory,
         status: DoctorStatus.Warn,
         title: "cwd-context",
         message: `${permissionMessage}; ${gitStatusMessage} (soft warning)`,
@@ -58,8 +58,9 @@ export const cwdContextCheck = {
       };
     }
 
-    const result: { id: string; status: DoctorStatus; title: string; message: string; hint?: string; details: string } = {
+    const result: { id: string; impact: DoctorImpact; status: DoctorStatus; title: string; message: string; hint?: string; details: string } = {
       id: "cwd-context-01",
+      impact: DoctorImpact.Blocking,
       status: permissionStatus,
       title: "cwd-context",
       message: permissionMessage,
@@ -71,5 +72,3 @@ export const cwdContextCheck = {
     return result;
   },
 };
-
-export const SOFT_CHECK_IDS = [SOFT_CHECK_ID];

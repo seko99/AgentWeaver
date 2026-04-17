@@ -1,7 +1,6 @@
 import type { DoctorCheck, DoctorReport, DoctorResult } from "./types.js";
-import { DoctorStatus, ReadinessStatus } from "./types.js";
+import { DoctorImpact, DoctorStatus, ReadinessStatus } from "./types.js";
 import { REGISTRY } from "./registry.js";
-import { SOFT_CHECK_IDS } from "./checks/cwd-context.js";
 
 class DoctorOrchestrator {
   async run(checks?: DoctorCheck[], filter?: string): Promise<DoctorReport> {
@@ -36,7 +35,7 @@ class DoctorOrchestrator {
       const result = await this.executeCheck(check);
       results.push(result);
 
-      if (result.status === DoctorStatus.Fail) {
+      if (result.status === DoctorStatus.Fail && result.impact === DoctorImpact.Blocking) {
         break;
       }
     }
@@ -61,10 +60,14 @@ class DoctorOrchestrator {
       });
 
       const result = await Promise.race([check.execute(), timeoutPromise]);
-      return result;
+      return {
+        ...result,
+        impact: result.impact ?? check.impact ?? DoctorImpact.Blocking,
+      };
     } catch (error) {
       return {
         id: check.id,
+        impact: check.impact ?? DoctorImpact.Blocking,
         status: DoctorStatus.Fail,
         title: check.title,
         message: error instanceof Error ? error.message : "Unknown error occurred",
@@ -78,10 +81,12 @@ class DoctorOrchestrator {
   }
 
   private aggregateReadiness(results: DoctorResult[]): ReadinessStatus {
-    if (results.some((r) => r.status === DoctorStatus.Fail)) {
+    const blockingResults = results.filter((result) => result.impact === DoctorImpact.Blocking);
+
+    if (blockingResults.some((r) => r.status === DoctorStatus.Fail)) {
       return ReadinessStatus.NotReady;
     }
-    if (results.some((r) => r.status === DoctorStatus.Warn && !SOFT_CHECK_IDS.includes(r.id))) {
+    if (blockingResults.some((r) => r.status === DoctorStatus.Warn)) {
       return ReadinessStatus.ReadyWithWarnings;
     }
     return ReadinessStatus.Ready;

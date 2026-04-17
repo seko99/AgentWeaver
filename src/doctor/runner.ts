@@ -1,4 +1,4 @@
-import { DoctorStatus, ReadinessStatus } from "./types.js";
+import { DoctorImpact, DoctorStatus, ReadinessStatus, type DoctorResult } from "./types.js";
 import { REGISTRY } from "./registry.js";
 import { DoctorOrchestrator } from "./orchestrator.js";
 import { CATEGORY } from "./checks/category.js";
@@ -21,8 +21,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   [CATEGORY.SYSTEM]: "System",
   [CATEGORY.EXECUTORS]: "Executors",
   [CATEGORY.ENV_DIAGNOSTICS]: "Environment",
-  [CATEGORY.FLOW_READINESS]: "Flow Readiness",
+  [CATEGORY.FLOW_READINESS]: "Workflow Continuity",
 };
+
+function formatCheckLine(result: DoctorResult): string {
+  const icon = STATUS_ICONS[result.status];
+  const impactLabel = result.impact === DoctorImpact.Advisory ? " (advisory)" : "";
+  return `[${icon}] ${result.title}${impactLabel} - ${result.message}`;
+}
 
 async function runDoctorCommand(args: string[]): Promise<number> {
   const jsonMode = args.includes("--json");
@@ -62,9 +68,7 @@ async function runDoctorCommand(args: string[]): Promise<number> {
     console.log();
 
     for (const result of items) {
-      const icon = STATUS_ICONS[result.status];
-      const line = `[${icon}] ${result.title} - ${result.message}`;
-      console.log(line);
+      console.log(formatCheckLine(result));
       if (result.hint) {
         console.log(`  Hint: ${result.hint}`);
       }
@@ -81,9 +85,7 @@ async function runDoctorCommand(args: string[]): Promise<number> {
     console.log(`## ${label}`);
     console.log();
     for (const result of items) {
-      const icon = STATUS_ICONS[result.status];
-      const line = `[${icon}] ${result.title} - ${result.message}`;
-      console.log(line);
+      console.log(formatCheckLine(result));
       if (result.hint) {
         console.log(`  Hint: ${result.hint}`);
       }
