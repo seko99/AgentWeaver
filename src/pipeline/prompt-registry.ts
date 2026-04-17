@@ -8,8 +8,9 @@ import {
   IMPLEMENT_PROMPT_TEMPLATE,
   JIRA_DESCRIPTION_PROMPT_TEMPLATE,
   MR_DESCRIPTION_PROMPT_TEMPLATE,
-  PLAN_QUESTIONS_PROMPT_TEMPLATE,
   PLAN_PROMPT_TEMPLATE,
+  PLAN_QUESTIONS_PROMPT_TEMPLATE,
+  PLAN_REVISE_PROMPT_TEMPLATE,
   REVIEW_FIX_PROMPT_TEMPLATE,
   REVIEW_PROJECT_PROMPT_TEMPLATE,
   REVIEW_PROMPT_TEMPLATE,
@@ -31,6 +32,7 @@ export type PromptTemplateRef =
   | "mr-description"
   | "plan-questions"
   | "plan"
+  | "plan-revise"
   | "review"
   | "review-fix"
   | "review-project"
@@ -51,6 +53,7 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "mr-description": MR_DESCRIPTION_PROMPT_TEMPLATE,
   "plan-questions": PLAN_QUESTIONS_PROMPT_TEMPLATE,
   plan: PLAN_PROMPT_TEMPLATE,
+  "plan-revise": PLAN_REVISE_PROMPT_TEMPLATE,
   review: REVIEW_PROMPT_TEMPLATE,
   "review-project": REVIEW_PROJECT_PROMPT_TEMPLATE,
   "review-fix": REVIEW_FIX_PROMPT_TEMPLATE,

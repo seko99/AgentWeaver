@@ -174,6 +174,36 @@ export const COMMIT_MESSAGE_PROMPT_TEMPLATE =
   "3) Include task key from Jira task. " +
   "4) Commit message language: English. " +
   "5) Write JSON to {commit_message_json_file}: {\"subject\": \"...\"}.";
+export const PLAN_REVISE_PROMPT_TEMPLATE =
+  "Revise the planning artifacts based on the design-review verdict. " +
+  "Use structured JSON artifacts as the source of truth for semantics. " +
+  "First revise the structured JSON artifacts; only after the JSON is complete and schema-valid should you write the derivative markdown files. " +
+  "Markdown must not influence JSON structure or types. " +
+  "The design-review verdict JSON {review_json_file} is the primary source of revision instructions — treat its blocking findings, major findings, and recommended actions as mandatory revision targets. " +
+  "The design-review markdown {review_file} is a derivative rendering only and must not override the structured verdict. " +
+  "Required source planning inputs: design JSON {design_json_file}, design markdown {design_file}, plan JSON {plan_json_file}, plan markdown {plan_file}. " +
+  "Optional source QA inputs (may be 'not provided'): QA JSON {qa_json_file}, QA markdown {qa_file}. " +
+  "When QA inputs are 'not provided', synthesize a new QA plan from the revised design and plan. " +
+  "Optional supplemental context (may be 'not provided'): Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}. " +
+  "When an optional variable is 'not provided', treat that source as unavailable and do not invent details from it. " +
+  "For every blocking finding and major finding in the verdict, address it directly in the revised artifacts. " +
+  "Preserve all content from the original artifacts that is not directly addressed by findings in the verdict — do not drop details, sections, or decisions that remain valid. " +
+  "Preserve semantics, not source formatting conventions from the verdict: do not copy verdict-style nested objects into fields whose schemas require plain strings. " +
+  "For implementation-design/v1 specifically, goals, non_goals, components, current_state, target_state, business_rules, migration_strategy, database_changes, api_changes, risks, acceptance_criteria, and open_questions must remain arrays of non-empty strings. " +
+  "Only affected_code and decisions may contain nested objects in implementation-design/v1. " +
+  "If you need to preserve extra detail such as mitigation, resolution, or answer text for a string-array field, fold that detail into a single English sentence string instead of creating an object. " +
+  "Produce the following revised outputs: " +
+  `revised design JSON to {revised_design_json_file}. ${strictSchemaInstruction("{revised_design_json_file}", "implementation-design/v1")}` +
+  "Revised design markdown to {revised_design_file}. " +
+  `revised plan JSON to {revised_plan_json_file}. ${strictSchemaInstruction("{revised_plan_json_file}", "implementation-plan/v1")}` +
+  "Revised plan markdown to {revised_plan_file}. " +
+  `revised QA JSON to {revised_qa_json_file}. ${strictSchemaInstruction("{revised_qa_json_file}", "qa-plan/v1")}` +
+  "Revised QA markdown to {revised_qa_file}. " +
+  "Create ready-to-merge.md only when all blocking findings from the verdict have been addressed in the revised artifacts. " +
+  "Do not create ready-to-merge.md if any blocking finding remains unresolved. " +
+  "JSON files must be valid and contain only JSON without markdown wrapping. " +
+  "Markdown files must be comprehensive derivative representations of the corresponding JSON artifacts.";
+
 export const AUTO_REVIEW_FIX_EXTRA_PROMPT = "Fix only blockers, criticals, and important issues";
 
 export function formatTemplate(template: string, values: Record<string, string>): string {

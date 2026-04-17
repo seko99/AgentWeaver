@@ -1,0 +1,261 @@
+{
+  "kind": "plan-revise-flow",
+  "version": 1,
+  "description": "Consumes a design-review verdict artifact and the latest planning artifacts, then produces revised design, implementation plan, and QA artifacts at the next iteration number without modifying originals.",
+  "phases": [
+    {
+      "id": "phase_1_load_contract",
+      "steps": [
+        {
+          "id": "validate_review_markdown",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.reviewFile" },
+            "panelTitle": { "const": "Design Review Verdict Markdown" },
+            "foundMessage": { "const": "Design review verdict markdown found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.reviewFile" },
+              "message": "Plan-revise contract is missing the required design-review verdict markdown."
+            }
+          ]
+        },
+        {
+          "id": "validate_review_json",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.reviewJsonFile" },
+            "panelTitle": { "const": "Design Review Verdict JSON" },
+            "foundMessage": { "const": "Design review verdict JSON found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.reviewJsonFile" },
+              "message": "Plan-revise contract is missing the required design-review verdict JSON."
+            }
+          ]
+        },
+        {
+          "id": "validate_source_design_markdown",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.designFile" },
+            "panelTitle": { "const": "Source Design Markdown" },
+            "foundMessage": { "const": "Source design markdown artifact found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.designFile" },
+              "message": "Plan-revise contract is missing the required source design markdown."
+            }
+          ]
+        },
+        {
+          "id": "validate_source_design_json",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.designJsonFile" },
+            "panelTitle": { "const": "Source Design JSON" },
+            "foundMessage": { "const": "Source design structured artifact found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.designJsonFile" },
+              "message": "Plan-revise contract is missing the required source design JSON."
+            }
+          ]
+        },
+        {
+          "id": "validate_source_plan_markdown",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.planFile" },
+            "panelTitle": { "const": "Source Plan Markdown" },
+            "foundMessage": { "const": "Source implementation plan markdown found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.planFile" },
+              "message": "Plan-revise contract is missing the required source plan markdown."
+            }
+          ]
+        },
+        {
+          "id": "validate_source_plan_json",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.planJsonFile" },
+            "panelTitle": { "const": "Source Plan JSON" },
+            "foundMessage": { "const": "Source implementation plan structured artifact found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.planJsonFile" },
+              "message": "Plan-revise contract is missing the required source plan JSON."
+            }
+          ]
+        },
+        {
+          "id": "validate_source_qa_markdown",
+          "when": { "ref": "params.hasQaArtifacts" },
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.qaFilePath" },
+            "panelTitle": { "const": "Source QA Markdown" },
+            "foundMessage": { "const": "Source QA markdown artifact found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.qaFilePath" },
+              "message": "Plan-revise contract expected a source QA markdown artifact, but the file is missing."
+            }
+          ]
+        },
+        {
+          "id": "validate_source_qa_json",
+          "when": { "ref": "params.hasQaArtifacts" },
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.qaJsonFilePath" },
+            "panelTitle": { "const": "Source QA JSON" },
+            "foundMessage": { "const": "Source QA structured artifact found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.qaJsonFilePath" },
+              "message": "Plan-revise contract expected a source QA JSON artifact, but the file is missing."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_2_revise",
+      "steps": [
+        {
+          "id": "run_plan_revise",
+          "node": "llm-prompt",
+          "prompt": {
+            "templateRef": "plan-revise",
+            "vars": {
+              "review_file": { "ref": "params.reviewFile" },
+              "review_json_file": { "ref": "params.reviewJsonFile" },
+              "design_file": { "ref": "params.designFile" },
+              "design_json_file": { "ref": "params.designJsonFile" },
+              "plan_file": { "ref": "params.planFile" },
+              "plan_json_file": { "ref": "params.planJsonFile" },
+              "qa_file": { "ref": "params.qaFile" },
+              "qa_json_file": { "ref": "params.qaJsonFile" },
+              "jira_task_file": { "ref": "params.jiraTaskFile" },
+              "jira_attachments_manifest_file": { "ref": "params.jiraAttachmentsManifestFile" },
+              "jira_attachments_context_file": { "ref": "params.jiraAttachmentsContextFile" },
+              "planning_answers_json_file": { "ref": "params.planningAnswersJsonFile" },
+              "revised_design_file": { "ref": "params.revisedDesignFile" },
+              "revised_design_json_file": { "ref": "params.revisedDesignJsonFile" },
+              "revised_plan_file": { "ref": "params.revisedPlanFile" },
+              "revised_plan_json_file": { "ref": "params.revisedPlanJsonFile" },
+              "revised_qa_file": { "ref": "params.revisedQaFile" },
+              "revised_qa_json_file": { "ref": "params.revisedQaJsonFile" }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "template": "Revising planning artifacts (iteration {outputIteration})",
+              "vars": {
+                "outputIteration": { "ref": "params.outputIteration" }
+              }
+            },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                { "ref": "params.revisedDesignFile" },
+                { "ref": "params.revisedPlanFile" },
+                { "ref": "params.revisedQaFile" }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "list": [
+                  { "ref": "params.revisedDesignFile" },
+                  { "ref": "params.revisedPlanFile" },
+                  { "ref": "params.revisedQaFile" }
+                ]
+              },
+              "message": "Plan-revise did not produce the required revised markdown artifacts."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": { "ref": "params.revisedDesignJsonFile" },
+                  "schemaId": "implementation-design/v1"
+                },
+                {
+                  "path": { "ref": "params.revisedPlanJsonFile" },
+                  "schemaId": "implementation-plan/v1"
+                },
+                {
+                  "path": { "ref": "params.revisedQaJsonFile" },
+                  "schemaId": "qa-plan/v1"
+                }
+              ],
+              "message": "Plan-revise produced invalid structured artifacts."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_3_finalize",
+      "steps": [
+        {
+          "id": "check_ready_to_merge",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Plan-revise completed and all blocking findings addressed. File ready-to-merge.md has been created." },
+            "tone": { "const": "green" }
+          }
+        },
+        {
+          "id": "notify_revise_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": { "const": "Plan-revise phase complete" }
+          }
+        }
+      ]
+    }
+  ]
+}

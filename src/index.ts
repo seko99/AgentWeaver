@@ -72,6 +72,7 @@ import { loadTieredEnv } from "./runtime/env-loader.js";
 import { agentweaverHome } from "./runtime/agentweaver-home.js";
 import { runCommand } from "./runtime/process-runner.js";
 import { resolveDesignReviewInputContract } from "./runtime/design-review-input-contract.js";
+import { resolvePlanReviseInputContract } from "./runtime/plan-revise-input-contract.js";
 import { clearReadyToMergeFile } from "./runtime/ready-to-merge.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
 import {
@@ -110,6 +111,7 @@ const COMMANDS = [
   "gitlab-review",
   "mr-description",
   "plan",
+  "plan-revise",
   "task-describe",
   "implement",
   "review",
@@ -233,6 +235,7 @@ function usage(): string {
   agentweaver doctor [<category>|<check-id>] [--json]
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [<jira-browse-url|jira-issue-key>]
+  agentweaver plan-revise [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver implement [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
@@ -638,6 +641,7 @@ function buildBaseConfig(
 function commandRequiresTask(command: string): boolean {
   return (
     command === "plan" ||
+    command === "plan-revise" ||
     command === "bug-analyze" ||
     command === "bug-fix" ||
     command === "design-review" ||
@@ -1230,6 +1234,65 @@ async function executeCommand(
       printSummary(
         "Design Review",
         `Artifacts:\n${designReviewFile(config.taskKey, iteration)}\n${designReviewJsonFile(config.taskKey, iteration)}`,
+      );
+    }
+    return false;
+  }
+
+  if (config.command === "plan-revise") {
+    const inputContract = resolvePlanReviseInputContract(config.taskKey);
+    if (!config.dryRun) {
+      clearReadyToMergeFile(config.taskKey);
+    }
+    await runDeclarativeFlowBySpecFile(
+      "plan-revise.json",
+      config,
+      {
+        taskKey: config.taskKey,
+        reviewIteration: inputContract.reviewIteration,
+        reviewFile: inputContract.reviewFile,
+        reviewJsonFile: inputContract.reviewJsonFile,
+        sourcePlanningIteration: inputContract.sourcePlanningIteration,
+        outputIteration: inputContract.outputIteration,
+        designFile: inputContract.designFile,
+        designJsonFile: inputContract.designJsonFile,
+        planFile: inputContract.planFile,
+        planJsonFile: inputContract.planJsonFile,
+        hasQaArtifacts: inputContract.hasQaArtifacts,
+        qaFilePath: inputContract.qaFilePath,
+        qaJsonFilePath: inputContract.qaJsonFilePath,
+        qaFile: inputContract.qaFile,
+        qaJsonFile: inputContract.qaJsonFile,
+        revisedDesignFile: inputContract.revisedDesignFile,
+        revisedDesignJsonFile: inputContract.revisedDesignJsonFile,
+        revisedPlanFile: inputContract.revisedPlanFile,
+        revisedPlanJsonFile: inputContract.revisedPlanJsonFile,
+        revisedQaFile: inputContract.revisedQaFile,
+        revisedQaJsonFile: inputContract.revisedQaJsonFile,
+        hasJiraTaskFile: inputContract.hasJiraTaskFile,
+        jiraTaskFilePath: inputContract.jiraTaskFilePath,
+        jiraTaskFile: inputContract.jiraTaskFile,
+        hasJiraAttachmentsManifestFile: inputContract.hasJiraAttachmentsManifestFile,
+        jiraAttachmentsManifestFilePath: inputContract.jiraAttachmentsManifestFilePath,
+        jiraAttachmentsManifestFile: inputContract.jiraAttachmentsManifestFile,
+        hasJiraAttachmentsContextFile: inputContract.hasJiraAttachmentsContextFile,
+        jiraAttachmentsContextFilePath: inputContract.jiraAttachmentsContextFilePath,
+        jiraAttachmentsContextFile: inputContract.jiraAttachmentsContextFile,
+        hasPlanningAnswersJsonFile: inputContract.hasPlanningAnswersJsonFile,
+        planningAnswersJsonFilePath: inputContract.planningAnswersJsonFilePath,
+        planningAnswersJsonFile: inputContract.planningAnswersJsonFile,
+        extraPrompt: config.extraPrompt,
+      },
+      launchProfile ? { launchProfile } : {},
+      requestUserInput,
+      undefined,
+      launchMode,
+      runtime,
+    );
+    if (!config.dryRun) {
+      printSummary(
+        "Plan Revise",
+        `Artifacts:\n${inputContract.revisedDesignFile}\n${inputContract.revisedDesignJsonFile}\n${inputContract.revisedPlanFile}\n${inputContract.revisedPlanJsonFile}\n${inputContract.revisedQaFile}\n${inputContract.revisedQaJsonFile}`,
       );
     }
     return false;
