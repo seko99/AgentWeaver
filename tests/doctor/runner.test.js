@@ -102,6 +102,24 @@ describe("doctor command", () => {
     ok(Array.isArray(workflowContinuity.data.entries));
   });
 
+  it("renders env diagnostics without dumping env values", async () => {
+    const result = await runDoctor(["env-diagnostics-01"]);
+    ok(result.stdout.includes("env-config"), "should render env-config check");
+    ok(!result.stdout.includes("\"value\":"), "should not print raw env values");
+    ok(!result.stdout.includes("\"maskedValue\":"), "should not print masked env values JSON");
+  });
+
+  it("returns sanitized env diagnostics data in JSON mode", async () => {
+    const result = await runDoctor(["env-diagnostics-01", "--json"]);
+    const report = JSON.parse(result.stdout);
+    const envDiagnostics = report.checks.find((check) => check.id === "env-diagnostics-01");
+    ok(envDiagnostics, "should include env diagnostics check");
+    ok(envDiagnostics.impact === "advisory");
+    ok(envDiagnostics.data && envDiagnostics.data.kind === "env-config");
+    ok(Array.isArray(envDiagnostics.data.keys));
+    ok(envDiagnostics.data.keys.every((entry) => !("value" in entry) && !("maskedValue" in entry)));
+  });
+
   it("exits 0 for ready_with_warnings", async () => {
     const result = await runDoctor(["--json"]);
     const report = JSON.parse(result.stdout);
