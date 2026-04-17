@@ -72,8 +72,11 @@ export const MR_DESCRIPTION_PROMPT_TEMPLATE =
 
 export const IMPLEMENT_PROMPT_TEMPLATE =
   "Use only structured artifacts as source of truth. " +
-  "Analyze the system design {design_json_file}, implementation plan {plan_json_file}, and proceed with implementation according to the plan. " +
-  "Markdown artifacts are intended only for human reading and should not define the implementation. ";
+  "Analyze the system design {design_json_file}, implementation plan {plan_json_file}, and QA plan {qa_json_file}, then proceed with implementation according to those artifacts. " +
+  "Treat the QA plan as the source of truth for the minimum required test scenarios, edge cases, regression checks, and validation behavior that the implementation must satisfy. " +
+  "When the repository contains automated tests, add or update tests for the key scenarios from the QA plan whenever it is practical in the current codebase. " +
+  "If some QA scenarios cannot be automated in the current change, still implement the code so those scenarios are satisfied and keep them explicit in your reasoning while editing. " +
+  "Markdown artifacts such as {design_file}, {plan_file}, and {qa_file} are intended only for human reading and should not define the implementation. ";
 
 export const REVIEW_PROMPT_TEMPLATE =
   "Conduct a code review of the current changes. " +
