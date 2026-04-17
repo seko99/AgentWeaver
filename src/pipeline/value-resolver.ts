@@ -9,14 +9,16 @@ import {
   bugFixDesignJsonFile,
   bugFixPlanFile,
   bugFixPlanJsonFile,
-    designFile,
-    designJsonFile,
-    gitlabDiffFile,
-    gitlabDiffJsonFile,
-    gitlabDiffReviewInputJsonFile,
-    gitlabReviewFile,
-    gitlabReviewInputJsonFile,
-    gitlabReviewJsonFile,
+  designFile,
+  designJsonFile,
+  designReviewFile,
+  designReviewJsonFile,
+  gitlabDiffFile,
+  gitlabDiffJsonFile,
+  gitlabDiffReviewInputJsonFile,
+  gitlabReviewFile,
+  gitlabReviewInputJsonFile,
+  gitlabReviewJsonFile,
   jiraAttachmentsContextFile,
   jiraAttachmentsManifestFile,
   jiraDescriptionFile,
@@ -150,6 +152,16 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return designFile(taskKey, iteration);
     case "design-json-file":
       return designJsonFile(taskKey, iteration);
+    case "design-review-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("design-review-file requires iteration");
+      }
+      return designReviewFile(taskKey, iteration);
+    case "design-review-json-file":
+      if (iteration === undefined) {
+        throw new TaskRunnerError("design-review-json-file requires iteration");
+      }
+      return designReviewJsonFile(taskKey, iteration);
     case "gitlab-diff-file":
       return gitlabDiffFile(taskKey, iteration);
     case "gitlab-diff-json-file":

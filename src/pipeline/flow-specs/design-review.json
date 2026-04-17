@@ -1,0 +1,239 @@
+{
+  "kind": "design-review-flow",
+  "version": 1,
+  "description": "Performs a structured planning critique of the latest completed planning artifacts against the task context available in the scope. Produces a verdict-oriented design review artifact and treats approved_with_warnings as ready to proceed.",
+  "phases": [
+    {
+      "id": "phase_1_load_contract",
+      "steps": [
+        {
+          "id": "validate_design_markdown_artifact",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.designFile" },
+            "panelTitle": { "const": "Design Markdown Artifact" },
+            "foundMessage": { "const": "Design markdown artifact found for the resolved planning iteration." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.designFile" },
+              "message": "Design-review contract is missing the required design markdown artifact."
+            }
+          ]
+        },
+        {
+          "id": "validate_design_json_artifact",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.designJsonFile" },
+            "panelTitle": { "const": "Design Structured Artifact" },
+            "foundMessage": { "const": "Design structured artifact found for the resolved planning iteration." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.designJsonFile" },
+              "message": "Design-review contract is missing the required design structured artifact."
+            }
+          ]
+        },
+        {
+          "id": "validate_plan_markdown_artifact",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.planFile" },
+            "panelTitle": { "const": "Plan Markdown Artifact" },
+            "foundMessage": { "const": "Implementation plan markdown artifact found for the resolved planning iteration." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.planFile" },
+              "message": "Design-review contract is missing the required implementation plan markdown artifact."
+            }
+          ]
+        },
+        {
+          "id": "validate_plan_json_artifact",
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.planJsonFile" },
+            "panelTitle": { "const": "Plan Structured Artifact" },
+            "foundMessage": { "const": "Implementation plan structured artifact found for the resolved planning iteration." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.planJsonFile" },
+              "message": "Design-review contract is missing the required implementation plan structured artifact."
+            }
+          ]
+        },
+        {
+          "id": "validate_qa_markdown_artifact",
+          "when": { "ref": "params.hasQaArtifacts" },
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.qaFilePath" },
+            "panelTitle": { "const": "QA Markdown Artifact" },
+            "foundMessage": { "const": "QA markdown artifact found and will be included in the critique." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.qaFilePath" },
+              "message": "Design-review contract expected a QA markdown artifact, but the file is missing."
+            }
+          ]
+        },
+        {
+          "id": "validate_qa_json_artifact",
+          "when": { "ref": "params.hasQaArtifacts" },
+          "node": "file-check",
+          "params": {
+            "path": { "ref": "params.qaJsonFilePath" },
+            "panelTitle": { "const": "QA Structured Artifact" },
+            "foundMessage": { "const": "QA structured artifact found and will be included in the critique." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": { "ref": "params.qaJsonFilePath" },
+              "message": "Design-review contract expected a QA structured artifact, but the file is missing."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_2_review",
+      "steps": [
+        {
+          "id": "run_design_review",
+          "node": "llm-prompt",
+          "prompt": {
+            "templateRef": "design-review",
+            "vars": {
+              "jira_task_file": { "ref": "params.jiraTaskFile" },
+              "jira_attachments_manifest_file": { "ref": "params.jiraAttachmentsManifestFile" },
+              "jira_attachments_context_file": { "ref": "params.jiraAttachmentsContextFile" },
+              "planning_answers_json_file": { "ref": "params.planningAnswersJsonFile" },
+              "design_file": { "ref": "params.designFile" },
+              "design_json_file": { "ref": "params.designJsonFile" },
+              "plan_file": { "ref": "params.planFile" },
+              "plan_json_file": { "ref": "params.planJsonFile" },
+              "qa_file": { "ref": "params.qaFile" },
+              "qa_json_file": { "ref": "params.qaJsonFile" },
+              "review_file": {
+                "artifact": {
+                  "kind": "design-review-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "review_json_file": {
+                "artifact": {
+                  "kind": "design-review-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": {
+              "template": "Running design review (iteration {iteration})",
+              "vars": {
+                "iteration": { "ref": "params.iteration" }
+              }
+            },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "design-review-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
+                }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "paths": {
+                "list": [
+                  {
+                    "artifact": {
+                      "kind": "design-review-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  }
+                ]
+              },
+              "message": "Design review did not produce the required review artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "design-review-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  },
+                  "schemaId": "design-review/v1"
+                }
+              ],
+              "message": "Design review produced invalid structured artifacts."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_3_finalize",
+      "steps": [
+        {
+          "id": "check_ready_to_merge",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Design review is ready to proceed. File ready-to-merge.md has been created." },
+            "tone": { "const": "green" }
+          }
+        },
+        {
+          "id": "notify_review_complete",
+          "node": "telegram-notify",
+          "params": {
+            "message": { "const": "Design review phase complete" }
+          }
+        }
+      ]
+    }
+  ]
+}

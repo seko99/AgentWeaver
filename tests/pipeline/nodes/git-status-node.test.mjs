@@ -1,7 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { gitCommitExecutor } from "/home/seko/Projects/ai/AgentWeaver/dist/executors/git-commit-executor.js";
-import { parsePorcelain } from "/home/seko/Projects/ai/AgentWeaver/dist/pipeline/nodes/git-status-node.js";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const distRoot = path.resolve(process.cwd(), "dist");
+const { gitCommitExecutor } = await import(pathToFileURL(path.join(distRoot, "executors/git-commit-executor.js")).href);
+const { parsePorcelain } = await import(pathToFileURL(path.join(distRoot, "pipeline/nodes/git-status-node.js")).href);
 
 describe("parsePorcelain", () => {
   it("parses simple modified file", () => {

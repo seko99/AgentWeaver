@@ -1,6 +1,7 @@
 import {
   BUG_ANALYZE_PROMPT_TEMPLATE,
   COMMIT_MESSAGE_PROMPT_TEMPLATE,
+  DESIGN_REVIEW_PROMPT_TEMPLATE,
   GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE,
   GITLAB_REVIEW_PROMPT_TEMPLATE,
   BUG_FIX_PROMPT_TEMPLATE,
@@ -22,6 +23,7 @@ export type PromptTemplateRef =
   | "bug-analyze"
   | "bug-fix"
   | "commit-message"
+  | "design-review"
   | "gitlab-diff-review"
   | "gitlab-review"
   | "implement"
@@ -41,6 +43,7 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "bug-analyze": BUG_ANALYZE_PROMPT_TEMPLATE,
   "bug-fix": BUG_FIX_PROMPT_TEMPLATE,
   "commit-message": COMMIT_MESSAGE_PROMPT_TEMPLATE,
+  "design-review": DESIGN_REVIEW_PROMPT_TEMPLATE,
   "gitlab-diff-review": GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE,
   "gitlab-review": GITLAB_REVIEW_PROMPT_TEMPLATE,
   implement: IMPLEMENT_PROMPT_TEMPLATE,

@@ -12,6 +12,8 @@ export const ARTIFACT_REF_KINDS = [
   "bug-fix-plan-json-file",
   "design-file",
   "design-json-file",
+  "design-review-file",
+  "design-review-json-file",
   "gitlab-diff-file",
   "gitlab-diff-json-file",
   "gitlab-diff-review-input-json-file",

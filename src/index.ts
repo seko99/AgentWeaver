@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import type { RuntimeServices } from "./executors/types.js";
 import {
-  REVIEW_FILE_RE,
   bugAnalyzeArtifacts,
   bugAnalyzeJsonFile,
   bugFixDesignJsonFile,
   bugFixPlanJsonFile,
+  designReviewFile,
+  designReviewJsonFile,
   designJsonFile,
   gitlabDiffFile,
   gitlabDiffJsonFile,
@@ -70,6 +71,8 @@ import { resolveCmd } from "./runtime/command-resolution.js";
 import { loadTieredEnv } from "./runtime/env-loader.js";
 import { agentweaverHome } from "./runtime/agentweaver-home.js";
 import { runCommand } from "./runtime/process-runner.js";
+import { resolveDesignReviewInputContract } from "./runtime/design-review-input-contract.js";
+import { clearReadyToMergeFile } from "./runtime/ready-to-merge.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
 import {
   bye,
@@ -100,6 +103,7 @@ const COMMANDS = [
   "auto-reset",
   "bug-analyze",
   "bug-fix",
+  "design-review",
   "doctor",
   "git-commit",
   "gitlab-diff-review",
@@ -225,6 +229,7 @@ function usage(): string {
   agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver bug-analyze [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver design-review [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver doctor [<category>|<check-id>] [--json]
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [<jira-browse-url|jira-issue-key>]
@@ -371,7 +376,7 @@ function isFormCancellation(error: unknown, formId: string): boolean {
 }
 
 async function requestInteractiveLaunchProfile(requestUserInput: UserInputRequester): Promise<ResolvedLaunchProfile> {
-  for (;;) {
+  for (; ;) {
     const executorFormResult = await requestUserInput(launchProfileSelectionForm());
     const rawExecutor = String(executorFormResult.values.executor ?? DEFAULT_LAUNCH_PROFILE.executor);
     const executor = LLM_EXECUTOR_IDS.find((id) => id === rawExecutor);
@@ -545,15 +550,18 @@ function scopeWithRestoredJiraContext(scope: ResolvedScope, state: FlowRunState 
   return resolveProjectScope(null, state.jiraRef);
 }
 
+function buildInteractiveBaseConfig(flowId: string, scope: ResolvedScope): BaseConfig {
+  return buildBaseConfig(flowId, {
+    ...(scope.jiraRef ? { jiraRef: scope.jiraRef } : {}),
+  });
+}
+
 function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): FlowResumeLookup {
   const directState = loadFlowRunState(currentScope.scopeKey, flowEntry.id);
   if (directState && hasResumableFlowState(directState)) {
     try {
       const effectiveScope = scopeWithRestoredJiraContext(currentScope, directState);
-      const baseConfig = buildBaseConfig(flowEntry.id, {
-        ...(effectiveScope.jiraRef ? { jiraRef: effectiveScope.jiraRef } : {}),
-        scopeName: effectiveScope.scopeKey,
-      });
+      const baseConfig = buildInteractiveBaseConfig(flowEntry.id, effectiveScope);
       const config = buildRuntimeConfig(baseConfig, effectiveScope);
       validateDeclarativeFlowResumeState(flowEntry, config, directState, directState.launchProfile);
       return {
@@ -592,21 +600,11 @@ function printAutoCommonPhasesHelp(): void {
 }
 
 function nextReviewIterationForTask(taskKey: string): number {
-  let maxIndex = 0;
-  const workspaceDir = scopeWorkspaceDir(taskKey);
-  if (!existsSync(workspaceDir)) {
-    return 1;
-  }
-  for (const entry of readdirSync(workspaceDir, { withFileTypes: true })) {
-    if (!entry.isFile()) {
-      continue;
-    }
-    const match = REVIEW_FILE_RE.exec(entry.name);
-    if (match && match[1] === taskKey) {
-      maxIndex = Math.max(maxIndex, Number.parseInt(match[2] ?? "0", 10));
-    }
-  }
-  return maxIndex + 1;
+  return nextArtifactIteration(taskKey, "review");
+}
+
+function nextDesignReviewIterationForTask(taskKey: string): number {
+  return nextArtifactIteration(taskKey, "design-review");
 }
 
 function buildBaseConfig(
@@ -642,6 +640,7 @@ function commandRequiresTask(command: string): boolean {
     command === "plan" ||
     command === "bug-analyze" ||
     command === "bug-fix" ||
+    command === "design-review" ||
     command === "mr-description" ||
     command === "auto-golang" ||
     command === "auto-common" ||
@@ -680,7 +679,7 @@ async function resolveScopeForCommand(
       if (error instanceof TaskRunnerError && error.message.includes("no TTY is available")) {
         throw new TaskRunnerError(
           `Command '${config.command}' requires a Jira task.\n` +
-            "Pass Jira issue key / browse URL as an argument, or run the command in an interactive terminal.",
+          "Pass Jira issue key / browse URL as an argument, or run the command in an interactive terminal.",
         );
       }
       throw error;
@@ -1185,6 +1184,57 @@ async function executeCommand(
     return false;
   }
 
+  if (config.command === "design-review") {
+    const iteration = nextDesignReviewIterationForTask(config.taskKey);
+    const inputContract = resolveDesignReviewInputContract(config.taskKey);
+    if (!config.dryRun) {
+      clearReadyToMergeFile(config.taskKey);
+    }
+    await runDeclarativeFlowBySpecFile(
+      "design-review.json",
+      config,
+      {
+        taskKey: config.taskKey,
+        iteration,
+        planningIteration: inputContract.planningIteration,
+        designFile: inputContract.designFile,
+        designJsonFile: inputContract.designJsonFile,
+        planFile: inputContract.planFile,
+        planJsonFile: inputContract.planJsonFile,
+        hasQaArtifacts: inputContract.hasQaArtifacts,
+        qaFilePath: inputContract.qaFilePath,
+        qaJsonFilePath: inputContract.qaJsonFilePath,
+        qaFile: inputContract.qaFile,
+        qaJsonFile: inputContract.qaJsonFile,
+        hasJiraTaskFile: inputContract.hasJiraTaskFile,
+        jiraTaskFilePath: inputContract.jiraTaskFilePath,
+        jiraTaskFile: inputContract.jiraTaskFile,
+        hasJiraAttachmentsManifestFile: inputContract.hasJiraAttachmentsManifestFile,
+        jiraAttachmentsManifestFilePath: inputContract.jiraAttachmentsManifestFilePath,
+        jiraAttachmentsManifestFile: inputContract.jiraAttachmentsManifestFile,
+        hasJiraAttachmentsContextFile: inputContract.hasJiraAttachmentsContextFile,
+        jiraAttachmentsContextFilePath: inputContract.jiraAttachmentsContextFilePath,
+        jiraAttachmentsContextFile: inputContract.jiraAttachmentsContextFile,
+        hasPlanningAnswersJsonFile: inputContract.hasPlanningAnswersJsonFile,
+        planningAnswersJsonFilePath: inputContract.planningAnswersJsonFilePath,
+        planningAnswersJsonFile: inputContract.planningAnswersJsonFile,
+        extraPrompt: config.extraPrompt,
+      },
+      launchProfile ? { launchProfile } : {},
+      requestUserInput,
+      undefined,
+      launchMode,
+      runtime,
+    );
+    if (!config.dryRun) {
+      printSummary(
+        "Design Review",
+        `Artifacts:\n${designReviewFile(config.taskKey, iteration)}\n${designReviewJsonFile(config.taskKey, iteration)}`,
+      );
+    }
+    return false;
+  }
+
   if (config.command === "gitlab-review") {
     const iteration = nextReviewIterationForTask(config.taskKey);
     const gitlabReviewIteration = nextArtifactIteration(config.taskKey, "gitlab-review");
@@ -1576,16 +1626,13 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             throw new TaskRunnerError("Resume is impossible because launch profile was not saved. Use restart.");
           }
           const previousScopeKey = currentScope.scopeKey;
-          const baseConfig = buildBaseConfig(flowId, {
-            ...(currentScope.jiraRef ? { jiraRef: currentScope.jiraRef } : {}),
-            scopeName: currentScope.scopeKey,
-          });
+          const baseConfig = buildInteractiveBaseConfig(flowId, currentScope);
           if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
             const nextScope = await resolveScopeForCommand(baseConfig, (form) => ui.requestUserInput(form));
             currentScope = nextScope;
           } else if (flowRequiresTaskScope(flowEntry) && !currentScope.jiraRef) {
             const jiraContext = await requestJiraContext((form) => ui.requestUserInput(form));
-            currentScope = resolveProjectScope(currentScope.scopeKey, jiraContext.jiraRef);
+            currentScope = resolveProjectScope(null, jiraContext.jiraRef);
           }
           ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null);
           if (previousScopeKey !== currentScope.scopeKey || currentScope.jiraIssueKey) {
@@ -1705,7 +1752,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
 
     const parsedArgs = parseCliArgs(args);
-    await executeCommand(buildConfigFromArgs(parsedArgs));
+    const commandCompleted = await executeCommand(buildConfigFromArgs(parsedArgs));
+    if (parsedArgs.command === "doctor") {
+      return commandCompleted ? 0 : 1;
+    }
     return 0;
   } catch (error) {
     if (error instanceof TaskRunnerError) {

@@ -485,6 +485,123 @@
     },
     "required": ["summary", "test_scenarios", "non_functional_checks"]
   },
+  "design-review/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "status": {
+        "type": "string",
+        "enum": ["approved", "approved_with_warnings", "needs_revision"]
+      },
+      "blocking_findings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "nonEmpty": true },
+            "description": { "type": "string", "nonEmpty": true },
+            "affected_artifacts": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true },
+              "minItems": 1
+            }
+          },
+          "required": ["title", "description", "affected_artifacts"]
+        }
+      },
+      "major_findings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "nonEmpty": true },
+            "description": { "type": "string", "nonEmpty": true },
+            "affected_artifacts": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true },
+              "minItems": 1
+            }
+          },
+          "required": ["title", "description", "affected_artifacts"]
+        }
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "nonEmpty": true },
+            "description": { "type": "string", "nonEmpty": true },
+            "affected_artifacts": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true },
+              "minItems": 1
+            }
+          },
+          "required": ["title", "description", "affected_artifacts"]
+        }
+      },
+      "missing_information": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "nonEmpty": true },
+            "description": { "type": "string", "nonEmpty": true },
+            "affected_artifacts": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true },
+              "minItems": 1
+            }
+          },
+          "required": ["title", "description", "affected_artifacts"]
+        }
+      },
+      "consistency_checks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "nonEmpty": true },
+            "status": { "type": "string", "nonEmpty": true },
+            "details": { "type": "string", "nonEmpty": true }
+          },
+          "required": ["name", "status", "details"]
+        }
+      },
+      "qa_coverage_gaps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "nonEmpty": true },
+            "description": { "type": "string", "nonEmpty": true },
+            "affected_artifacts": {
+              "type": "array",
+              "items": { "type": "string", "nonEmpty": true },
+              "minItems": 1
+            }
+          },
+          "required": ["title", "description", "affected_artifacts"]
+        }
+      },
+      "recommended_actions": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      }
+    },
+    "required": [
+      "summary",
+      "status",
+      "blocking_findings",
+      "major_findings",
+      "warnings",
+      "missing_information",
+      "consistency_checks",
+      "qa_coverage_gaps",
+      "recommended_actions"
+    ]
+  },
   "review-findings/v1": {
     "type": "object",
     "properties": {
