@@ -19,6 +19,7 @@ import { localScriptCheckNode } from "./nodes/local-script-check-node.js";
 import { llmPromptNode } from "./nodes/llm-prompt-node.js";
 import { opencodePromptNode } from "./nodes/opencode-prompt-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
+import { planningBundleNode } from "./nodes/planning-bundle-node.js";
 import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.js";
 import { readFileNode } from "./nodes/read-file-node.js";
 import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
@@ -52,6 +53,7 @@ export type NodeKind =
   | "llm-prompt"
   | "opencode-prompt"
   | "plan-codex"
+  | "planning-bundle"
   | "planning-questions-form"
   | "read-file"
   | "review-findings-form"
@@ -101,6 +103,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "llm-prompt": llmPromptNode as unknown as AnyNodeDefinition,
   "opencode-prompt": opencodePromptNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
+  "planning-bundle": planningBundleNode as unknown as AnyNodeDefinition,
   "planning-questions-form": planningQuestionsFormNode as unknown as AnyNodeDefinition,
   "read-file": readFileNode as unknown as AnyNodeDefinition,
   "review-findings-form": reviewFindingsFormNode as unknown as AnyNodeDefinition,
@@ -221,6 +224,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["prompt", "requiredArtifacts"],
     executors: ["codex"],
+  },
+  "planning-bundle": {
+    kind: "planning-bundle",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["taskKey"],
   },
   "planning-questions-form": {
     kind: "planning-questions-form",

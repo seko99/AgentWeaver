@@ -18,6 +18,7 @@ import {
 } from "../artifacts.js";
 import { TaskRunnerError } from "../errors.js";
 import { validateStructuredArtifacts } from "../structured-artifacts.js";
+import { resolveLatestCompletedPlanningIteration } from "./planning-bundle.js";
 
 const OPTIONAL_INPUT_NOT_PROVIDED = "not provided";
 
@@ -87,39 +88,6 @@ function resolveLatestDesignReviewIteration(taskKey: string): number {
     "Plan-revise requires design-review markdown and JSON artifacts from the latest completed design-review run.",
   );
   throw new TaskRunnerError("Unreachable plan-revise design-review artifact resolution state.");
-}
-
-function resolveLatestCompletedPlanningIteration(taskKey: string): number {
-  const latestDesignMd = latestArtifactIteration(taskKey, "design", "md") ?? 0;
-  const latestDesignJson = latestArtifactIteration(taskKey, "design", "json") ?? 0;
-  const latestPlanMd = latestArtifactIteration(taskKey, "plan", "md") ?? 0;
-  const latestPlanJson = latestArtifactIteration(taskKey, "plan", "json") ?? 0;
-  const maxIteration = Math.max(latestDesignMd, latestDesignJson, latestPlanMd, latestPlanJson);
-
-  for (let iteration = maxIteration; iteration >= 1; iteration -= 1) {
-    const paths = [
-      designFile(taskKey, iteration),
-      designJsonFile(taskKey, iteration),
-      planFile(taskKey, iteration),
-      planJsonFile(taskKey, iteration),
-    ];
-    if (paths.every((candidate) => existsSync(candidate))) {
-      return iteration;
-    }
-  }
-
-  const fallbackIteration = maxIteration || 1;
-  const fallbackPaths = [
-    designFile(taskKey, fallbackIteration),
-    designJsonFile(taskKey, fallbackIteration),
-    planFile(taskKey, fallbackIteration),
-    planJsonFile(taskKey, fallbackIteration),
-  ];
-  requireArtifacts(
-    fallbackPaths,
-    "Plan-revise requires design and plan markdown/JSON artifacts from the latest completed planning run.",
-  );
-  throw new TaskRunnerError("Unreachable plan-revise planning artifact resolution state.");
 }
 
 function resolveOptionalPromptFile(filePath: string): OptionalPromptFile {
@@ -196,7 +164,10 @@ export function resolvePlanReviseInputContract(taskKey: string): PlanReviseInput
     "Plan-revise design-review structured artifact is invalid.",
   );
 
-  const sourcePlanningIteration = resolveLatestCompletedPlanningIteration(taskKey);
+  const sourcePlanningIteration = resolveLatestCompletedPlanningIteration(taskKey, {
+    requireQa: false,
+    missingMessage: "Plan-revise requires design and plan markdown/JSON artifacts from the latest completed planning run.",
+  });
 
   const srcDesignMd = designFile(taskKey, sourcePlanningIteration);
   const srcDesignJson = designJsonFile(taskKey, sourcePlanningIteration);

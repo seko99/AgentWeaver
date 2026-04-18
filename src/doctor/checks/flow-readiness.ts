@@ -11,6 +11,7 @@ import {
   latestArtifactIteration,
   planJsonFile,
 } from "../../artifacts.js";
+import { inspectLatestPlanningBundle } from "../../runtime/planning-bundle.js";
 
 interface WorkflowContinuityEntry {
   flowId: string;
@@ -143,31 +144,13 @@ function checkStructuredArtifactFile(
 function checkImplementWorkflowContinuity(scopeKey: string): WorkflowContinuityEntry {
   const entry = createEntry("implement");
 
-  const latestDesignIteration = getLatestJsonArtifactIteration(scopeKey, "design");
-  const latestPlanIteration = getLatestJsonArtifactIteration(scopeKey, "plan");
-
-  if (latestDesignIteration === null) {
-    setEntryState(entry, WorkflowContinuityState.NeedsPreviousStage, "Missing design artifact from the planning stage.");
-  } else {
-    checkStructuredArtifactFile(
-      entry,
-      designJsonFile(scopeKey, latestDesignIteration),
-      "implementation-design/v1",
-      "Missing design artifact from the planning stage.",
-      "Design artifact schema is invalid",
-    );
-  }
-
-  if (latestPlanIteration === null) {
-    setEntryState(entry, WorkflowContinuityState.NeedsPreviousStage, "Missing plan artifact from the planning stage.");
-  } else {
-    checkStructuredArtifactFile(
-      entry,
-      planJsonFile(scopeKey, latestPlanIteration),
-      "implementation-plan/v1",
-      "Missing plan artifact from the planning stage.",
-      "Plan artifact schema is invalid",
-    );
+  const planningBundle = inspectLatestPlanningBundle(scopeKey);
+  if (planningBundle.status === "missing") {
+    setEntryState(entry, WorkflowContinuityState.NeedsPreviousStage, planningBundle.errorMessage);
+  } else if (planningBundle.status === "incomplete") {
+    setEntryState(entry, WorkflowContinuityState.InvalidState, planningBundle.errorMessage);
+  } else if (planningBundle.status === "invalid") {
+    setEntryState(entry, WorkflowContinuityState.InvalidState, planningBundle.errorMessage);
   }
 
   if (entry.state === WorkflowContinuityState.NeedsPreviousStage) {

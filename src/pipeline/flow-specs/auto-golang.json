@@ -362,35 +362,24 @@
       "id": "implement",
       "steps": [
         {
+          "id": "resolve_planning_bundle",
+          "node": "planning-bundle",
+          "params": {
+            "taskKey": { "ref": "params.taskKey" }
+          }
+        },
+        {
           "id": "run_implement",
           "node": "llm-prompt",
           "prompt": {
             "templateRef": "implement",
             "vars": {
-              "design_file": {
-                "artifact": {
-                  "kind": "design-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_json_file": {
-                "artifact": {
-                  "kind": "design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_file": {
-                "artifact": {
-                  "kind": "plan-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_json_file": {
-                "artifact": {
-                  "kind": "plan-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              }
+              "design_file": { "ref": "steps.implement.resolve_planning_bundle.value.designFile" },
+              "design_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.designJsonFile" },
+              "plan_file": { "ref": "steps.implement.resolve_planning_bundle.value.planFile" },
+              "plan_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.planJsonFile" },
+              "qa_file": { "ref": "steps.implement.resolve_planning_bundle.value.qaFile" },
+              "qa_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.qaJsonFile" }
             },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"
