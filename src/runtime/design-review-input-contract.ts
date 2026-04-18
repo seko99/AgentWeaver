@@ -14,8 +14,8 @@ import {
   qaJsonFile,
   requireArtifacts,
 } from "../artifacts.js";
-import { TaskRunnerError } from "../errors.js";
 import { validateStructuredArtifacts } from "../structured-artifacts.js";
+import { resolveLatestCompletedPlanningIteration } from "./planning-bundle.js";
 
 const OPTIONAL_INPUT_NOT_PROVIDED = "not provided";
 
@@ -62,30 +62,6 @@ function requiredPlanningArtifactPaths(taskKey: string, iteration: number): {
     planFile: planFile(taskKey, iteration),
     planJsonFile: planJsonFile(taskKey, iteration),
   };
-}
-
-function resolveLatestCompletedPlanningIteration(taskKey: string): number {
-  const latestKnownIteration = Math.max(
-    latestArtifactIteration(taskKey, "design", "md") ?? 0,
-    latestArtifactIteration(taskKey, "design", "json") ?? 0,
-    latestArtifactIteration(taskKey, "plan", "md") ?? 0,
-    latestArtifactIteration(taskKey, "plan", "json") ?? 0,
-  );
-
-  for (let iteration = latestKnownIteration; iteration >= 1; iteration -= 1) {
-    const requiredPaths = Object.values(requiredPlanningArtifactPaths(taskKey, iteration));
-    if (requiredPaths.every((candidate) => existsSync(candidate))) {
-      return iteration;
-    }
-  }
-
-  const fallbackIteration = latestKnownIteration || 1;
-  const fallbackPaths = Object.values(requiredPlanningArtifactPaths(taskKey, fallbackIteration));
-  requireArtifacts(
-    fallbackPaths,
-    "Design-review requires design and plan markdown/JSON artifacts from the latest completed planning run.",
-  );
-  throw new TaskRunnerError("Unreachable design-review planning artifact resolution state.");
 }
 
 function resolveOptionalPromptFile(filePath: string): OptionalPromptFile {
@@ -171,7 +147,10 @@ function resolveOptionalQaPair(taskKey: string, iteration: number): {
  * deterministic when some context is absent.
  */
 export function resolveDesignReviewInputContract(taskKey: string): DesignReviewInputContract {
-  const planningIteration = resolveLatestCompletedPlanningIteration(taskKey);
+  const planningIteration = resolveLatestCompletedPlanningIteration(taskKey, {
+    requireQa: false,
+    missingMessage: "Design-review requires design and plan markdown/JSON artifacts from the latest completed planning run.",
+  });
   const requiredArtifacts = requiredPlanningArtifactPaths(taskKey, planningIteration);
 
   requireArtifacts(

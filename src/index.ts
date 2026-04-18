@@ -22,8 +22,6 @@ import {
   latestArtifactIteration,
   nextArtifactIteration,
   planJsonFile,
-  planArtifacts,
-  qaJsonFile,
   readyToMergeFile,
   requireArtifacts,
   reviewAssessmentFile,
@@ -73,6 +71,7 @@ import { agentweaverHome } from "./runtime/agentweaver-home.js";
 import { runCommand } from "./runtime/process-runner.js";
 import { resolveDesignReviewInputContract } from "./runtime/design-review-input-contract.js";
 import { resolvePlanReviseInputContract } from "./runtime/plan-revise-input-contract.js";
+import { resolveLatestPlanningBundle } from "./runtime/planning-bundle.js";
 import { clearReadyToMergeFile } from "./runtime/ready-to-merge.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
 import {
@@ -1396,17 +1395,10 @@ async function executeCommand(
   }
 
   if (config.command === "implement") {
-    requireArtifacts(planArtifacts(config.taskKey), "Implement mode requires plan artifacts from the planning phase.");
-    validateStructuredArtifacts(
-      [
-        { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
-        { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
-        { path: qaJsonFile(config.taskKey), schemaId: "qa-plan/v1" },
-      ],
-      "Implement mode requires valid structured plan artifacts from the planning phase.",
-    );
+    const planningBundle = resolveLatestPlanningBundle(config.taskKey);
     await runDeclarativeFlowBySpecFile("implement.json", config, {
       taskKey: config.taskKey,
+      planningIteration: planningBundle.planningIteration,
       extraPrompt: config.extraPrompt,
     }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode);
     return false;

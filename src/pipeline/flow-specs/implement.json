@@ -15,37 +15,43 @@
               "design_file": {
                 "artifact": {
                   "kind": "design-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.planningIteration" }
                 }
               },
               "design_json_file": {
                 "artifact": {
                   "kind": "design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.planningIteration" }
                 }
               },
               "plan_file": {
                 "artifact": {
                   "kind": "plan-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.planningIteration" }
                 }
               },
               "plan_json_file": {
                 "artifact": {
                   "kind": "plan-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.planningIteration" }
                 }
               },
               "qa_file": {
                 "artifact": {
                   "kind": "qa-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.planningIteration" }
                 }
               },
               "qa_json_file": {
                 "artifact": {
                   "kind": "qa-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.planningIteration" }
                 }
               }
             },
