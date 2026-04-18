@@ -115,6 +115,7 @@ import {
 const COMMANDS = [
   "auto-golang",
   "auto-common",
+  "auto-simple",
   "auto-status",
   "auto-reset",
   "bug-analyze",
@@ -263,6 +264,10 @@ function usage(): string {
   agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] --from <phase> [<jira-browse-url|jira-issue-key>]
   agentweaver auto-golang --help-phases
+  agentweaver auto-common [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] <jira-browse-url|jira-issue-key>
+  agentweaver auto-common --help-phases
+  agentweaver auto-simple [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] <jira-browse-url|jira-issue-key>
+  agentweaver auto-simple --help-phases
   agentweaver auto-status [<jira-browse-url|jira-issue-key>]
   agentweaver auto-reset [<jira-browse-url|jira-issue-key>]
 
@@ -449,6 +454,20 @@ function validateDeclarativeFlowResumeState(
   executionRouting?: ResolvedExecutionRouting,
   runtime: RuntimeServices = runtimeServices,
 ): void {
+  if (state.flowId === "auto-common") {
+    const persistedPhaseIds = state.executionState.phases.map((p) => p.id);
+    const hasLegacyPhaseOnly =
+      persistedPhaseIds.length > 0 &&
+      !persistedPhaseIds.some((id) =>
+        ["design_review", "verdict", "plan_revision", "design_review_repeat", "verdict_repeat"].includes(id),
+      );
+    if (hasLegacyPhaseOnly) {
+      throw new TaskRunnerError(
+        "Resume is impossible because the persisted state was created with the legacy phase graph. Use restart.",
+      );
+    }
+  }
+
   const persistedFingerprint = state.routingFingerprint ?? state.executionRouting?.fingerprint ?? state.launchProfile?.fingerprint;
   if (persistedFingerprint) {
     if (!executionRouting) {
@@ -543,6 +562,16 @@ function printAutoCommonPhasesHelp(): void {
   printPanel("Auto-Common Phases", phaseLines.join("\n"), "magenta");
 }
 
+function autoSimplePhaseIds(): string[] {
+  return loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" }).phases.map((phase) => phase.id);
+}
+
+function printAutoSimplePhasesHelp(): void {
+  const phaseLines = ["Available auto-simple phases:", "", ...autoSimplePhaseIds()];
+  phaseLines.push("", "You can run auto-simple with:", "agentweaver auto-simple <jira>");
+  printPanel("Auto-Simple Phases", phaseLines.join("\n"), "magenta");
+}
+
 function nextReviewIterationForTask(taskKey: string): number {
   return nextArtifactIteration(taskKey, "review");
 }
@@ -589,6 +618,7 @@ function commandRequiresTask(command: string): boolean {
     command === "mr-description" ||
     command === "auto-golang" ||
     command === "auto-common" ||
+    command === "auto-simple" ||
     command === "auto-status" ||
     command === "auto-reset"
   );
@@ -1124,6 +1154,25 @@ async function executeCommand(
     );
     return false;
   }
+  if (config.command === "auto-simple") {
+    requireJiraConfig(config);
+    checkAutoPrerequisites(config, launchProfile, executionRouting);
+    process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
+    process.env.JIRA_API_URL = config.jiraApiUrl;
+    process.env.JIRA_TASK_FILE = config.jiraTaskFile;
+
+    await runDeclarativeFlowBySpecFile(
+      "auto-simple.json",
+      config,
+      autoFlowParams(config, forceRefreshSummary),
+      flowOverrides,
+      requestUserInput,
+      setSummary,
+      launchMode,
+      runtime,
+    );
+    return false;
+  }
   if (config.command === "auto-status") {
     const state = loadFlowRunState(config.scope.scopeKey, "auto-golang");
     if (!state) {
@@ -1644,6 +1693,10 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   }
   if (command === "auto-common" && helpPhases) {
     printAutoCommonPhasesHelp();
+    process.exit(0);
+  }
+  if (command === "auto-simple" && helpPhases) {
+    printAutoSimplePhasesHelp();
     process.exit(0);
   }
 

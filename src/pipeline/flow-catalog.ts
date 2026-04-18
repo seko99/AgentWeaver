@@ -20,6 +20,7 @@ export type FlowCatalogEntry = {
 export const BUILT_IN_COMMAND_FLOW_IDS = [
   "auto-golang",
   "auto-common",
+  "auto-simple",
   "bug-analyze",
   "bug-fix",
   "design-review",
@@ -41,6 +42,7 @@ export const BUILT_IN_COMMAND_FLOW_IDS = [
 const BUILT_IN_COMMAND_FLOW_FILES: Record<(typeof BUILT_IN_COMMAND_FLOW_IDS)[number], string> = {
   "auto-golang": "auto-golang.json",
   "auto-common": "auto-common.json",
+  "auto-simple": "auto-simple.json",
   "bug-analyze": "bugz/bug-analyze.json",
   "bug-fix": "bugz/bug-fix.json",
   "design-review": "design-review.json",
