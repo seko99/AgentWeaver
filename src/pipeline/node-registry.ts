@@ -3,6 +3,7 @@ import { buildReviewFixPromptNode } from "./nodes/build-review-fix-prompt-node.j
 import { codexPromptNode } from "./nodes/codex-prompt-node.js";
 import { commandCheckNode } from "./nodes/command-check-node.js";
 import { commitMessageFormNode } from "./nodes/commit-message-form-node.js";
+import { designReviewVerdictNode } from "./nodes/design-review-verdict-node.js";
 import { ensureSummaryJsonNode } from "./nodes/ensure-summary-json-node.js";
 import { fetchGitLabDiffNode } from "./nodes/fetch-gitlab-diff-node.js";
 import { fetchGitLabReviewNode } from "./nodes/fetch-gitlab-review-node.js";
@@ -37,6 +38,7 @@ export type NodeKind =
   | "codex-prompt"
   | "command-check"
   | "commit-message-form"
+  | "design-review-verdict"
   | "ensure-summary-json"
   | "fetch-gitlab-diff"
   | "fetch-gitlab-review"
@@ -87,6 +89,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "codex-prompt": codexPromptNode as unknown as AnyNodeDefinition,
   "command-check": commandCheckNode as unknown as AnyNodeDefinition,
   "commit-message-form": commitMessageFormNode as unknown as AnyNodeDefinition,
+  "design-review-verdict": designReviewVerdictNode as unknown as AnyNodeDefinition,
   "ensure-summary-json": ensureSummaryJsonNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-diff": fetchGitLabDiffNode as unknown as AnyNodeDefinition,
   "fetch-gitlab-review": fetchGitLabReviewNode as unknown as AnyNodeDefinition,
@@ -147,6 +150,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["commitMessageFile", "formId", "title", "outputFile"],
+  },
+  "design-review-verdict": {
+    kind: "design-review-verdict",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["taskKey"],
   },
   "ensure-summary-json": {
     kind: "ensure-summary-json",

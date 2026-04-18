@@ -63,7 +63,15 @@ export type PlanReviseInputContract = {
   planningAnswersJsonFile: string;
 };
 
-function resolveLatestDesignReviewIteration(taskKey: string): number {
+function resolveLatestDesignReviewIteration(taskKey: string, sourcePlanningIteration?: number): number {
+  if (sourcePlanningIteration !== undefined) {
+    const candidateMd = designReviewFile(taskKey, sourcePlanningIteration);
+    const candidateJson = designReviewJsonFile(taskKey, sourcePlanningIteration);
+    if (existsSync(candidateMd) && existsSync(candidateJson)) {
+      return sourcePlanningIteration;
+    }
+  }
+
   const latestMd = latestArtifactIteration(taskKey, "design-review", "md");
   const latestJson = latestArtifactIteration(taskKey, "design-review", "json");
   const maxIteration = Math.max(latestMd ?? 0, latestJson ?? 0);
@@ -150,7 +158,12 @@ function resolveOptionalQaPair(taskKey: string, iteration: number): {
 }
 
 export function resolvePlanReviseInputContract(taskKey: string): PlanReviseInputContract {
-  const reviewIteration = resolveLatestDesignReviewIteration(taskKey);
+  const sourcePlanningIteration = resolveLatestCompletedPlanningIteration(taskKey, {
+    requireQa: false,
+    missingMessage: "Plan-revise requires design and plan markdown/JSON artifacts from the latest completed planning run.",
+  });
+
+  const reviewIteration = resolveLatestDesignReviewIteration(taskKey, sourcePlanningIteration);
   const reviewMd = designReviewFile(taskKey, reviewIteration);
   const reviewJson = designReviewJsonFile(taskKey, reviewIteration);
 
@@ -163,11 +176,6 @@ export function resolvePlanReviseInputContract(taskKey: string): PlanReviseInput
     [{ path: reviewJson, schemaId: "design-review/v1" }],
     "Plan-revise design-review structured artifact is invalid.",
   );
-
-  const sourcePlanningIteration = resolveLatestCompletedPlanningIteration(taskKey, {
-    requireQa: false,
-    missingMessage: "Plan-revise requires design and plan markdown/JSON artifacts from the latest completed planning run.",
-  });
 
   const srcDesignMd = designFile(taskKey, sourcePlanningIteration);
   const srcDesignJson = designJsonFile(taskKey, sourcePlanningIteration);

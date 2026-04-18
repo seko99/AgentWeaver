@@ -87,7 +87,8 @@ User-invokable built-in commands currently map to these flow specs:
 - `run-go-tests-loop` — runs `run_go_tests.py` and analyzes failures; if tests fail, sends the error output to LLM for a fix and retries; repeats up to 5 attempts, stopping early on success
 - `run-go-linter-loop` — runs `run_go_linter.py` and analyzes output; if the linter reports issues, sends them to LLM for a fix and retries; repeats up to 5 attempts, stopping early on success
 - `auto-golang` — end-to-end resumable pipeline for Go projects: plan → implement → linter loop → test loop → review loop → final linter loop → final test loop; supports `--from` to restart from a specific phase and `auto-status`/`auto-reset` for state management
-- `auto-common` — end-to-end resumable pipeline without language-specific checks: plan → implement → review loop; simplified alternative to auto-golang for projects that do not need Go linter/test loops
+- `auto-common` — planning-aware pipeline with mandatory design-review gate before implementation: plan → design review → optional plan revision (once) → implement → review loop; blocks implementation when design review verdict is `needs_revision` twice
+- `auto-simple` — preserved simplified pipeline equivalent to the legacy auto-common behavior: plan → implement → review loop; no planning review gate, suitable for projects that do not need design review before coding
 - `doctor` — diagnostics command that runs system, executor, and flow readiness health checks; supports filtering by category or check ID and JSON output
 
 There are also built-in nested/helper flows that are loaded declaratively but are not direct top-level CLI commands, for example `review-project` (project-level code review used internally when no prior design/plan artifacts are present).
@@ -220,6 +221,7 @@ agentweaver run-go-tests-loop DEMO-1234
 agentweaver run-go-linter-loop DEMO-1234
 agentweaver auto-golang DEMO-1234
 agentweaver auto-common DEMO-1234
+agentweaver auto-simple DEMO-1234
 agentweaver doctor
 agentweaver doctor --json
 agentweaver doctor <category>|<check-id>
@@ -243,6 +245,7 @@ agentweaver --help
 agentweaver --version
 agentweaver auto-golang --help-phases
 agentweaver auto-common --help-phases
+agentweaver auto-simple --help-phases
 agentweaver auto-golang --from <phase> DEMO-1234
 agentweaver auto-status DEMO-1234
 agentweaver auto-reset DEMO-1234
@@ -263,7 +266,7 @@ Notes:
 - `gitlab-review` and `gitlab-diff-review` ask for a GitLab merge request URL interactively
 - `auto-status` and `auto-reset` currently operate on persisted state for `auto-golang`
 
-## `auto-golang` and `auto-common`
+## `auto-golang`, `auto-common`, and `auto-simple`
 
 `auto-golang` is the main resumable end-to-end automation flow. It stores persisted execution state and supports:
 
@@ -273,7 +276,9 @@ Notes:
 - reset via `auto-reset`
 - resume validation against saved launch profile and required artifacts
 
-`auto-common` is a separate built-in automation flow with its own phase list, but it does not currently have dedicated `auto-status` or `auto-reset` commands.
+`auto-common` is the planning-aware built-in automation flow. After `plan`, it runs `design-review` and blocks implementation until the verdict is `approved` or `approved_with_warnings`. When the verdict is `needs_revision`, it runs `plan-revise` once and then a second `design-review`. If the second verdict is still `needs_revision`, the pipeline stops before `implement`.
+
+`auto-simple` is the preserved simplified pipeline: `plan → implement → review loop`, with no planning review gate and no revise rounds. It is behaviorally equivalent to the legacy `auto-common` before the planning gate was introduced.
 
 ## Launch Profiles and Resume
 
