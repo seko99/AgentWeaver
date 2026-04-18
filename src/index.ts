@@ -920,7 +920,11 @@ async function runDeclarativeFlowByRef(
       },
       );
     }
-    state.status = "completed";
+    if (executionState.terminated) {
+      state.status = executionState.terminationOutcome === "success" ? "completed" : "blocked";
+    } else {
+      state.status = "completed";
+    }
     state.currentStep = null;
     state.lastError = null;
     state.executionState = executionState;

@@ -1,11 +1,26 @@
 {
   "kind": "review-loop-flow",
   "version": 1,
-  "description": "Iteratively runs review → review-fix cycles up to 5 times. Stops early when ready-to-merge is achieved. Each iteration auto-selects blockers and critical findings for fixing.",
+  "description": "Iteratively runs review → review-fix cycles up to 5 times. Stops early when ready-to-merge is achieved. Each iteration auto-selects blockers and critical findings for fixing. After iteration 5, runs a terminal verification review to confirm the post-fix state.",
   "constants": {
     "autoReviewFixExtraPrompt": "Fix only blockers and criticals. Skip minor and warning severity."
   },
   "phases": [
+    {
+      "id": "entry_cleanup",
+      "steps": [
+        {
+          "id": "clear_stale_ready_to_merge",
+          "node": "clear-ready-to-merge",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "taskKey": { "ref": "params.taskKey" }
+          }
+        }
+      ]
+    },
     {
       "id": "review_iteration_1",
       "steps": [
@@ -37,6 +52,9 @@
         {
           "id": "check_ready_to_merge",
           "node": "file-check",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
           "params": {
             "path": {
               "artifact": {
@@ -59,9 +77,12 @@
           "id": "write_auto_selection",
           "node": "write-selection-file",
           "when": {
-            "equals": [
-              { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
-              { "const": false }
+            "all": [
+              { "not": { "ref": "context.dryRun" } },
+              { "equals": [
+                { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+                { "const": false }
+              ]}
             ]
           },
           "params": {
@@ -87,9 +108,12 @@
           "id": "run_review_fix",
           "node": "flow-run",
           "when": {
-            "equals": [
-              { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
-              { "const": false }
+            "all": [
+              { "not": { "ref": "context.dryRun" } },
+              { "equals": [
+                { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+                { "const": false }
+              ]}
             ]
           },
           "params": {
@@ -174,6 +198,9 @@
             {
               "id": "check_ready_to_merge",
               "node": "file-check",
+              "when": {
+                "not": { "ref": "context.dryRun" }
+              },
               "params": {
                 "path": {
                   "artifact": {
@@ -196,9 +223,12 @@
               "id": "write_auto_selection",
               "node": "write-selection-file",
               "when": {
-                "equals": [
-                  { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
-                  { "const": false }
+                "all": [
+                  { "not": { "ref": "context.dryRun" } },
+                  { "equals": [
+                    { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                    { "const": false }
+                  ]}
                 ]
               },
               "params": {
@@ -223,9 +253,12 @@
             {
               "id": "run_review_fix",
               "when": {
-                "equals": [
-                  { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
-                  { "const": false }
+                "all": [
+                  { "not": { "ref": "context.dryRun" } },
+                  { "equals": [
+                    { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                    { "const": false }
+                  ]}
                 ]
               },
               "node": "flow-run",
@@ -256,13 +289,16 @@
                 "llmExecutor": { "ref": "params.llmExecutor" }
               }
             },
-            {
+{
               "id": "notify_review_fix_complete",
               "node": "telegram-notify",
               "when": {
-                "equals": [
-                  { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
-                  { "const": false }
+                "all": [
+                  { "not": { "ref": "context.dryRun" } },
+                  { "equals": [
+                    { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                    { "const": false }
+                  ]}
                 ]
               },
               "params": {
@@ -274,6 +310,81 @@
                   }
                 }
               }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "terminal_verification",
+      "when": {
+        "not": { "ref": "context.dryRun" }
+      },
+      "steps": [
+        {
+          "id": "clear_ready_to_merge_before_verification",
+          "node": "clear-ready-to-merge",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "taskKey": { "ref": "params.taskKey" }
+          }
+        },
+        {
+          "id": "run_terminal_review",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "review.json" },
+            "labelText": { "const": "Running terminal verification review (iteration 6)" },
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "const": 6 },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmModel": { "ref": "params.llmModel" },
+            "llmExecutor": { "ref": "params.llmExecutor" }
+          }
+        },
+        {
+          "id": "check_terminal_ready_to_merge",
+          "node": "file-check",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Changes are ready to merge.\nready-to-merge.md file created." },
+            "tone": { "const": "green" }
+          }
+        },
+        {
+          "id": "assert_terminal_success",
+          "node": "file-check",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Terminal Verification" },
+            "foundMessage": { "const": "Terminal verification passed." },
+            "tone": { "const": "green" }
+          },
+          "expect": [
+            {
+              "kind": "step-output",
+              "value": { "ref": "steps.terminal_verification.check_terminal_ready_to_merge.value.exists" },
+              "equals": { "const": true },
+              "message": "Terminal verification failed: ready-to-merge.md was not produced after review_iteration_6. review-loop must fail."
             }
           ]
         }

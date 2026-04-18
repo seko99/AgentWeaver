@@ -1,5 +1,6 @@
 import { buildFailureSummaryNode } from "./nodes/build-failure-summary-node.js";
 import { buildReviewFixPromptNode } from "./nodes/build-review-fix-prompt-node.js";
+import { clearReadyToMergeNode } from "./nodes/clear-ready-to-merge-node.js";
 import { codexPromptNode } from "./nodes/codex-prompt-node.js";
 import { commandCheckNode } from "./nodes/command-check-node.js";
 import { commitMessageFormNode } from "./nodes/commit-message-form-node.js";
@@ -35,6 +36,7 @@ import type { PipelineNodeDefinition } from "./types.js";
 export type NodeKind =
   | "build-failure-summary"
   | "build-review-fix-prompt"
+  | "clear-ready-to-merge"
   | "codex-prompt"
   | "command-check"
   | "commit-message-form"
@@ -86,6 +88,7 @@ export type NodeContractMetadata = {
 const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "build-failure-summary": buildFailureSummaryNode as unknown as AnyNodeDefinition,
   "build-review-fix-prompt": buildReviewFixPromptNode as unknown as AnyNodeDefinition,
+  "clear-ready-to-merge": clearReadyToMergeNode as unknown as AnyNodeDefinition,
   "codex-prompt": codexPromptNode as unknown as AnyNodeDefinition,
   "command-check": commandCheckNode as unknown as AnyNodeDefinition,
   "commit-message-form": commitMessageFormNode as unknown as AnyNodeDefinition,
@@ -130,6 +133,12 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["selectionFile", "autoMode"],
+  },
+  "clear-ready-to-merge": {
+    kind: "clear-ready-to-merge",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["taskKey"],
   },
   "codex-prompt": {
     kind: "codex-prompt",
