@@ -1,7 +1,7 @@
 {
   "kind": "auto-flow",
   "version": 1,
-  "description": "End-to-end resumable pipeline without language-specific checks. Runs: plan (with Jira fetch and Q&A) → design review → optional plan revision → implement → review loop. Planning gate requires design-review approval before implementation.",
+  "description": "End-to-end resumable pipeline without language-specific checks. Runs: plan (with Jira fetch and Q&A) → design-review loop → implement → review loop. Planning gate requires design-review approval, or an explicit user decision to continue after the maximum revision attempts, before implementation.",
   "phases": [
     {
       "id": "plan",
@@ -358,124 +358,27 @@
       ]
     },
     {
-      "id": "design_review",
+      "id": "design_review_loop",
       "steps": [
         {
-          "id": "run_design_review",
+          "id": "run_design_review_loop",
           "node": "flow-run",
           "params": {
-            "fileName": { "const": "design-review.json" },
-            "labelText": { "const": "Running design review" },
+            "fileName": { "const": "design-review-loop.json" },
+            "labelText": { "const": "Running design-review loop" },
             "taskKey": { "ref": "params.taskKey" },
             "workspaceDir": { "ref": "params.workspaceDir" },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "llmExecutor": { "ref": "params.llmExecutor" },
             "llmModel": { "ref": "params.llmModel" }
-          }
-        }
-      ]
-    },
-    {
-      "id": "verdict",
-      "steps": [
-        {
-          "id": "check_design_review_verdict",
-          "node": "design-review-verdict",
-          "params": {
-            "taskKey": { "ref": "params.taskKey" }
-          }
-        },
-        {
-          "id": "notify_review_complete",
-          "node": "telegram-notify",
-          "params": {
-            "message": {
-              "template": "Design review verdict: {verdict}",
-              "vars": {
-                "verdict": { "ref": "steps.verdict.check_design_review_verdict.value.verdict" }
-              }
-            }
-          }
-        }
-      ]
-    },
-    {
-      "id": "plan_revision",
-      "when": { "equals": [{ "ref": "steps.verdict.check_design_review_verdict.value.needsRevision" }, { "const": true }] },
-      "steps": [
-        {
-          "id": "run_plan_revise",
-          "node": "flow-run",
-          "params": {
-            "fileName": { "const": "plan-revise.json" },
-            "labelText": { "const": "Running plan revision" },
-            "taskKey": { "ref": "params.taskKey" },
-            "workspaceDir": { "ref": "params.workspaceDir" },
-            "extraPrompt": { "ref": "params.extraPrompt" },
-            "llmExecutor": { "ref": "params.llmExecutor" },
-            "llmModel": { "ref": "params.llmModel" }
-          }
-        },
-        {
-          "id": "notify_revise_complete",
-          "node": "telegram-notify",
-          "params": {
-            "message": { "const": "Plan revision complete. Running second design review." }
-          }
-        }
-      ]
-    },
-    {
-      "id": "design_review_repeat",
-      "when": { "equals": [{ "ref": "steps.verdict.check_design_review_verdict.value.needsRevision" }, { "const": true }] },
-      "steps": [
-        {
-          "id": "run_second_design_review",
-          "node": "flow-run",
-          "params": {
-            "fileName": { "const": "design-review.json" },
-            "labelText": { "const": "Running second design review after revision" },
-            "taskKey": { "ref": "params.taskKey" },
-            "workspaceDir": { "ref": "params.workspaceDir" },
-            "extraPrompt": { "ref": "params.extraPrompt" },
-            "llmExecutor": { "ref": "params.llmExecutor" },
-            "llmModel": { "ref": "params.llmModel" }
-          }
-        }
-      ]
-    },
-    {
-      "id": "verdict_repeat",
-      "when": { "equals": [{ "ref": "steps.verdict.check_design_review_verdict.value.needsRevision" }, { "const": true }] },
-      "steps": [
-        {
-          "id": "check_second_verdict",
-          "node": "design-review-verdict",
-          "params": {
-            "taskKey": { "ref": "params.taskKey" }
-          }
-        },
-        {
-          "id": "notify_second_review",
-          "node": "telegram-notify",
-          "params": {
-            "message": {
-              "template": "Second design review verdict: {verdict}",
-              "vars": {
-                "verdict": { "ref": "steps.verdict_repeat.check_second_verdict.value.verdict" }
-              }
-            }
-          }
-        },
-        {
-          "id": "stop_on_repeated_needs_revision",
-          "stopFlowIf": {
-            "equals": [{ "ref": "steps.verdict_repeat.check_second_verdict.value.needsRevision" }, { "const": true }]
           },
-          "node": "telegram-notify",
-          "params": {
-            "message": { "const": "Second design review still requires revision. Auto-common pipeline stopped. Please address the blocking findings and restart." }
-          }
+          "stopFlowIf": {
+            "equals": [
+              { "ref": "steps.design_review_loop.run_design_review_loop.value.executionState.terminationOutcome" },
+              { "const": "stopped" }
+            ]
+          },
+          "stopFlowOutcome": "stopped"
         }
       ]
     },

@@ -2025,7 +2025,12 @@ export class InteractiveUi {
       lines.push("");
     }
     if (flowState?.terminated) {
-      lines.push(`{green-fg}✓{/green-fg} {green-fg}Flow completed successfully{/green-fg}`);
+      const terminationOutcome = flowState.terminationOutcome ?? "success";
+      if (terminationOutcome === "stopped") {
+        lines.push(`{yellow-fg}■{/yellow-fg} {yellow-fg}Flow stopped before completion{/yellow-fg}`);
+      } else {
+        lines.push(`{green-fg}✓{/green-fg} {green-fg}Flow completed successfully{/green-fg}`);
+      }
       lines.push(`{gray-fg}Reason: ${flowState.terminationReason ?? "flow terminated"}{/gray-fg}`);
     }
     this.progress.setContent(lines.join("\n").trimEnd());

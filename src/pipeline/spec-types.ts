@@ -140,6 +140,7 @@ export type DeclarativeStepSpec = {
   params?: Record<string, ValueSpec>;
   expect?: ExpectationSpec[];
   stopFlowIf?: ConditionSpec;
+  stopFlowOutcome?: "success" | "stopped";
   after?: StepAfterActionSpec[];
 };
 
@@ -182,6 +183,7 @@ export type ExpandedStepSpec = {
   params?: Record<string, ValueSpec>;
   expect?: ExpectationSpec[];
   stopFlowIf?: ConditionSpec;
+  stopFlowOutcome?: "success" | "stopped";
   after?: StepAfterActionSpec[];
   repeatVars: Record<string, JsonValue>;
 };
@@ -210,5 +212,6 @@ export type FlowExecutionState = {
   flowVersion: number;
   terminated: boolean;
   terminationReason?: string;
+  terminationOutcome?: "success" | "stopped";
   phases: ExpandedPhaseExecutionState[];
 };

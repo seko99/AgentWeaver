@@ -456,12 +456,10 @@ function validateDeclarativeFlowResumeState(
 ): void {
   if (state.flowId === "auto-common") {
     const persistedPhaseIds = state.executionState.phases.map((p) => p.id);
-    const hasLegacyPhaseOnly =
-      persistedPhaseIds.length > 0 &&
-      !persistedPhaseIds.some((id) =>
-        ["design_review", "verdict", "plan_revision", "design_review_repeat", "verdict_repeat"].includes(id),
-      );
-    if (hasLegacyPhaseOnly) {
+    const hasLegacyPlanningGatePhases = persistedPhaseIds.some((id) =>
+      ["design_review", "verdict", "plan_revision", "design_review_repeat", "verdict_repeat"].includes(id),
+    );
+    if (hasLegacyPlanningGatePhases) {
       throw new TaskRunnerError(
         "Resume is impossible because the persisted state was created with the legacy phase graph. Use restart.",
       );
@@ -850,6 +848,7 @@ async function runDeclarativeFlowByRef(
     flowKind: flow.kind,
     flowVersion: flow.version,
     terminated: false,
+    terminationOutcome: "success",
     phases: [],
   };
   let persistedState = launchMode === "resume" ? loadFlowRunState(config.scope.scopeKey, flowId) : null;
