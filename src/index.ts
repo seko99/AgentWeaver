@@ -50,16 +50,26 @@ import { validateStructuredArtifacts } from "./structured-artifacts.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { runNodeChecks } from "./pipeline/checks.js";
 import { createPipelineContext } from "./pipeline/context.js";
-import { loadDeclarativeFlow, type DeclarativeFlowRef } from "./pipeline/declarative-flows.js";
+import { collectFlowRoutingGroups, loadDeclarativeFlow, type DeclarativeFlowRef } from "./pipeline/declarative-flows.js";
 import { runExpandedPhase } from "./pipeline/declarative-flow-runner.js";
-import { findCatalogEntry, isBuiltInCommandFlowId, loadInteractiveFlowCatalog, toDeclarativeFlowRef, type FlowCatalogEntry } from "./pipeline/flow-catalog.js";
 import {
-  ALLOWED_MODELS_BY_EXECUTOR,
-  defaultModelForExecutor,
+  builtInCommandFlowFile,
+  findCatalogEntry,
+  flowRoutingGroups,
+  isBuiltInCommandFlowId,
+  loadInteractiveFlowCatalog,
+  toDeclarativeFlowRef,
+  type FlowCatalogEntry,
+} from "./pipeline/flow-catalog.js";
+import {
+  EXECUTION_ROUTING_GROUPS,
+  type ExecutionRoutingGroup,
+  type ResolvedExecutionRouting,
+  type SelectedExecutionPreset,
+} from "./pipeline/execution-routing-config.js";
+import {
   DEFAULT_LAUNCH_PROFILE,
-  LLM_EXECUTOR_IDS,
-  resolveLaunchProfile,
-  type LaunchProfileSelection,
+  type LlmExecutorId,
   type ResolvedLaunchProfile,
 } from "./pipeline/launch-profile-config.js";
 import type { ExpandedPhaseExecutionState, ExpandedPhaseSpec, ExpandedStepSpec, FlowExecutionState } from "./pipeline/spec-types.js";
@@ -73,6 +83,12 @@ import { resolveDesignReviewInputContract } from "./runtime/design-review-input-
 import { resolvePlanReviseInputContract } from "./runtime/plan-revise-input-contract.js";
 import { resolveLatestPlanningBundle } from "./runtime/planning-bundle.js";
 import { clearReadyToMergeFile } from "./runtime/ready-to-merge.js";
+import {
+  describeExecutionRouting,
+  executorsForRoutingGroups,
+  resolveExecutionRouting,
+} from "./runtime/execution-routing.js";
+import { requestInteractiveExecutionRouting } from "./runtime/interactive-execution-routing.js";
 import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
 import {
   bye,
@@ -86,7 +102,7 @@ import {
   stripAnsi,
 } from "./tui.js";
 import { requestUserInputInTerminal, type UserInputRequester } from "./user-input.js";
-import type { UserInputFormDefinition } from "./user-input.js";
+import type { UserInputFieldDefinition, UserInputFormDefinition } from "./user-input.js";
 import { runDoctorCommand } from "./doctor/index.js";
 import {
   attachJiraContext,
@@ -158,6 +174,8 @@ type Config = BaseConfig & {
 
 type DeclarativeFlowOverrides = {
   launchProfile?: ResolvedLaunchProfile;
+  executionRouting?: ResolvedExecutionRouting;
+  selectedRoutingPreset?: SelectedExecutionPreset;
 };
 
 type ParsedArgs = {
@@ -316,92 +334,16 @@ function buildFlowResumeDetails(state: FlowRunState): string {
     `Current step: ${currentStep}`,
     `Updated: ${state.updatedAt}`,
   ];
-  if (state.launchProfile) {
+  if (state.executionRouting) {
+    lines.push(`Default route: ${state.executionRouting.defaultRoute.executor} / ${state.executionRouting.defaultRoute.model}`);
+    lines.push(`Routing fingerprint: ${state.executionRouting.fingerprint}`);
+  } else if (state.launchProfile) {
     lines.push(`Launch profile: ${state.launchProfile.executor} / ${state.launchProfile.model}`);
   }
   if (state.lastError) {
     lines.push(`Last error: ${state.lastError.message ?? "-"} (exit ${state.lastError.returnCode ?? "-"})`);
   }
   return lines.join("\n");
-}
-
-function launchProfileSelectionForm(): UserInputFormDefinition {
-  const defaultExecutor = DEFAULT_LAUNCH_PROFILE.executor;
-  return {
-    formId: "flow-launch-profile",
-    title: "LLM Launch Settings",
-    description: `Select an executor for the flow. Current default: ${defaultExecutor}.`,
-    submitLabel: "Continue",
-    fields: [
-      {
-        id: "executor",
-        type: "single-select",
-        label: "Executor",
-        required: true,
-        default: defaultExecutor,
-        options: LLM_EXECUTOR_IDS.map((id) => ({
-          value: id,
-          label: id === defaultExecutor ? `${id} [default]` : id,
-        })),
-      },
-    ],
-  };
-}
-
-function launchModelSelectionForm(executor: LaunchProfileSelection["executor"]): UserInputFormDefinition {
-  const resolvedExecutor = executor === "default" ? DEFAULT_LAUNCH_PROFILE.executor : executor;
-  const defaultModel = defaultModelForExecutor(resolvedExecutor);
-  const options = ALLOWED_MODELS_BY_EXECUTOR[resolvedExecutor].map((model) => ({
-    value: model,
-    label: model === defaultModel ? `${model} [default]` : model,
-  }));
-  return {
-    formId: "flow-launch-model",
-    title: "LLM Launch Settings",
-    description: `Select a model for the flow. Current default for ${resolvedExecutor}: ${defaultModel}.`,
-    submitLabel: "Start",
-    fields: [
-      {
-        id: "model",
-        type: "single-select",
-        label: "Model",
-        required: true,
-        default: defaultModel,
-        options,
-      },
-    ],
-  };
-}
-
-function isFormCancellation(error: unknown, formId: string): boolean {
-  return error instanceof TaskRunnerError && error.message === `User cancelled form '${formId}'.`;
-}
-
-async function requestInteractiveLaunchProfile(requestUserInput: UserInputRequester): Promise<ResolvedLaunchProfile> {
-  for (; ;) {
-    const executorFormResult = await requestUserInput(launchProfileSelectionForm());
-    const rawExecutor = String(executorFormResult.values.executor ?? DEFAULT_LAUNCH_PROFILE.executor);
-    const executor = LLM_EXECUTOR_IDS.find((id) => id === rawExecutor);
-    if (!executor) {
-      throw new TaskRunnerError(`Unsupported launch executor '${rawExecutor}'.`);
-    }
-    try {
-      const modelFormResult = await requestUserInput(launchModelSelectionForm(executor));
-      const rawModel = String(modelFormResult.values.model ?? defaultModelForExecutor(executor)).trim();
-      return resolveLaunchProfile(
-        {
-          executor,
-          model: rawModel.length > 0 ? rawModel : defaultModelForExecutor(executor),
-        },
-        DEFAULT_LAUNCH_PROFILE,
-      );
-    } catch (error) {
-      if (isFormCancellation(error, "flow-launch-model")) {
-        continue;
-      }
-      throw error;
-    }
-  }
 }
 
 type FlowResumeLookup = {
@@ -504,17 +446,16 @@ function validateDeclarativeFlowResumeState(
   flowEntry: FlowCatalogEntry,
   config: Config,
   state: FlowRunState,
-  launchProfile?: ResolvedLaunchProfile,
+  executionRouting?: ResolvedExecutionRouting,
   runtime: RuntimeServices = runtimeServices,
 ): void {
-  if (state.launchProfile) {
-    if (!launchProfile) {
-      throw new TaskRunnerError("Resume is impossible because launch profile is missing. Use restart.");
+  const persistedFingerprint = state.routingFingerprint ?? state.executionRouting?.fingerprint ?? state.launchProfile?.fingerprint;
+  if (persistedFingerprint) {
+    if (!executionRouting) {
+      throw new TaskRunnerError("Resume is impossible because execution routing is missing. Use restart.");
     }
-    if (state.launchProfile.fingerprint !== launchProfile.fingerprint) {
-      throw new TaskRunnerError(
-        `Resume is impossible because launch profile changed (${state.launchProfile.executor}/${state.launchProfile.model} -> ${launchProfile.executor}/${launchProfile.model}). Use restart.`,
-      );
+    if (persistedFingerprint !== executionRouting.fingerprint) {
+      throw new TaskRunnerError("Resume is impossible because execution routing changed. Use restart.");
     }
   }
   if (flowRequiresTaskScope(flowEntry) && !config.jiraRef) {
@@ -529,11 +470,12 @@ function validateDeclarativeFlowResumeState(
     ...(config.mdLang !== undefined ? { mdLang: config.mdLang } : {}),
     runtime,
     requestUserInput: requestUserInputInTerminal,
+    ...(executionRouting ? { executionRouting } : {}),
   });
   const flowParams = defaultDeclarativeFlowParams(
     config,
     false,
-    launchProfile ? { launchProfile } : {},
+    executionRouting ? { executionRouting, launchProfile: executionRouting.defaultRoute } : {},
   );
 
   for (const phase of flowEntry.flow.phases) {
@@ -565,7 +507,7 @@ function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: 
       const effectiveScope = scopeWithRestoredJiraContext(currentScope, directState);
       const baseConfig = buildInteractiveBaseConfig(flowEntry.id, effectiveScope);
       const config = buildRuntimeConfig(baseConfig, effectiveScope);
-      validateDeclarativeFlowResumeState(flowEntry, config, directState, directState.launchProfile);
+      validateDeclarativeFlowResumeState(flowEntry, config, directState, directState.executionRouting);
       return {
         resumeAvailable: true,
         hasExistingState: true,
@@ -707,23 +649,64 @@ function buildRuntimeConfig(baseConfig: BaseConfig, scope: ResolvedScope): Confi
   };
 }
 
-function checkPrerequisites(config: Config): void {
-  if (
-    config.command === "bug-analyze" ||
-    config.command === "bug-fix" ||
-    config.command === "mr-description" ||
-    config.command === "plan" ||
-    config.command === "task-describe" ||
-    config.command === "review" ||
-    config.command === "run-go-tests-loop" ||
-    config.command === "run-go-linter-loop"
-  ) {
+function routingForPrerequisites(
+  launchProfile?: ResolvedLaunchProfile,
+  executionRouting?: ResolvedExecutionRouting,
+): ResolvedExecutionRouting {
+  if (executionRouting) {
+    return executionRouting;
+  }
+  return resolveExecutionRouting({
+    defaultRoute: launchProfile
+      ? {
+          executor: launchProfile.executor,
+          model: launchProfile.model,
+        }
+      : {
+          executor: DEFAULT_LAUNCH_PROFILE.executor,
+          model: DEFAULT_LAUNCH_PROFILE.model,
+        },
+  });
+}
+
+function flowSpecFileForPrerequisiteChecks(command: Config["command"]): string | null {
+  return isBuiltInCommandFlowId(command) ? builtInCommandFlowFile(command) : null;
+}
+
+function commandRoutingGroupsForPrerequisiteChecks(command: Config["command"], cwd: string): ExecutionRoutingGroup[] {
+  const fileName = flowSpecFileForPrerequisiteChecks(command);
+  if (!fileName) {
+    return [];
+  }
+  return collectFlowRoutingGroups(loadDeclarativeFlow({ source: "built-in", fileName }), cwd);
+}
+
+function resolveExecutorPrerequisite(executor: LlmExecutorId): void {
+  if (executor === "codex") {
     resolveCmd("codex", "CODEX_BIN");
+    return;
+  }
+  resolveCmd("opencode", "OPENCODE_BIN");
+}
+
+function checkPrerequisites(
+  config: Config,
+  launchProfile?: ResolvedLaunchProfile,
+  executionRouting?: ResolvedExecutionRouting,
+): void {
+  const routing = routingForPrerequisites(launchProfile, executionRouting);
+  const groups = commandRoutingGroupsForPrerequisiteChecks(config.command, process.cwd());
+  for (const executor of executorsForRoutingGroups(routing, groups)) {
+    resolveExecutorPrerequisite(executor);
   }
 }
 
-function checkAutoPrerequisites(config: Config): void {
-  resolveCmd("codex", "CODEX_BIN");
+function checkAutoPrerequisites(
+  config: Config,
+  launchProfile?: ResolvedLaunchProfile,
+  executionRouting?: ResolvedExecutionRouting,
+): void {
+  checkPrerequisites(config, launchProfile, executionRouting);
 }
 
 function autoFlowParams(config: Config, forceRefreshSummary = false): Record<string, unknown> {
@@ -830,6 +813,7 @@ async function runDeclarativeFlowByRef(
     runtime,
     ...(setSummary ? { setSummary } : {}),
     requestUserInput,
+    ...(overrides.executionRouting ? { executionRouting: overrides.executionRouting } : {}),
   });
   const flow = loadDeclarativeFlow(flowRef);
   const initialExecutionState: FlowExecutionState = {
@@ -851,7 +835,10 @@ async function runDeclarativeFlowByRef(
       },
       config,
       persistedState,
-      overrides.launchProfile,
+      overrides.executionRouting ?? (overrides.launchProfile ? resolveExecutionRouting({ defaultRoute: {
+        executor: overrides.launchProfile.executor,
+        model: overrides.launchProfile.model,
+      } }) : undefined),
       runtime,
     );
     persistedState = prepareFlowStateForResume(persistedState);
@@ -860,9 +847,24 @@ async function runDeclarativeFlowByRef(
   }
   const executionState = persistedState?.executionState ?? initialExecutionState;
   const state = persistedState
-    ?? createFlowRunState(config.scope.scopeKey, flowId, executionState, config.jiraRef, overrides.launchProfile);
-  if (overrides.launchProfile) {
+    ?? createFlowRunState(
+      config.scope.scopeKey,
+      flowId,
+      executionState,
+      config.jiraRef,
+      overrides.launchProfile,
+      overrides.executionRouting,
+      overrides.selectedRoutingPreset,
+    );
+  if (overrides.executionRouting) {
+    state.executionRouting = overrides.executionRouting;
+    state.routingFingerprint = overrides.executionRouting.fingerprint;
+    state.launchProfile = overrides.executionRouting.defaultRoute;
+  } else if (overrides.launchProfile) {
     state.launchProfile = overrides.launchProfile;
+  }
+  if (overrides.selectedRoutingPreset) {
+    state.selectedRoutingPreset = overrides.selectedRoutingPreset;
   }
   state.status = "running";
   state.lastError = null;
@@ -944,7 +946,18 @@ function defaultDeclarativeFlowParams(
 ): Record<string, unknown> {
   const iteration = nextReviewIterationForTask(config.taskKey);
   const latestIteration = latestArtifactIteration(config.taskKey, "review");
-  const launchProfile = overrides.launchProfile ?? resolveLaunchProfile({ executor: "default", model: "default" }, DEFAULT_LAUNCH_PROFILE);
+  const executionRouting = overrides.executionRouting ?? resolveExecutionRouting({
+    defaultRoute: overrides.launchProfile
+      ? {
+          executor: overrides.launchProfile.executor,
+          model: overrides.launchProfile.model,
+        }
+      : {
+          executor: DEFAULT_LAUNCH_PROFILE.executor,
+          model: DEFAULT_LAUNCH_PROFILE.model,
+        },
+  });
+  const launchProfile = executionRouting.defaultRoute;
   return {
     taskKey: config.taskKey,
     jiraRef: config.jiraRef,
@@ -959,6 +972,7 @@ function defaultDeclarativeFlowParams(
     llmExecutor: launchProfile.executor,
     llmModel: launchProfile.model,
     launchProfile,
+    executionRouting,
     iteration,
     latestIteration,
     taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
@@ -1026,6 +1040,8 @@ async function executeCommand(
   forceRefreshSummary = false,
   launchMode: FlowLaunchMode = "restart",
   launchProfile?: ResolvedLaunchProfile,
+  executionRouting?: ResolvedExecutionRouting,
+  selectedRoutingPreset?: SelectedExecutionPreset,
   runtime: RuntimeServices = runtimeServices,
 ): Promise<boolean> {
   if (baseConfig.command === "doctor") {
@@ -1034,15 +1050,24 @@ async function executeCommand(
   }
 
   const config = buildRuntimeConfig(baseConfig, resolvedScope ?? (await resolveScopeForCommand(baseConfig, requestUserInput)));
+  const flowOverrides: DeclarativeFlowOverrides = executionRouting
+    ? {
+        launchProfile: executionRouting.defaultRoute,
+        executionRouting,
+        ...(selectedRoutingPreset ? { selectedRoutingPreset } : {}),
+      }
+    : launchProfile
+      ? { launchProfile }
+      : {};
   if (config.command === "auto-golang") {
     requireJiraConfig(config);
-    checkAutoPrerequisites(config);
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
     process.env.JIRA_API_URL = config.jiraApiUrl;
     process.env.JIRA_TASK_FILE = config.jiraTaskFile;
 
     let effectiveLaunchMode = launchMode;
     let effectiveLaunchProfile = launchProfile;
+    let effectiveExecutionRouting = executionRouting;
     if (config.autoFromPhase) {
       const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
       const persistedState = loadFlowRunState(config.scope.scopeKey, "auto-golang");
@@ -1055,14 +1080,24 @@ async function executeCommand(
       saveFlowRunState(persistedState);
       effectiveLaunchMode = "resume";
       effectiveLaunchProfile ??= persistedState.launchProfile;
+      effectiveExecutionRouting ??= persistedState.executionRouting;
       printPanel("Auto-Golang Resume", `Auto-golang pipeline will continue from phase: ${config.autoFromPhase}`, "yellow");
     }
+    checkAutoPrerequisites(config, effectiveLaunchProfile, effectiveExecutionRouting);
 
     await runDeclarativeFlowBySpecFile(
       "auto-golang.json",
       config,
       autoFlowParams(config, forceRefreshSummary),
-      effectiveLaunchProfile ? { launchProfile: effectiveLaunchProfile } : {},
+      effectiveExecutionRouting
+        ? {
+            launchProfile: effectiveExecutionRouting.defaultRoute,
+            executionRouting: effectiveExecutionRouting,
+            ...(selectedRoutingPreset ? { selectedRoutingPreset } : {}),
+          }
+        : effectiveLaunchProfile
+          ? { launchProfile: effectiveLaunchProfile }
+          : {},
       requestUserInput,
       setSummary,
       effectiveLaunchMode,
@@ -1072,7 +1107,7 @@ async function executeCommand(
   }
   if (config.command === "auto-common") {
     requireJiraConfig(config);
-    checkAutoPrerequisites(config);
+    checkAutoPrerequisites(config, launchProfile, executionRouting);
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
     process.env.JIRA_API_URL = config.jiraApiUrl;
     process.env.JIRA_TASK_FILE = config.jiraTaskFile;
@@ -1081,7 +1116,7 @@ async function executeCommand(
       "auto-common.json",
       config,
       autoFlowParams(config, forceRefreshSummary),
-      launchProfile ? { launchProfile } : {},
+      flowOverrides,
       requestUserInput,
       setSummary,
       launchMode,
@@ -1103,7 +1138,10 @@ async function executeCommand(
       `Current step: ${currentStep}`,
       `Updated: ${state.updatedAt}`,
     ];
-    if (state.launchProfile) {
+    if (state.executionRouting) {
+      lines.push(`Default route: ${state.executionRouting.defaultRoute.executor} / ${state.executionRouting.defaultRoute.model}`);
+      lines.push(`Routing fingerprint: ${state.executionRouting.fingerprint}`);
+    } else if (state.launchProfile) {
       lines.push(`Launch profile: ${state.launchProfile.executor} / ${state.launchProfile.model}`);
     }
     if (state.lastError) {
@@ -1136,7 +1174,7 @@ async function executeCommand(
     return false;
   }
 
-  checkPrerequisites(config);
+  checkPrerequisites(config, launchProfile, executionRouting);
   if (config.jiraBrowseUrl && config.jiraApiUrl && config.jiraTaskFile) {
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl ?? "";
     process.env.JIRA_API_URL = config.jiraApiUrl ?? "";
@@ -1163,7 +1201,7 @@ async function executeCommand(
       qaIteration: nextArtifactIteration(config.taskKey, "qa"),
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, launchProfile ? { launchProfile } : {}, requestUserInput, setSummary, launchMode, runtime);
+    }, flowOverrides, requestUserInput, setSummary, launchMode, runtime);
     return false;
   }
 
@@ -1183,7 +1221,7 @@ async function executeCommand(
       bugFixPlanIteration: nextArtifactIteration(config.taskKey, "bug-fix-plan"),
       extraPrompt: config.extraPrompt,
       forceRefresh: forceRefreshSummary,
-    }, launchProfile ? { launchProfile } : {}, requestUserInput, setSummary, launchMode, runtime);
+    }, flowOverrides, requestUserInput, setSummary, launchMode, runtime);
     return false;
   }
 
@@ -1223,7 +1261,7 @@ async function executeCommand(
         planningAnswersJsonFile: inputContract.planningAnswersJsonFile,
         extraPrompt: config.extraPrompt,
       },
-      launchProfile ? { launchProfile } : {},
+      flowOverrides,
       requestUserInput,
       undefined,
       launchMode,
@@ -1282,7 +1320,7 @@ async function executeCommand(
         planningAnswersJsonFile: inputContract.planningAnswersJsonFile,
         extraPrompt: config.extraPrompt,
       },
-      launchProfile ? { launchProfile } : {},
+      flowOverrides,
       requestUserInput,
       undefined,
       launchMode,
@@ -1311,7 +1349,7 @@ async function executeCommand(
         reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, iteration),
         reviewFixPoints: config.reviewFixPoints,
       },
-      launchProfile ? { launchProfile } : {},
+      flowOverrides,
       requestUserInput,
       undefined,
       launchMode,
@@ -1338,7 +1376,7 @@ async function executeCommand(
         gitlabDiffIteration,
         extraPrompt: config.extraPrompt,
       },
-      launchProfile ? { launchProfile } : {},
+      flowOverrides,
       requestUserInput,
       undefined,
       launchMode,
@@ -1368,7 +1406,7 @@ async function executeCommand(
     await runDeclarativeFlowBySpecFile("bugz/bug-fix.json", config, {
       taskKey: config.taskKey,
       extraPrompt: config.extraPrompt,
-    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
+    }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1379,7 +1417,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       iteration: nextArtifactIteration(config.taskKey, "mr-description"),
       extraPrompt: config.extraPrompt,
-    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
+    }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1390,7 +1428,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       iteration,
       extraPrompt: config.extraPrompt,
-    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
+    }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1400,7 +1438,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       planningIteration: planningBundle.planningIteration,
       extraPrompt: config.extraPrompt,
-    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode);
+    }, flowOverrides, requestUserInput, undefined, launchMode);
     return false;
   }
 
@@ -1419,13 +1457,13 @@ async function executeCommand(
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
+      }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
     } else {
       await runDeclarativeFlowBySpecFile("review/review-project.json", config, {
         taskKey: config.taskKey,
         iteration,
         extraPrompt: config.extraPrompt,
-      }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
+      }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
     }
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
@@ -1448,7 +1486,7 @@ async function executeCommand(
       reviewFixSelectionJsonFile: reviewFixSelectionJsonFile(config.taskKey, latestIteration),
       extraPrompt: config.extraPrompt,
       reviewFixPoints: config.reviewFixPoints,
-    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
+    }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
     return false;
   }
 
@@ -1468,7 +1506,7 @@ async function executeCommand(
       taskKey: config.taskKey,
       iteration,
       extraPrompt: config.extraPrompt,
-    }, launchProfile ? { launchProfile } : {}, requestUserInput, undefined, launchMode, runtime);
+    }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
   }
 
@@ -1484,7 +1522,7 @@ async function executeCommand(
         runGoLinterIteration: nextArtifactIteration(config.taskKey, "run-go-linter-result", "json"),
         extraPrompt: config.extraPrompt,
       },
-      launchProfile ? { launchProfile } : {},
+      flowOverrides,
       requestUserInput,
       undefined,
       launchMode,
@@ -1501,7 +1539,7 @@ async function executeCommand(
         taskKey: config.taskKey,
         extraPrompt: config.extraPrompt,
       },
-      launchProfile ? { launchProfile } : {},
+      flowOverrides,
       requestUserInput,
       undefined,
       launchMode,
@@ -1670,16 +1708,23 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           if (!flowEntry) {
             throw new TaskRunnerError(`Unknown flow: ${flowId}`);
           }
+          const routingGroups = flowRoutingGroups(flowEntry, process.cwd());
           const resumeState = launchMode === "resume" ? loadFlowRunState(currentScope.scopeKey, flowId) : null;
           if (resumeState) {
             currentScope = scopeWithRestoredJiraContext(currentScope, resumeState);
           }
-          const launchProfile = launchMode === "resume"
-            ? resumeState?.launchProfile
-            : await requestInteractiveLaunchProfile((form) => ui.requestUserInput(form));
-          if (!launchProfile) {
-            throw new TaskRunnerError("Resume is impossible because launch profile was not saved. Use restart.");
+          const routingSelection = launchMode === "resume"
+            ? (resumeState?.executionRouting
+                ? {
+                    routing: resumeState.executionRouting,
+                    selectedPreset: resumeState.selectedRoutingPreset ?? { kind: "custom", label: "Saved routing" } as const,
+                  }
+                : null)
+            : await requestInteractiveExecutionRouting(flowEntry, (form) => ui.requestUserInput(form));
+          if (launchMode === "resume" && !routingSelection?.routing) {
+            throw new TaskRunnerError("Resume is impossible because execution routing was not saved. Use restart.");
           }
+          const launchProfile = routingSelection?.routing?.defaultRoute;
           const previousScopeKey = currentScope.scopeKey;
           const baseConfig = buildInteractiveBaseConfig(flowId, currentScope);
           if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
@@ -1693,11 +1738,16 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           if (previousScopeKey !== currentScope.scopeKey || currentScope.jiraIssueKey) {
             syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
           }
-          printPanel(
-            "Effective Launch Config",
-            `executor: ${launchProfile.executor}\nmodel: ${launchProfile.model}\nmode: ${launchMode}`,
-            "cyan",
-          );
+          if (routingSelection?.routing) {
+            printPanel(
+              "Effective Launch Config",
+              `preset: ${routingSelection.selectedPreset.label}\nmode: ${launchMode}\n${describeExecutionRouting(
+                routingSelection.routing,
+                routingGroups,
+              )}`,
+              "cyan",
+            );
+          }
           if (flowEntry.source === "built-in" && isBuiltInCommandFlowId(flowId)) {
             await executeCommand(
               baseConfig,
@@ -1708,18 +1758,25 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
               forceRefresh,
               launchMode,
               launchProfile,
+              routingSelection?.routing,
+              routingSelection?.selectedPreset,
               createRuntimeServices(abortController.signal),
             );
             return;
           }
 
           const runtimeConfig = buildRuntimeConfig(baseConfig, currentScope);
+          const flowOverrides = {
+            ...(launchProfile ? { launchProfile } : {}),
+            ...(routingSelection?.routing ? { executionRouting: routingSelection.routing } : {}),
+            ...(routingSelection?.selectedPreset ? { selectedRoutingPreset: routingSelection.selectedPreset } : {}),
+          };
           await runDeclarativeFlowByRef(
             flowId,
             toDeclarativeFlowRef(flowEntry),
             runtimeConfig,
-            defaultDeclarativeFlowParams(runtimeConfig, forceRefresh, { launchProfile }),
-            { launchProfile },
+            defaultDeclarativeFlowParams(runtimeConfig, forceRefresh, flowOverrides),
+            flowOverrides,
             (form) => ui.requestUserInput(form),
             (markdown) => ui.setSummary(markdown),
             launchMode,

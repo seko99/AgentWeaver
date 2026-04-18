@@ -118,6 +118,7 @@
         {
           "id": "run_design_review",
           "node": "llm-prompt",
+          "routingGroup": "design-review",
           "prompt": {
             "templateRef": "design-review",
             "vars": {

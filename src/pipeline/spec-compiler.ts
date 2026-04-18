@@ -200,6 +200,7 @@ function expandPhase(phase: DeclarativePhaseSpec, repeatVars: Record<string, Jso
       return {
         id: interpolateText(step.id, repeatVars),
         node: step.node,
+        ...(step.routingGroup ? { routingGroup: step.routingGroup } : {}),
         ...(stepWhen ? { when: stepWhen } : {}),
         ...(step.prompt ? { prompt: interpolatePrompt(step.prompt, repeatVars) } : {}),
         ...(step.params

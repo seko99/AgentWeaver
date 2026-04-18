@@ -9,6 +9,7 @@
         {
           "id": "run_mr_description",
           "node": "llm-prompt",
+          "routingGroup": "review",
           "prompt": {
             "templateRef": "mr-description",
             "vars": {

@@ -56,6 +56,7 @@
             ]
           },
           "node": "llm-prompt",
+          "routingGroup": "local-fix-loop",
           "prompt": {
             "templateRef": "run-go-linter-loop-fix",
             "vars": {
@@ -177,6 +178,7 @@
                 ]
               },
               "node": "llm-prompt",
+              "routingGroup": "local-fix-loop",
               "prompt": {
                 "templateRef": "run-go-linter-loop-fix",
                 "vars": {

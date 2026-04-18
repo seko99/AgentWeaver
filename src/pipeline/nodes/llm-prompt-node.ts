@@ -10,6 +10,7 @@ import type {
 } from "../../executors/opencode-executor.js";
 import { TaskRunnerError } from "../../errors.js";
 import { printInfo, printPrompt } from "../../tui.js";
+import type { ExecutionRoutingGroup } from "../execution-routing-config.js";
 import {
   isAllowedModelForExecutor,
   isLlmExecutorId,
@@ -21,9 +22,10 @@ import { toExecutorContext } from "../types.js";
 export type LlmPromptNodeParams = {
   prompt: string;
   labelText: string;
-  executor: LlmExecutorId;
+  executor?: LlmExecutorId;
   command?: string;
   model?: string;
+  routingGroup?: ExecutionRoutingGroup;
   requiredArtifacts?: string[];
   missingArtifactsMessage?: string;
 };
@@ -36,16 +38,26 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
   kind: "llm-prompt",
   version: 1,
   async run(context, params) {
-    if (!isLlmExecutorId(params.executor)) {
-      throw new TaskRunnerError(`Unsupported llm executor '${params.executor}'.`);
+    const routedProfile = params.routingGroup
+      ? context.executionRouting?.groups[params.routingGroup]
+      : undefined;
+    const fallbackProfile = context.executionRouting?.defaultRoute;
+    const executor = params.routingGroup
+      ? routedProfile?.executor ?? params.executor ?? fallbackProfile?.executor
+      : params.executor ?? fallbackProfile?.executor;
+    const model = params.routingGroup
+      ? routedProfile?.model ?? params.model ?? fallbackProfile?.model
+      : params.model ?? fallbackProfile?.model;
+    if (!executor || !isLlmExecutorId(executor)) {
+      throw new TaskRunnerError(`Unsupported llm executor '${String(executor ?? params.executor ?? "undefined")}'.`);
     }
-    if (params.model && !isAllowedModelForExecutor(params.executor, params.model)) {
-      throw new TaskRunnerError(`Model '${params.model}' is not allowed for executor '${params.executor}'.`);
+    if (model && !isAllowedModelForExecutor(executor, model)) {
+      throw new TaskRunnerError(`Model '${model}' is not allowed for executor '${executor}'.`);
     }
     printInfo(params.labelText);
-    printPrompt(`LLM:${params.executor}`, params.prompt);
+    printPrompt(`LLM:${executor}`, params.prompt);
     const executorContext = toExecutorContext(context);
-    if (params.executor === "codex") {
+    if (executor === "codex") {
       const executor = context.executors.get<CodexExecutorConfig, CodexExecutorInput, CodexExecutorResult>(
         "codex",
       );
@@ -53,7 +65,7 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
         executorContext,
         {
           prompt: params.prompt,
-          ...(params.model ? { model: params.model } : {}),
+          ...(model ? { model } : {}),
           env: { ...context.env },
         },
         executor.defaultConfig,
@@ -66,13 +78,13 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
         outputs: (params.requiredArtifacts ?? []).map((path) => ({ kind: "artifact" as const, path, required: true })),
       };
     }
-    if (params.executor === "opencode") {
+    if (executor === "opencode") {
       const executor = context.executors.get<OpenCodeExecutorConfig, OpenCodeExecutorInput, OpenCodeExecutorResult>("opencode");
       const value = await executor.execute(
         executorContext,
         {
           prompt: params.prompt,
-          ...(params.model ? { model: params.model } : {}),
+          ...(model ? { model } : {}),
           env: { ...context.env },
         },
         executor.defaultConfig,
@@ -85,7 +97,7 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
         outputs: (params.requiredArtifacts ?? []).map((path) => ({ kind: "artifact" as const, path, required: true })),
       };
     }
-    throw new TaskRunnerError(`Unsupported llm executor '${params.executor}'.`);
+    throw new TaskRunnerError(`Unsupported llm executor '${executor}'.`);
   },
   checks(_context, params) {
     if (!params.requiredArtifacts || params.requiredArtifacts.length === 0) {

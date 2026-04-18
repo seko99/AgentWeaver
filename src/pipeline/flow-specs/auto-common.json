@@ -66,6 +66,7 @@
         {
           "id": "generate_planning_questions",
           "node": "llm-prompt",
+          "routingGroup": "planning",
           "prompt": {
             "templateRef": "plan-questions",
             "vars": {
@@ -213,6 +214,7 @@
         {
           "id": "run_plan",
           "node": "llm-prompt",
+          "routingGroup": "planning",
           "prompt": {
             "templateRef": "plan",
             "vars": {
@@ -368,6 +370,7 @@
         {
           "id": "run_implement",
           "node": "llm-prompt",
+          "routingGroup": "implementation",
           "prompt": {
             "templateRef": "implement",
             "vars": {

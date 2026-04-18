@@ -153,6 +153,7 @@
         {
           "id": "run_task_describe_from_jira",
           "node": "llm-prompt",
+          "routingGroup": "planning",
           "when": {
             "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"
           },
@@ -285,6 +286,7 @@
         {
           "id": "run_task_describe_from_input",
           "node": "llm-prompt",
+          "routingGroup": "planning",
           "when": {
             "not": {
               "ref": "steps.task_describe.collect_task_source.value.values.jira_ref"

@@ -2,7 +2,8 @@ import path from "node:path";
 
 import { TaskRunnerError } from "../errors.js";
 import { loadAutoGolangFlow } from "./auto-flow.js";
-import { type DeclarativeFlowRef, loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
+import { collectFlowRoutingGroups, type DeclarativeFlowRef, loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
+import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
 import { listBuiltInFlowSpecFiles, listProjectFlowSpecFiles, projectFlowSpecsDir } from "./spec-loader.js";
 
 export type FlowCatalogSource = "built-in" | "project-local";
@@ -57,6 +58,10 @@ const BUILT_IN_COMMAND_FLOW_FILES: Record<(typeof BUILT_IN_COMMAND_FLOW_IDS)[num
   "run-go-tests-loop": "go/run-go-tests-loop.json",
   "run-go-linter-loop": "go/run-go-linter-loop.json",
 };
+
+export function builtInCommandFlowFile(flowId: string): string | null {
+  return BUILT_IN_COMMAND_FLOW_FILES[flowId as (typeof BUILT_IN_COMMAND_FLOW_IDS)[number]] ?? null;
+}
 
 function builtInCommandIdForFile(fileName: string): (typeof BUILT_IN_COMMAND_FLOW_IDS)[number] | null {
   for (const [flowId, candidate] of Object.entries(BUILT_IN_COMMAND_FLOW_FILES)) {
@@ -128,4 +133,14 @@ export function toDeclarativeFlowRef(entry: FlowCatalogEntry): DeclarativeFlowRe
   return entry.source === "built-in"
     ? { source: "built-in", fileName: entry.fileName }
     : { source: "project-local", filePath: entry.absolutePath };
+}
+
+export function flowRoutingKey(entry: FlowCatalogEntry): string {
+  return entry.source === "project-local"
+    ? `project-local:${entry.absolutePath}`
+    : `built-in:${entry.id}`;
+}
+
+export function flowRoutingGroups(entry: FlowCatalogEntry, cwd: string): ExecutionRoutingGroup[] {
+  return collectFlowRoutingGroups(entry.flow, cwd);
 }

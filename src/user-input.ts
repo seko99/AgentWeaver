@@ -9,6 +9,8 @@ export type UserInputOption = {
   description?: string;
 };
 
+export type UserInputOptionsResolver = (values: UserInputFormValues) => UserInputOption[];
+
 export type UserInputFieldDefinition =
   | {
       id: string;
@@ -36,6 +38,7 @@ export type UserInputFieldDefinition =
       help?: string;
       required?: boolean;
       options: UserInputOption[];
+      optionsFromValues?: UserInputOptionsResolver;
       default?: string;
     }
   | {
@@ -45,6 +48,7 @@ export type UserInputFieldDefinition =
       help?: string;
       required?: boolean;
       options: UserInputOption[];
+      optionsFromValues?: UserInputOptionsResolver;
       default?: string[];
     };
 
@@ -52,6 +56,7 @@ export type UserInputFormDefinition = {
   formId: string;
   title: string;
   description?: string;
+  preview?: string;
   submitLabel?: string;
   fields: UserInputFieldDefinition[];
 };
@@ -87,6 +92,60 @@ export function buildInitialUserInputValues(fields: UserInputFieldDefinition[]):
   return Object.fromEntries(fields.map((field) => [field.id, defaultValueForField(field)]));
 }
 
+function defaultSelectValue(
+  field: Extract<UserInputFieldDefinition, { type: "single-select" | "multi-select" }>,
+): string | string[] {
+  if (field.type === "single-select") {
+    return field.default ?? field.options[0]?.value ?? "";
+  }
+  return [...(field.default ?? [])];
+}
+
+export function resolveFieldOptions(
+  field: Extract<UserInputFieldDefinition, { type: "single-select" | "multi-select" }>,
+  values: UserInputFormValues,
+): UserInputOption[] {
+  return field.optionsFromValues?.(values) ?? field.options;
+}
+
+export function resolveFieldDefinition(
+  field: UserInputFieldDefinition,
+  values: UserInputFormValues,
+): UserInputFieldDefinition {
+  if (field.type !== "single-select" && field.type !== "multi-select") {
+    return field;
+  }
+  return {
+    ...field,
+    options: resolveFieldOptions(field, values),
+  };
+}
+
+export function normalizeUserInputFieldValue(
+  field: UserInputFieldDefinition,
+  values: UserInputFormValues,
+): void {
+  if (field.type !== "single-select" && field.type !== "multi-select") {
+    return;
+  }
+
+  const allowedValues = new Set(resolveFieldOptions(field, values).map((option) => option.value));
+  if (field.type === "single-select") {
+    const currentValue = typeof values[field.id] === "string" ? String(values[field.id]) : "";
+    if (!allowedValues.has(currentValue)) {
+      const fallback = defaultSelectValue(resolveFieldDefinition(field, values) as typeof field);
+      values[field.id] = typeof fallback === "string" ? fallback : "";
+    }
+    return;
+  }
+
+  const currentValue = values[field.id];
+  const currentValues: string[] = Array.isArray(currentValue)
+    ? currentValue.filter((item): item is string => typeof item === "string")
+    : [];
+  values[field.id] = currentValues.filter((item): item is string => typeof item === "string" && allowedValues.has(item));
+}
+
 export function validateUserInputValues(form: UserInputFormDefinition, values: UserInputFormValues): void {
   for (const field of form.fields) {
     const value = values[field.id];
@@ -108,25 +167,27 @@ export function validateUserInputValues(form: UserInputFormDefinition, values: U
     }
 
     if (field.type === "single-select") {
+      const options = resolveFieldOptions(field, values);
       if (typeof value !== "string") {
         throw new TaskRunnerError(`Field '${field.label}' must be a string.`);
       }
       if (field.required && normalizeText(value).length === 0) {
         throw new TaskRunnerError(`Field '${field.label}' is required.`);
       }
-      if (value && !field.options.some((option) => option.value === value)) {
+      if (value && !options.some((option) => option.value === value)) {
         throw new TaskRunnerError(`Field '${field.label}' contains an unknown option '${value}'.`);
       }
       continue;
     }
 
+    const options = resolveFieldOptions(field, values);
     if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
       throw new TaskRunnerError(`Field '${field.label}' must be a string array.`);
     }
     if (field.required && value.length === 0) {
       throw new TaskRunnerError(`Field '${field.label}' requires at least one selected option.`);
     }
-    const allowed = new Set(field.options.map((option) => option.value));
+    const allowed = new Set(options.map((option) => option.value));
     for (const item of value) {
       if (!allowed.has(item)) {
         throw new TaskRunnerError(`Field '${field.label}' contains an unknown option '${item}'.`);
@@ -194,7 +255,9 @@ export async function requestUserInputInTerminal(form: UserInputFormDefinition):
     }
     const values = buildInitialUserInputValues(form.fields);
 
-    for (const field of form.fields) {
+    for (const rawField of form.fields) {
+      normalizeUserInputFieldValue(rawField, values);
+      const field = resolveFieldDefinition(rawField, values);
       if (field.type === "boolean") {
         while (true) {
           const current = values[field.id];

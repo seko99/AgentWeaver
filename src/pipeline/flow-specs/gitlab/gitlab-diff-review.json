@@ -104,6 +104,7 @@
           "id": "run_diff_review",
           "when": { "not": { "ref": "context.dryRun" } },
           "node": "llm-prompt",
+          "routingGroup": "review",
           "prompt": {
             "templateRef": "gitlab-diff-review",
             "vars": {

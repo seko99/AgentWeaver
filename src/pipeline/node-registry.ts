@@ -214,7 +214,7 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     kind: "llm-prompt",
     version: 1,
     prompt: "required",
-    requiredParams: ["labelText", "executor"],
+    requiredParams: ["labelText"],
     executors: ["codex", "opencode"],
   },
   "opencode-prompt": { kind: "opencode-prompt", version: 1, prompt: "required", requiredParams: ["labelText"] },

@@ -3,6 +3,7 @@ import { STRUCTURED_ARTIFACT_SCHEMA_IDS } from "../structured-artifacts.js";
 import type { NodeRegistry } from "./node-registry.js";
 import { isPromptTemplateRef } from "./prompt-registry.js";
 import type { ExecutorRegistry } from "./registry.js";
+import { EXECUTION_ROUTING_GROUPS } from "./execution-routing-config.js";
 import {
   ARTIFACT_LIST_REF_KINDS as artifactListRefKinds,
   ARTIFACT_REF_KINDS as artifactRefKinds,
@@ -137,6 +138,16 @@ function validateStep(
     assert(executorRegistry.has(executorId), `Unknown executor '${executorId}' required by node '${step.node}' at ${path}.node`);
   }
   validateCondition(step.when, `${path}.when`);
+  if (step.routingGroup) {
+    assert(
+      step.node === "llm-prompt",
+      `routingGroup is only supported for llm-prompt steps at ${path}.routingGroup`,
+    );
+    assert(
+      EXECUTION_ROUTING_GROUPS.includes(step.routingGroup),
+      `Unknown routingGroup '${step.routingGroup}' at ${path}.routingGroup`,
+    );
+  }
   if (step.prompt) {
     assert(nodeMeta.prompt !== "forbidden", `Node '${step.node}' does not accept prompt binding at ${path}.prompt`);
     assert(
@@ -147,6 +158,12 @@ function validateStep(
   assert(step.prompt !== undefined || nodeMeta.prompt !== "required", `Node '${step.node}' requires prompt binding at ${path}.prompt`);
   for (const requiredParam of nodeMeta.requiredParams ?? []) {
     assert(step.params?.[requiredParam] !== undefined, `Node '${step.node}' requires param '${requiredParam}' at ${path}.params.${requiredParam}`);
+  }
+  if (step.node === "llm-prompt") {
+    assert(
+      step.routingGroup !== undefined || step.params?.executor !== undefined,
+      `Node 'llm-prompt' requires routingGroup or param 'executor' at ${path}`,
+    );
   }
   if (step.prompt?.templateRef) {
     assert(isPromptTemplateRef(step.prompt.templateRef), `Unknown prompt template '${step.prompt.templateRef}' at ${path}.prompt.templateRef`);
