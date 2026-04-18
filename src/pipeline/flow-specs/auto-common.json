@@ -435,6 +435,15 @@
         {
           "id": "run_review_loop",
           "node": "flow-run",
+          "stopFlowIf": {
+            "not": {
+              "equals": [
+                { "ref": "steps.review-loop.run_review_loop.value.executionState.terminationOutcome" },
+                { "const": "success" }
+              ]
+            }
+          },
+          "stopFlowOutcome": "stopped",
           "params": {
             "fileName": { "const": "review-loop.json" },
             "labelText": { "const": "Running review-loop" },

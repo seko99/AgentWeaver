@@ -33,11 +33,12 @@ describe("design-review-verdict-node", () => {
     expect(registry.has("design-review-verdict")).toBe(true);
   });
 
-  it("should load auto-common flow spec", async () => {
+  it("should load auto-common flow spec with design_review_loop phase", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    expect(flow.phases.map((p) => p.id)).toContain("verdict");
-    expect(flow.phases.map((p) => p.id)).toContain("plan_revision");
-    expect(flow.phases.map((p) => p.id)).toContain("design_review_repeat");
+    expect(flow.phases.map((p) => p.id)).toContain("design_review_loop");
+    expect(flow.phases.map((p) => p.id)).toContain("plan");
+    expect(flow.phases.map((p) => p.id)).toContain("implement");
+    expect(flow.phases.map((p) => p.id)).toContain("review-loop");
   });
 
   it("should load auto-simple flow spec", async () => {
@@ -52,55 +53,35 @@ describe("design-review-verdict-node", () => {
     expect(hasDesignReview).toBe(false);
   });
 
-  it("auto-common should have plan_revision phase gated by needs_revision", async () => {
+  it("auto-common design_review_loop phase should run design-review-loop.json", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const planRevisionPhase = flow.phases.find((p) => p.id === "plan_revision");
-    expect(planRevisionPhase).toBeDefined();
-    expect(planRevisionPhase!.when).toBeDefined();
-    expect(planRevisionPhase!.when).toEqual(
+    const designReviewLoopPhase = flow.phases.find((p) => p.id === "design_review_loop");
+    expect(designReviewLoopPhase).toBeDefined();
+    const runStep = designReviewLoopPhase!.steps.find((s) => s.node === "flow-run");
+    expect(runStep).toBeDefined();
+    expect(runStep!.params?.fileName).toEqual({ const: "design-review-loop.json" });
+  });
+
+  it("auto-common design_review_loop phase should stop flow if sub-flow is stopped", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const designReviewLoopPhase = flow.phases.find((p) => p.id === "design_review_loop");
+    expect(designReviewLoopPhase).toBeDefined();
+    const runStep = designReviewLoopPhase!.steps.find((s) => s.id === "run_design_review_loop");
+    expect(runStep).toBeDefined();
+    expect(runStep!.stopFlowIf).toBeDefined();
+    expect(runStep!.stopFlowIf).toEqual(
       expect.objectContaining({
         equals: expect.arrayContaining([
-          expect.objectContaining({ ref: "steps.verdict.check_design_review_verdict.value.needsRevision" }),
-          { const: true },
+          expect.objectContaining({ ref: "steps.design_review_loop.run_design_review_loop.value.executionState.terminationOutcome" }),
+          { const: "stopped" },
         ]),
       }),
     );
-  });
-
-  it("auto-common should have second design review phase gated by needs_revision", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const secondReviewPhase = flow.phases.find((p) => p.id === "design_review_repeat");
-    expect(secondReviewPhase).toBeDefined();
-    expect(secondReviewPhase!.when).toBeDefined();
-  });
-
-  it("auto-common should stop on repeated needs_revision via stopFlowIf", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const verdictRepeatPhase = flow.phases.find((p) => p.id === "verdict_repeat");
-    expect(verdictRepeatPhase).toBeDefined();
-    const stopStep = verdictRepeatPhase!.steps.find((s) => s.stopFlowIf);
-    expect(stopStep).toBeDefined();
-    expect(stopStep!.stopFlowIf).toEqual(
-      expect.objectContaining({
-        equals: expect.arrayContaining([
-          expect.objectContaining({ ref: "steps.verdict_repeat.check_second_verdict.value.needsRevision" }),
-          { const: true },
-        ]),
-      }),
-    );
-  });
-
-  it("auto-common verdict phase should use design-review-verdict node", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const verdictPhase = flow.phases.find((p) => p.id === "verdict");
-    const checkStep = verdictPhase!.steps.find((s) => s.id === "check_design_review_verdict");
-    expect(checkStep).toBeDefined();
-    expect(checkStep!.node).toBe("design-review-verdict");
   });
 });
 
 describe("auto-common flow branching", () => {
-  it("should route to implement when verdict is approved", async () => {
+  it("should route to implement when design review is approved", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const implementPhase = flow.phases.find((p) => p.id === "implement");
     expect(implementPhase).toBeDefined();
@@ -108,26 +89,23 @@ describe("auto-common flow branching", () => {
     expect(hasNoWhen).toBe(true);
   });
 
-  it("should route to implement when verdict is approved_with_warnings", async () => {
+  it("should route to implement when design review is approved_with_warnings", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const implementPhase = flow.phases.find((p) => p.id === "implement");
     expect(implementPhase).toBeDefined();
     expect(implementPhase!.when).toBeUndefined();
   });
 
-  it("should have plan_revision phase when needs_revision", async () => {
+  it("should have design_review_loop phase that runs sub-flow", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const planRevisionPhase = flow.phases.find((p) => p.id === "plan_revision");
-    expect(planRevisionPhase).toBeDefined();
+    const designReviewLoopPhase = flow.phases.find((p) => p.id === "design_review_loop");
+    expect(designReviewLoopPhase).toBeDefined();
   });
 
-  it("should have verdict_repeat phase to check second review", async () => {
+  it("should have review-loop phase that runs sub-flow", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const verdictRepeatPhase = flow.phases.find((p) => p.id === "verdict_repeat");
-    expect(verdictRepeatPhase).toBeDefined();
-    const checkStep = verdictRepeatPhase!.steps.find((s) => s.id === "check_second_verdict");
-    expect(checkStep).toBeDefined();
-    expect(checkStep!.node).toBe("design-review-verdict");
+    const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
+    expect(reviewLoopPhase).toBeDefined();
   });
 });
 
@@ -202,51 +180,7 @@ describe("auto-common runtime branches", () => {
     expect(implementPhase!.when).toBeUndefined();
   });
 
-  it("should route to plan_revision when verdict is needs_revision", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const planRevisionPhase = flow.phases.find((p) => p.id === "plan_revision");
-    expect(planRevisionPhase).toBeDefined();
-    expect(planRevisionPhase!.when).toEqual(
-      expect.objectContaining({
-        equals: expect.arrayContaining([
-          expect.objectContaining({ ref: "steps.verdict.check_design_review_verdict.value.needsRevision" }),
-          { const: true },
-        ]),
-      }),
-    );
-  });
-
-  it("should have second design review phase after plan_revision when needs_revision", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const secondReviewPhase = flow.phases.find((p) => p.id === "design_review_repeat");
-    expect(secondReviewPhase).toBeDefined();
-    expect(secondReviewPhase!.when).toEqual(
-      expect.objectContaining({
-        equals: expect.arrayContaining([
-          expect.objectContaining({ ref: "steps.verdict.check_design_review_verdict.value.needsRevision" }),
-          { const: true },
-        ]),
-      }),
-    );
-  });
-
-  it("should stop flow on repeated needs_revision via stopFlowIf", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const verdictRepeatPhase = flow.phases.find((p) => p.id === "verdict_repeat");
-    expect(verdictRepeatPhase).toBeDefined();
-    const stopStep = verdictRepeatPhase!.steps.find((s) => s.stopFlowIf);
-    expect(stopStep).toBeDefined();
-    expect(stopStep!.stopFlowIf).toEqual(
-      expect.objectContaining({
-        equals: expect.arrayContaining([
-          expect.objectContaining({ ref: "steps.verdict_repeat.check_second_verdict.value.needsRevision" }),
-          { const: true },
-        ]),
-      }),
-    );
-  });
-
-  it("should use iteration 1 by default when not specified in design-review-verdict", async () => {
+it("should use iteration 1 by default when not specified in design-review-verdict", async () => {
     writeDesignReviewJson(1, "approved", "Default iteration test");
     const result = await designReviewVerdictNode.run(
       {} as never,
@@ -273,18 +207,64 @@ describe("auto-common runtime branches", () => {
     expect(implementPhase!.when).toBeUndefined();
   });
 
-  it("should have plan_revision phase that runs when first verdict needs_revision", async () => {
+  it("auto-common review-loop phase should run review-loop.json", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
-    const planRevisionPhase = flow.phases.find((p) => p.id === "plan_revision");
-    expect(planRevisionPhase).toBeDefined();
-    expect(planRevisionPhase!.when).toBeDefined();
-    expect(planRevisionPhase!.when).toEqual(
+    const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
+    expect(reviewLoopPhase).toBeDefined();
+    const runStep = reviewLoopPhase!.steps.find((s) => s.node === "flow-run");
+    expect(runStep).toBeDefined();
+    expect(runStep!.params?.fileName).toEqual({ const: "review-loop.json" });
+  });
+
+  it("auto-common should have notify_task_complete after review-loop phase", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
+    expect(reviewLoopPhase).toBeDefined();
+    const notifyStep = reviewLoopPhase!.steps.find((s) => s.id === "notify_task_complete");
+    expect(notifyStep).toBeDefined();
+  });
+
+  it("auto-common review-loop run_review_loop should stop flow when termination outcome is not success", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
+    expect(reviewLoopPhase).toBeDefined();
+    const runStep = reviewLoopPhase!.steps.find((s) => s.id === "run_review_loop");
+    expect(runStep).toBeDefined();
+    expect(runStep!.stopFlowIf).toBeDefined();
+    expect(runStep!.stopFlowIf).toEqual(
       expect.objectContaining({
-        equals: expect.arrayContaining([
-          expect.objectContaining({ ref: "steps.verdict.check_design_review_verdict.value.needsRevision" }),
-          { const: true },
-        ]),
+        not: expect.objectContaining({
+          equals: expect.arrayContaining([
+            expect.objectContaining({ ref: "steps.review-loop.run_review_loop.value.executionState.terminationOutcome" }),
+            { const: "success" },
+          ]),
+        }),
       }),
     );
+  });
+
+  it("auto-common notify_task_complete should not have stopFlowIf after the fix", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
+    expect(reviewLoopPhase).toBeDefined();
+    const notifyStep = reviewLoopPhase!.steps.find((s) => s.id === "notify_task_complete");
+    expect(notifyStep).toBeDefined();
+    expect(notifyStep!.stopFlowIf).toBeUndefined();
+  });
+
+  it("auto-common should stop before notify_task_complete when review-loop reports non-success", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
+    expect(reviewLoopPhase).toBeDefined();
+    const runStep = reviewLoopPhase!.steps.find((s) => s.id === "run_review_loop");
+    const notifyStep = reviewLoopPhase!.steps.find((s) => s.id === "notify_task_complete");
+    expect(runStep).toBeDefined();
+    expect(notifyStep).toBeDefined();
+    const stepIds = reviewLoopPhase!.steps.map((s) => s.id);
+    const runIndex = stepIds.indexOf("run_review_loop");
+    const notifyIndex = stepIds.indexOf("notify_task_complete");
+    expect(runIndex).toBeLessThan(notifyIndex);
+    expect(runStep!.stopFlowIf).toBeDefined();
+    expect(notifyStep!.stopFlowIf).toBeUndefined();
   });
 });
