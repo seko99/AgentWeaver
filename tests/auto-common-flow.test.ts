@@ -62,6 +62,16 @@ describe("design-review-verdict-node", () => {
     expect(runStep!.params?.fileName).toEqual({ const: "design-review-loop.json" });
   });
 
+  it("auto-common plan phase should run plan.json", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const planPhase = flow.phases.find((p) => p.id === "plan");
+    expect(planPhase).toBeDefined();
+    const runStep = planPhase!.steps.find((s) => s.id === "run_plan_flow");
+    expect(runStep).toBeDefined();
+    expect(runStep!.node).toBe("flow-run");
+    expect(runStep!.params?.fileName).toEqual({ const: "plan.json" });
+  });
+
   it("auto-common design_review_loop phase should stop flow if sub-flow is stopped", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const designReviewLoopPhase = flow.phases.find((p) => p.id === "design_review_loop");

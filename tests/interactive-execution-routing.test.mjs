@@ -207,8 +207,8 @@ describe("interactive execution routing", () => {
     const preview = interactiveRoutingModule.describeEffectiveRoutingPreview(flowEntry, routing, process.cwd());
 
     assert.match(preview, /\| Default\s+\| opencode \| minimax-coding-plan\/MiniMax-M2\.7 \|/);
-    assert.match(preview, /\| plan\.generate_planning_questions\s+\| Planning\s+\| codex\s+\| gpt-5\.4\s+\|/);
-    assert.match(preview, /\| plan\.run_plan\s+\| Planning\s+\| codex\s+\| gpt-5\.4\s+\|/);
+    assert.match(preview, /\| plan\.run_plan_flow > plan > plan\.generate_planning_questions\s+\| Planning\s+\| codex\s+\| gpt-5\.4\s+\|/);
+    assert.match(preview, /\| plan\.run_plan_flow > plan > plan\.run_plan\s+\| Planning\s+\| codex\s+\| gpt-5\.4\s+\|/);
     assert.match(preview, /\| implement\.run_implement\s+\| Implementation \| opencode \| minimax-coding-plan\/MiniMax-M… \|/);
     assert.match(
       preview,
@@ -241,7 +241,10 @@ describe("interactive execution routing", () => {
     assert.ok(routingPreviewForm, "routing preview form should be shown");
     assert.match(routingPreviewForm.description, /Review the effective routing and choose the next action\./);
     assert.match(routingPreviewForm.preview, /^Preset: Balanced$/m);
-    assert.match(routingPreviewForm.preview, /\| plan\.generate_planning_questions\s+\| Planning\s+\| codex\s+\| gpt-5\.4\s+\|/);
+    assert.match(
+      routingPreviewForm.preview,
+      /\| plan\.run_plan_flow > plan > plan\.generate_planning_questions\s+\| Planning\s+\| codex\s+\| gpt-5\.4\s+\|/,
+    );
     assert.match(
       routingPreviewForm.preview,
       /\| implement\.run_implement\s+\| Implementation \| opencode \| minimax-coding-plan\/MiniMax-M… \|/,

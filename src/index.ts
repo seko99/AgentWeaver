@@ -743,6 +743,10 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
   return {
     jiraApiUrl: config.jiraApiUrl,
     taskKey: config.taskKey,
+    taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
+    designIteration: nextArtifactIteration(config.taskKey, "design"),
+    planIteration: nextArtifactIteration(config.taskKey, "plan"),
+    qaIteration: nextArtifactIteration(config.taskKey, "qa"),
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
     forceRefresh: forceRefreshSummary,
