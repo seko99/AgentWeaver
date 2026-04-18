@@ -212,6 +212,7 @@ function expandPhase(phase: DeclarativePhaseSpec, repeatVars: Record<string, Jso
           : {}),
         ...(step.expect ? { expect: step.expect.map((item) => interpolateExpectation(item, repeatVars)) } : {}),
         ...(stopFlowIf ? { stopFlowIf } : {}),
+        ...(step.stopFlowOutcome ? { stopFlowOutcome: step.stopFlowOutcome } : {}),
         ...(step.after ? { after: step.after.map((item) => interpolateAfterAction(item, repeatVars)) } : {}),
         repeatVars,
       };

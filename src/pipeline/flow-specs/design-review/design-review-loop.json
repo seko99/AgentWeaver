@@ -1,0 +1,303 @@
+{
+  "kind": "design-review-loop-flow",
+  "version": 1,
+  "description": "Runs design-review and plan-revise for up to 3 iterations. Stops early on approval. If the final design review still requires revision, notifies the user and asks whether to continue with the latest planning artifacts or stop the parent flow.",
+  "phases": [
+    {
+      "repeat": {
+        "var": "iteration",
+        "from": 1,
+        "to": 3
+      },
+      "phases": [
+        {
+          "id": "design_review_iteration_${iteration}",
+          "steps": [
+            {
+              "id": "run_design_review",
+              "node": "flow-run",
+              "params": {
+                "fileName": { "const": "design-review.json" },
+                "labelText": {
+                  "template": "Running design review (iteration ${iteration})"
+                },
+                "taskKey": { "ref": "params.taskKey" },
+                "workspaceDir": { "ref": "params.workspaceDir" },
+                "extraPrompt": { "ref": "params.extraPrompt" },
+                "llmExecutor": { "ref": "params.llmExecutor" },
+                "llmModel": { "ref": "params.llmModel" }
+              }
+            },
+            {
+              "id": "check_design_review_verdict",
+              "node": "design-review-verdict",
+              "params": {
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            {
+              "id": "notify_review_complete",
+              "node": "telegram-notify",
+              "params": {
+                "message": {
+                  "template": "Design review iteration ${iteration} verdict: {verdict}",
+                  "vars": {
+                    "iteration": { "ref": "repeat.iteration" },
+                    "verdict": { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.verdict" }
+                  }
+                }
+              }
+            },
+            {
+              "id": "stop_on_approved",
+              "when": {
+                "equals": [
+                  { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                  { "const": false }
+                ]
+              },
+              "node": "telegram-notify",
+              "params": {
+                "message": {
+                  "template": "Design review approved on iteration ${iteration}. Proceeding with implementation.",
+                  "vars": {
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
+              },
+              "stopFlowIf": {
+                "equals": [
+                  { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                  { "const": false }
+                ]
+              },
+              "stopFlowOutcome": "success"
+            },
+            {
+              "id": "run_plan_revise",
+              "when": {
+                "all": [
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                      { "const": true }
+                    ]
+                  },
+                  {
+                    "not": {
+                      "equals": [{ "ref": "repeat.iteration" }, { "const": 3 }]
+                    }
+                  }
+                ]
+              },
+              "node": "flow-run",
+              "params": {
+                "fileName": { "const": "plan-revise.json" },
+                "labelText": {
+                  "template": "Running plan revision (iteration ${iteration})"
+                },
+                "taskKey": { "ref": "params.taskKey" },
+                "workspaceDir": { "ref": "params.workspaceDir" },
+                "extraPrompt": { "ref": "params.extraPrompt" },
+                "llmExecutor": { "ref": "params.llmExecutor" },
+                "llmModel": { "ref": "params.llmModel" }
+              }
+            },
+            {
+              "id": "notify_revise_complete",
+              "when": {
+                "all": [
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                      { "const": true }
+                    ]
+                  },
+                  {
+                    "not": {
+                      "equals": [{ "ref": "repeat.iteration" }, { "const": 3 }]
+                    }
+                  }
+                ]
+              },
+              "node": "telegram-notify",
+              "params": {
+                "message": {
+                  "template": "Plan revision after design review iteration ${iteration} is complete.",
+                  "vars": {
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
+              }
+            },
+            {
+              "id": "notify_max_iterations_reached",
+              "when": {
+                "all": [
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                      { "const": true }
+                    ]
+                  },
+                  {
+                    "equals": [{ "ref": "repeat.iteration" }, { "const": 3 }]
+                  }
+                ]
+              },
+              "node": "telegram-notify",
+              "params": {
+                "message": { "const": "Design review still requires revision after 3 iterations. User confirmation is required to continue with the latest planning artifacts." }
+              }
+            },
+            {
+              "id": "collect_continue_decision",
+              "when": {
+                "all": [
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                      { "const": true }
+                    ]
+                  },
+                  {
+                    "equals": [{ "ref": "repeat.iteration" }, { "const": 3 }]
+                  }
+                ]
+              },
+              "node": "user-input",
+              "params": {
+                "formId": { "const": "design-review-loop-final-decision" },
+                "title": { "const": "Design Review Requires Revision" },
+                "description": { "const": "The latest design review still requires revision after 3 iterations. Decide whether to continue with the latest design and plan artifacts or stop the flow." },
+                "submitLabel": { "const": "Confirm decision" },
+                "fields": {
+                  "list": [
+                    {
+                      "const": {
+                        "id": "decision",
+                        "type": "single-select",
+                        "label": "How to proceed",
+                        "required": true,
+                        "default": "continue",
+                        "options": [
+                          {
+                            "value": "continue",
+                            "label": "Continue with latest artifacts",
+                            "description": "Proceed to implementation using the most recently revised design and plan."
+                          },
+                          {
+                            "value": "stop",
+                            "label": "Stop the flow",
+                            "description": "Do not continue automatically. Review and revise the planning artifacts manually."
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "outputFile": {
+                  "template": "{workspace}/design-review-loop-decision-{taskKey}.json",
+                  "vars": {
+                    "workspace": { "ref": "params.workspaceDir" },
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              },
+              "expect": [
+                {
+                  "kind": "require-structured-artifacts",
+                  "items": [
+                    {
+                      "path": {
+                        "template": "{workspace}/design-review-loop-decision-{taskKey}.json",
+                        "vars": {
+                          "workspace": { "ref": "params.workspaceDir" },
+                          "taskKey": { "ref": "params.taskKey" }
+                        }
+                      },
+                      "schemaId": "user-input/v1"
+                    }
+                  ],
+                  "message": "Design-review loop final decision input is missing or invalid."
+                }
+              ]
+            },
+            {
+              "id": "notify_continue_with_latest_artifacts",
+              "when": {
+                "all": [
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                      { "const": true }
+                    ]
+                  },
+                  {
+                    "equals": [{ "ref": "repeat.iteration" }, { "const": 3 }]
+                  },
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.collect_continue_decision.value.values.decision" },
+                      { "const": "continue" }
+                    ]
+                  }
+                ]
+              },
+              "node": "telegram-notify",
+              "params": {
+                "message": { "const": "User chose to continue with the latest planning artifacts despite the final design-review verdict." }
+              }
+            },
+            {
+              "id": "stop_after_user_declined",
+              "when": {
+                "all": [
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                      { "const": true }
+                    ]
+                  },
+                  {
+                    "equals": [{ "ref": "repeat.iteration" }, { "const": 3 }]
+                  },
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.collect_continue_decision.value.values.decision" },
+                      { "const": "stop" }
+                    ]
+                  }
+                ]
+              },
+              "node": "telegram-notify",
+              "params": {
+                "message": { "const": "User chose to stop after the final design-review verdict still required revision." }
+              },
+              "stopFlowIf": {
+                "all": [
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.check_design_review_verdict.value.needsRevision" },
+                      { "const": true }
+                    ]
+                  },
+                  {
+                    "equals": [{ "ref": "repeat.iteration" }, { "const": 3 }]
+                  },
+                  {
+                    "equals": [
+                      { "ref": "steps.design_review_iteration_${iteration}.collect_continue_decision.value.values.decision" },
+                      { "const": "stop" }
+                    ]
+                  }
+                ]
+              },
+              "stopFlowOutcome": "stopped"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

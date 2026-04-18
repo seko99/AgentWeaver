@@ -205,6 +205,12 @@ function validateStep(
   if (step.stopFlowIf) {
     validateCondition(step.stopFlowIf, `${path}.stopFlowIf`);
   }
+  if (step.stopFlowOutcome) {
+    assert(
+      step.stopFlowOutcome === "success" || step.stopFlowOutcome === "stopped",
+      `Unsupported stopFlowOutcome '${step.stopFlowOutcome}' at ${path}.stopFlowOutcome`,
+    );
+  }
   if (step.after) {
     step.after.forEach((action, index) => validateAfterAction(action, `${path}.after[${index}]`));
   }

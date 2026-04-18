@@ -110,6 +110,7 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
       flowKind: flow.kind,
       flowVersion: flow.version,
       terminated: false,
+      terminationOutcome: "success",
       phases: [],
     };
 

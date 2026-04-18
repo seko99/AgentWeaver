@@ -67,6 +67,7 @@ function ensureExecutionState(options: DeclarativePhaseRunOptions): FlowExecutio
     flowKind: options.flowKind ?? "declarative-flow",
     flowVersion: options.flowVersion ?? 1,
     terminated: false,
+    terminationOutcome: "success",
     phases: [],
   };
 }
@@ -318,6 +319,7 @@ export async function runExpandedPhase(
     if (stopFlow) {
       executionState.terminated = true;
       executionState.terminationReason = `Stopped by ${phase.id}:${step.id}`;
+      executionState.terminationOutcome = step.stopFlowOutcome ?? "success";
       phaseState.status = "done";
       phaseState.finishedAt = nowIso8601();
       await options.onStateChange?.(executionState);

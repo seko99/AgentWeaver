@@ -44,6 +44,7 @@ export function stripExecutionStatePayload(executionState: FlowExecutionState): 
     flowVersion: executionState.flowVersion,
     terminated: executionState.terminated,
     ...(executionState.terminationReason ? { terminationReason: executionState.terminationReason } : {}),
+    ...(executionState.terminationOutcome ? { terminationOutcome: executionState.terminationOutcome } : {}),
     phases: executionState.phases.map((phase) => ({
       id: phase.id,
       status: phase.status,
