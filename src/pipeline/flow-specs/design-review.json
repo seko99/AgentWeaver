@@ -167,6 +167,13 @@
                     "taskKey": { "ref": "params.taskKey" },
                     "iteration": { "ref": "params.iteration" }
                   }
+                },
+                {
+                  "artifact": {
+                    "kind": "design-review-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
                 }
               ]
             }

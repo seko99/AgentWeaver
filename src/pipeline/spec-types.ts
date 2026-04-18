@@ -1,5 +1,6 @@
 import type { JsonValue } from "../executors/types.js";
 import type { StructuredArtifactSchemaId } from "../structured-artifacts.js";
+import type { PublishedArtifactRecord } from "../runtime/artifact-registry.js";
 import type { NodeKind } from "./node-registry.js";
 import type { PromptTemplateRef } from "./prompt-registry.js";
 import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
@@ -193,6 +194,7 @@ export type ExpandedStepExecutionState = {
   status: "pending" | "running" | "done" | "skipped";
   outputs?: Record<string, JsonValue>;
   value?: JsonValue;
+  publishedArtifacts?: PublishedArtifactRecord[];
   startedAt?: string;
   finishedAt?: string;
   stopFlow?: boolean;
@@ -208,6 +210,8 @@ export type ExpandedPhaseExecutionState = {
 };
 
 export type FlowExecutionState = {
+  runId?: string;
+  publicationRunId?: string;
   flowKind: string;
   flowVersion: number;
   terminated: boolean;

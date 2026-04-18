@@ -4,13 +4,19 @@ import { getPromptTemplate } from "./prompt-registry.js";
 import type { PromptBindingSpec } from "./spec-types.js";
 import { resolveValue, type DeclarativeResolverContext } from "./value-resolver.js";
 
+export function resolvePromptBindingInputs(binding: PromptBindingSpec, context: DeclarativeResolverContext): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(binding.vars ?? {}).map(([key, value]) => [key, resolveValue(value, context)]),
+  );
+}
+
 export function renderPrompt(binding: PromptBindingSpec, context: DeclarativeResolverContext): string {
   const baseTemplate = binding.inlineTemplate ?? (binding.templateRef ? getPromptTemplate(binding.templateRef) : null);
   if (!baseTemplate) {
     throw new TaskRunnerError("Prompt binding must define templateRef or inlineTemplate");
   }
   const vars = Object.fromEntries(
-    Object.entries(binding.vars ?? {}).map(([key, value]) => [key, String(resolveValue(value, context))]),
+    Object.entries(resolvePromptBindingInputs(binding, context)).map(([key, value]) => [key, String(value)]),
   );
   const basePrompt = formatTemplate(baseTemplate, vars);
   const resolvedExtraPrompt = binding.extraPrompt ? resolveValue(binding.extraPrompt, context) : null;

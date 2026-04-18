@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 import { ensureScopeWorkspaceDir, flowStateFile } from "./artifacts.js";
@@ -38,8 +39,16 @@ function nowIso8601(): string {
   return new Date().toISOString();
 }
 
+function ensurePublicationRunId(executionState: FlowExecutionState): string {
+  executionState.publicationRunId ??= randomUUID();
+  return executionState.publicationRunId;
+}
+
 export function stripExecutionStatePayload(executionState: FlowExecutionState): FlowExecutionState {
+  ensurePublicationRunId(executionState);
   return {
+    ...(executionState.runId ? { runId: executionState.runId } : {}),
+    ...(executionState.publicationRunId ? { publicationRunId: executionState.publicationRunId } : {}),
     flowKind: executionState.flowKind,
     flowVersion: executionState.flowVersion,
     terminated: executionState.terminated,
@@ -56,6 +65,7 @@ export function stripExecutionStatePayload(executionState: FlowExecutionState): 
         status: step.status,
         ...(step.outputs ? { outputs: step.outputs } : {}),
         ...(step.value !== undefined ? { value: step.value } : {}),
+        ...(step.publishedArtifacts ? { publishedArtifacts: step.publishedArtifacts } : {}),
         ...(step.startedAt ? { startedAt: step.startedAt } : {}),
         ...(step.finishedAt ? { finishedAt: step.finishedAt } : {}),
         ...(step.stopFlow !== undefined ? { stopFlow: step.stopFlow } : {}),
@@ -73,6 +83,7 @@ export function createFlowRunState(
   executionRouting?: ResolvedExecutionRouting,
   selectedRoutingPreset?: SelectedExecutionPreset,
 ): FlowRunState {
+  ensurePublicationRunId(executionState);
   const effectiveExecutionRouting = executionRouting ?? (launchProfile ? singleLaunchProfileExecutionRouting(launchProfile) : undefined);
   const effectiveLaunchProfile = launchProfile ?? effectiveExecutionRouting?.defaultRoute;
   return {
@@ -205,7 +216,14 @@ function normalizeStepState(step: ExpandedStepExecutionState): ExpandedStepExecu
   if (step.status !== "running") {
     return step;
   }
-  const { finishedAt: _finishedAt, outputs: _outputs, value: _value, stopFlow: _stopFlow, ...rest } = step;
+  const {
+    finishedAt: _finishedAt,
+    outputs: _outputs,
+    value: _value,
+    publishedArtifacts: _publishedArtifacts,
+    stopFlow: _stopFlow,
+    ...rest
+  } = step;
   return {
     ...rest,
     status: "pending",
@@ -290,6 +308,7 @@ export function prepareFlowStateForResume(state: FlowRunState): FlowRunState {
   state.currentStep = null;
   state.executionState = {
     ...state.executionState,
+    publicationRunId: randomUUID(),
     terminated: false,
     phases: state.executionState.phases.map(normalizePhaseState),
   };

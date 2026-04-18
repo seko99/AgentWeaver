@@ -56,7 +56,7 @@ import { TaskRunnerError } from "../errors.js";
 import { formatTemplate } from "../prompts.js";
 import type { FlowExecutionState } from "./spec-types.js";
 import type { PipelineContext } from "./types.js";
-import type { ArtifactListRefSpec, ArtifactRefSpec, ConditionSpec, ValueSpec } from "./spec-types.js";
+import type { ArtifactListRefSpec, ArtifactRefSpec, ConditionSpec, PromptBindingSpec, ValueSpec } from "./spec-types.js";
 
 type ResolverContext = {
   flowParams: Record<string, unknown>;
@@ -334,6 +334,84 @@ export function resolveParams(
     return {};
   }
   return Object.fromEntries(Object.entries(params).map(([key, value]) => [key, resolveValue(value, context)]));
+}
+
+export const ARTIFACT_LINEAGE_REF_PATHS_PARAM = "__artifactLineageRefPaths";
+
+function collectAnnotatedRefArtifactPathCandidates(refPath: string, context: ResolverContext): string[] {
+  const annotatedRefPaths = context.flowParams[ARTIFACT_LINEAGE_REF_PATHS_PARAM];
+  if (!annotatedRefPaths || typeof annotatedRefPaths !== "object" || Array.isArray(annotatedRefPaths)) {
+    return [];
+  }
+
+  const candidate = (annotatedRefPaths as Record<string, unknown>)[refPath];
+  const paths = typeof candidate === "string" ? [candidate] : Array.isArray(candidate) ? candidate : [];
+  return paths.filter((value): value is string => typeof value === "string" && existsSync(value));
+}
+
+export function collectResolvedArtifactPathCandidates(value: ValueSpec | undefined, context: ResolverContext): string[] {
+  const candidates = new Set<string>();
+
+  const addCandidate = (candidatePath: string): void => {
+    if (existsSync(candidatePath)) {
+      candidates.add(candidatePath);
+    }
+  };
+
+  const visit = (current: ValueSpec | undefined): void => {
+    if (!current || "const" in current) {
+      return;
+    }
+    if ("ref" in current) {
+      collectAnnotatedRefArtifactPathCandidates(current.ref, context).forEach((candidatePath) => addCandidate(candidatePath));
+      return;
+    }
+    if ("artifact" in current) {
+      addCandidate(resolveArtifact(current.artifact, context));
+      return;
+    }
+    if ("artifactList" in current) {
+      resolveArtifactList(current.artifactList, context).forEach((candidatePath) => addCandidate(candidatePath));
+      return;
+    }
+    if ("template" in current) {
+      Object.values(current.vars ?? {}).forEach((candidate) => visit(candidate));
+      return;
+    }
+    if ("appendPrompt" in current) {
+      visit(current.appendPrompt.base);
+      visit(current.appendPrompt.suffix);
+      return;
+    }
+    if ("add" in current) {
+      current.add.forEach((candidate) => visit(candidate));
+      return;
+    }
+    if ("concat" in current) {
+      current.concat.forEach((candidate) => visit(candidate));
+      return;
+    }
+    if ("list" in current) {
+      current.list.forEach((candidate) => visit(candidate));
+    }
+  };
+
+  visit(value);
+  return Array.from(candidates).sort();
+}
+
+export function collectResolvedPromptArtifactPathCandidates(
+  binding: PromptBindingSpec | undefined,
+  context: ResolverContext,
+): string[] {
+  const candidates = new Set<string>();
+  for (const value of Object.values(binding?.vars ?? {})) {
+    collectResolvedArtifactPathCandidates(value, context).forEach((candidate) => candidates.add(candidate));
+  }
+  if (binding?.extraPrompt) {
+    collectResolvedArtifactPathCandidates(binding.extraPrompt, context).forEach((candidate) => candidates.add(candidate));
+  }
+  return Array.from(candidates).sort();
 }
 
 function truthy(value: unknown): boolean {

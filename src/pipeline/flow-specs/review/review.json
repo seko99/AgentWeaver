@@ -69,7 +69,25 @@
               }
             },
             "model": { "ref": "params.llmModel" },
-            "executor": { "ref": "params.llmExecutor" }
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "review-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
+                },
+                {
+                  "artifact": {
+                    "kind": "review-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
+                }
+              ]
+            }
           },
           "expect": [
             {

@@ -28,15 +28,61 @@ export const jiraFetchNode: PipelineNodeDefinition<JiraFetchNodeParams, JiraFetc
       },
       executor.defaultConfig,
     );
-    const outputs: NodeOutputSpec[] = [{ kind: "file", path: params.outputFile, required: true }];
+    const outputs: NodeOutputSpec[] = [
+      {
+        kind: "file",
+        path: params.outputFile,
+        required: true,
+        manifest: {
+          publish: true,
+          logicalKey: "artifacts/jira-task.json",
+          payloadFamily: "helper-json",
+          schemaId: "helper-json/v1",
+          schemaVersion: 1,
+        },
+      },
+    ];
     if (params.attachmentsManifestFile) {
-      outputs.push({ kind: "artifact", path: params.attachmentsManifestFile, required: true });
+      outputs.push({
+        kind: "artifact",
+        path: params.attachmentsManifestFile,
+        required: true,
+        manifest: {
+          publish: true,
+          logicalKey: "artifacts/jira-attachments.json",
+          payloadFamily: "helper-json",
+          schemaId: "helper-json/v1",
+          schemaVersion: 1,
+        },
+      });
     }
     if (params.attachmentsContextFile) {
-      outputs.push({ kind: "artifact", path: params.attachmentsContextFile, required: true });
+      outputs.push({
+        kind: "artifact",
+        path: params.attachmentsContextFile,
+        required: true,
+        manifest: {
+          publish: true,
+          logicalKey: "jira-attachments-context.txt",
+          payloadFamily: "plain-text",
+          schemaId: "plain-text/v1",
+          schemaVersion: 1,
+        },
+      });
     }
     if (value.enrichedFile) {
-      outputs.push({ kind: "artifact", path: value.enrichedFile, required: false });
+      outputs.push({
+        kind: "artifact",
+        path: value.enrichedFile,
+        required: false,
+        manifest: {
+          publish: true,
+          logicalKey: "artifacts/jira-task-enriched.json",
+          payloadFamily: "helper-json",
+          schemaId: "helper-json/v1",
+          schemaVersion: 1,
+        },
+      });
     }
     return {
       value,

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
+import { buildLogicalKeyForPayload } from "../../artifact-manifest.js";
 import { TaskRunnerError } from "../../errors.js";
 import type { UserInputFieldDefinition, UserInputFormDefinition, UserInputFormValues } from "../../user-input.js";
 import { validateUserInputValues } from "../../user-input.js";
@@ -95,6 +96,13 @@ export const selectFilesFormNode: PipelineNodeDefinition<SelectFilesFormNodePara
           kind: "artifact",
           path: params.outputFile,
           required: true,
+          manifest: {
+            publish: true,
+            logicalKey: buildLogicalKeyForPayload(context.issueKey, params.outputFile),
+            payloadFamily: "structured-json",
+            schemaId: "user-input/v1",
+            schemaVersion: 1,
+          },
         },
       ],
     };

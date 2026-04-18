@@ -660,6 +660,104 @@
     },
     "required": ["summary", "completed_actions", "validation_steps"]
   },
+  "helper-json/v1": {
+    "type": "json"
+  },
+  "markdown/v1": {
+    "type": "string",
+    "nonEmpty": true
+  },
+  "opaque-file/v1": {
+    "type": "bytes"
+  },
+  "plain-text/v1": {
+    "type": "string",
+    "nonEmpty": true
+  },
+  "artifact-manifest/v1": {
+    "type": "object",
+    "properties": {
+      "artifact_id": { "type": "string", "nonEmpty": true },
+      "logical_key": { "type": "string", "nonEmpty": true, "pattern": "^[a-z0-9][a-z0-9._/-]*$" },
+      "scope": { "type": "string", "nonEmpty": true },
+      "run_id": { "type": "string", "nonEmpty": true },
+      "flow_id": { "type": "string", "nonEmpty": true },
+      "phase_id": { "type": "string", "nonEmpty": true },
+      "step_id": { "type": "string", "nonEmpty": true },
+      "kind": { "type": "string", "enum": ["artifact", "file"] },
+      "version": { "type": "number" },
+      "payload_family": { "type": "string", "enum": ["structured-json", "markdown", "plain-text", "helper-json", "opaque-file"] },
+      "schema_id": { "type": "string", "nonEmpty": true },
+      "schema_version": { "type": "number" },
+      "created_at": { "type": "string", "nonEmpty": true },
+      "producer": {
+        "type": "object",
+        "properties": {
+          "node": { "type": "string", "nonEmpty": true },
+          "executor": { "type": "string", "nonEmpty": true },
+          "model": { "type": "string", "nonEmpty": true },
+          "summary": { "type": "string", "nonEmpty": true }
+        },
+        "required": ["node"]
+      },
+      "inputs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "source": { "type": "string", "enum": ["manifest", "external-path"] },
+            "path": { "type": "string", "nonEmpty": true },
+            "artifact_id": { "type": "string", "nonEmpty": true },
+            "logical_key": { "type": "string", "nonEmpty": true, "pattern": "^[a-z0-9][a-z0-9._/-]*$" },
+            "schema_id": { "type": "string", "nonEmpty": true },
+            "schema_version": { "type": "number" }
+          },
+          "required": ["source", "path"]
+        }
+      },
+      "content_hash": { "type": "string", "nonEmpty": true, "pattern": "^sha256:[a-f0-9]{64}$" },
+      "status": { "type": "string", "enum": ["ready", "superseded", "stale"] },
+      "payload_path": { "type": "string", "nonEmpty": true },
+      "manifest_path": { "type": "string", "nonEmpty": true },
+      "publication_key": { "type": "string", "nonEmpty": true },
+      "supersedes": { "type": "string", "nonEmpty": true },
+      "status_reason": { "type": "string", "nonEmpty": true },
+      "diagnostics": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "code": { "type": "string", "nonEmpty": true },
+            "severity": { "type": "string", "enum": ["info", "warning", "error"] },
+            "message": { "type": "string", "nonEmpty": true }
+          },
+          "required": ["code", "severity", "message"]
+        }
+      }
+    },
+    "required": [
+      "artifact_id",
+      "logical_key",
+      "scope",
+      "run_id",
+      "flow_id",
+      "phase_id",
+      "step_id",
+      "kind",
+      "version",
+      "payload_family",
+      "schema_id",
+      "schema_version",
+      "created_at",
+      "producer",
+      "inputs",
+      "content_hash",
+      "status",
+      "payload_path",
+      "manifest_path",
+      "publication_key"
+    ]
+  },
   "task-summary/v1": {
     "type": "object",
     "properties": {

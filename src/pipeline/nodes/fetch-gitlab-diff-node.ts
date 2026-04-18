@@ -3,6 +3,7 @@ import type {
   FetchGitLabDiffExecutorInput,
   FetchGitLabDiffExecutorResult,
 } from "../../executors/fetch-gitlab-diff-executor.js";
+import { buildLogicalKeyForPayload } from "../../artifact-manifest.js";
 import type { PipelineNodeDefinition } from "../types.js";
 import { toExecutorContext } from "../types.js";
 
@@ -36,8 +37,24 @@ export const fetchGitLabDiffNode: PipelineNodeDefinition<
     return {
       value,
       outputs: [
-        { kind: "artifact", path: params.outputFile, required: true },
-        { kind: "artifact", path: params.outputJsonFile, required: true },
+        {
+          kind: "artifact",
+          path: params.outputFile,
+          required: true,
+          manifest: {
+            publish: true,
+            logicalKey: buildLogicalKeyForPayload(context.issueKey, params.outputFile),
+          },
+        },
+        {
+          kind: "artifact",
+          path: params.outputJsonFile,
+          required: true,
+          manifest: {
+            publish: true,
+            logicalKey: buildLogicalKeyForPayload(context.issueKey, params.outputJsonFile),
+          },
+        },
       ],
     };
   },

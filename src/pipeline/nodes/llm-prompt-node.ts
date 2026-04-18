@@ -34,6 +34,17 @@ type LlmPromptNodeResult =
   | (CodexExecutorResult & { executor: "codex" })
   | (OpenCodeExecutorResult & { executor: "opencode" });
 
+function outputsForArtifacts(requiredArtifacts?: string[]) {
+  return Array.from(new Set(requiredArtifacts ?? [])).map((outputPath) => ({
+    kind: "artifact" as const,
+    path: outputPath,
+    required: true,
+    manifest: {
+      publish: true,
+    },
+  }));
+}
+
 export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromptNodeResult> = {
   kind: "llm-prompt",
   version: 1,
@@ -75,7 +86,7 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
           ...value,
           executor: "codex",
         },
-        outputs: (params.requiredArtifacts ?? []).map((path) => ({ kind: "artifact" as const, path, required: true })),
+        outputs: outputsForArtifacts(params.requiredArtifacts),
       };
     }
     if (executor === "opencode") {
@@ -94,7 +105,7 @@ export const llmPromptNode: PipelineNodeDefinition<LlmPromptNodeParams, LlmPromp
           ...value,
           executor: "opencode",
         },
-        outputs: (params.requiredArtifacts ?? []).map((path) => ({ kind: "artifact" as const, path, required: true })),
+        outputs: outputsForArtifacts(params.requiredArtifacts),
       };
     }
     throw new TaskRunnerError(`Unsupported llm executor '${executor}'.`);

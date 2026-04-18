@@ -1,4 +1,5 @@
 import type { OutputAdapter } from "../tui.js";
+import type { ArtifactRegistry } from "../runtime/artifact-registry.js";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonObject = { [key: string]: JsonValue };
@@ -18,6 +19,7 @@ export type RuntimeServices = {
       signal?: AbortSignal;
     },
   ) => Promise<string>;
+  artifactRegistry: ArtifactRegistry;
 };
 
 export type ExecutorContext = {

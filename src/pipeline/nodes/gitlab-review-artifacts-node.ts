@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { readFileSync } from "node:fs";
 
+import { buildLogicalKeyForPayload } from "../../artifact-manifest.js";
 import { TaskRunnerError } from "../../errors.js";
 import type { PipelineNodeDefinition } from "../types.js";
 
@@ -154,8 +155,24 @@ export const gitlabReviewArtifactsNode: PipelineNodeDefinition<
         readyToMerge: artifact.ready_to_merge,
       },
       outputs: [
-        { kind: "artifact", path: params.reviewFile, required: true },
-        { kind: "artifact", path: params.reviewJsonFile, required: true },
+        {
+          kind: "artifact",
+          path: params.reviewFile,
+          required: true,
+          manifest: {
+            publish: true,
+            logicalKey: buildLogicalKeyForPayload(context.issueKey, params.reviewFile),
+          },
+        },
+        {
+          kind: "artifact",
+          path: params.reviewJsonFile,
+          required: true,
+          manifest: {
+            publish: true,
+            logicalKey: buildLogicalKeyForPayload(context.issueKey, params.reviewJsonFile),
+          },
+        },
       ],
     };
   },
