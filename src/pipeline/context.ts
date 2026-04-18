@@ -3,6 +3,7 @@ import process from "node:process";
 import type { RuntimeServices } from "../executors/types.js";
 import { getOutputAdapter } from "../tui.js";
 import type { UserInputRequester } from "../user-input.js";
+import type { ResolvedExecutionRouting } from "./execution-routing-config.js";
 import { createNodeRegistry } from "./node-registry.js";
 import { createExecutorRegistry } from "./registry.js";
 import type { PipelineContext } from "./types.js";
@@ -16,6 +17,7 @@ export type CreatePipelineContextInput = {
   runtime: RuntimeServices;
   setSummary?: (markdown: string) => void;
   requestUserInput?: UserInputRequester;
+  executionRouting?: ResolvedExecutionRouting;
 };
 
 export function createPipelineContext(input: CreatePipelineContextInput): PipelineContext {
@@ -33,5 +35,6 @@ export function createPipelineContext(input: CreatePipelineContextInput): Pipeli
     nodes: createNodeRegistry(),
     ...(input.setSummary ? { setSummary: input.setSummary } : {}),
     ...(input.requestUserInput ? { requestUserInput: input.requestUserInput } : {}),
+    ...(input.executionRouting ? { executionRouting: input.executionRouting } : {}),
   };
 }

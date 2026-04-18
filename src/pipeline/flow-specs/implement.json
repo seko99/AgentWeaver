@@ -9,6 +9,7 @@
         {
           "id": "run_implement",
           "node": "llm-prompt",
+          "routingGroup": "implementation",
           "prompt": {
             "templateRef": "implement",
             "vars": {

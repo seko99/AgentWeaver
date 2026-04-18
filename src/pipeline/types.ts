@@ -2,6 +2,7 @@ import type { ExecutorContext, RuntimeServices } from "../executors/types.js";
 import type { StructuredArtifactCheck } from "../structured-artifacts.js";
 import type { OutputAdapter } from "../tui.js";
 import type { UserInputRequester } from "../user-input.js";
+import type { ResolvedExecutionRouting } from "./execution-routing-config.js";
 import type { NodeRegistry } from "./node-registry.js";
 import type { ExecutorRegistry } from "./registry.js";
 
@@ -53,6 +54,7 @@ export type PipelineContext = {
   nodes: NodeRegistry;
   setSummary?: (markdown: string) => void;
   requestUserInput?: UserInputRequester;
+  executionRouting?: ResolvedExecutionRouting;
 };
 
 export type PipelineNodeDefinition<TParams, TResult> = {

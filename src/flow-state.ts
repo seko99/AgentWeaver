@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 import { ensureScopeWorkspaceDir, flowStateFile } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
+import type { ResolvedExecutionRouting, SelectedExecutionPreset } from "./pipeline/execution-routing-config.js";
 import type { ResolvedLaunchProfile } from "./pipeline/launch-profile-config.js";
 import type {
   ExpandedPhaseExecutionState,
@@ -9,8 +10,9 @@ import type {
   ExpandedStepExecutionState,
   FlowExecutionState,
 } from "./pipeline/spec-types.js";
+import { resolveStoredExecutionRoutingSnapshot, singleLaunchProfileExecutionRouting } from "./runtime/execution-routing.js";
 
-const FLOW_STATE_SCHEMA_VERSION = 1;
+const FLOW_STATE_SCHEMA_VERSION = 2;
 
 export type FlowRunState = {
   schemaVersion: number;
@@ -22,7 +24,14 @@ export type FlowRunState = {
   updatedAt: string;
   lastError?: { step?: string; returnCode?: number; message?: string } | null;
   launchProfile?: ResolvedLaunchProfile;
+  executionRouting?: ResolvedExecutionRouting;
+  routingFingerprint?: string;
+  selectedRoutingPreset?: SelectedExecutionPreset;
   executionState: FlowExecutionState;
+};
+
+type FlowRunStateV1 = Omit<FlowRunState, "schemaVersion" | "executionRouting" | "routingFingerprint" | "selectedRoutingPreset"> & {
+  schemaVersion: 1;
 };
 
 function nowIso8601(): string {
@@ -60,7 +69,11 @@ export function createFlowRunState(
   executionState: FlowExecutionState,
   jiraRef?: string | null,
   launchProfile?: ResolvedLaunchProfile,
+  executionRouting?: ResolvedExecutionRouting,
+  selectedRoutingPreset?: SelectedExecutionPreset,
 ): FlowRunState {
+  const effectiveExecutionRouting = executionRouting ?? (launchProfile ? singleLaunchProfileExecutionRouting(launchProfile) : undefined);
+  const effectiveLaunchProfile = launchProfile ?? effectiveExecutionRouting?.defaultRoute;
   return {
     schemaVersion: FLOW_STATE_SCHEMA_VERSION,
     flowId,
@@ -69,9 +82,54 @@ export function createFlowRunState(
     status: "pending",
     currentStep: null,
     updatedAt: nowIso8601(),
-    ...(launchProfile ? { launchProfile } : {}),
+    ...(effectiveLaunchProfile ? { launchProfile: effectiveLaunchProfile } : {}),
+    ...(effectiveExecutionRouting ? { executionRouting: effectiveExecutionRouting, routingFingerprint: effectiveExecutionRouting.fingerprint } : {}),
+    ...(selectedRoutingPreset ? { selectedRoutingPreset } : {}),
     executionState: stripExecutionStatePayload(executionState),
   };
+}
+
+function upgradeFlowRunStateV1(state: FlowRunStateV1): FlowRunState {
+  const executionRouting = state.launchProfile ? singleLaunchProfileExecutionRouting(state.launchProfile) : undefined;
+  return {
+    ...state,
+    schemaVersion: FLOW_STATE_SCHEMA_VERSION,
+    ...(executionRouting ? { executionRouting, routingFingerprint: executionRouting.fingerprint } : {}),
+    ...(executionRouting ? { selectedRoutingPreset: { kind: "custom", label: "Legacy launch profile" } as const } : {}),
+  };
+}
+
+function normalizeFlowRunState(raw: unknown, flowId: string, filePath: string): FlowRunState {
+  if (!raw || typeof raw !== "object") {
+    throw new TaskRunnerError(`Invalid flow state file format: ${filePath}`);
+  }
+
+  const schemaVersion = (raw as { schemaVersion?: unknown }).schemaVersion;
+  let state: FlowRunState;
+  if (schemaVersion === 1) {
+    state = upgradeFlowRunStateV1(raw as FlowRunStateV1);
+  } else if (schemaVersion === FLOW_STATE_SCHEMA_VERSION) {
+    state = raw as FlowRunState;
+  } else {
+    throw new TaskRunnerError(`Unsupported flow state schema in ${filePath}: ${String(schemaVersion ?? "unknown")}`);
+  }
+
+  if (state.flowId !== flowId) {
+    throw new TaskRunnerError(`Flow state ${filePath} belongs to flow '${state.flowId}', expected '${flowId}'`);
+  }
+
+  if (state.executionRouting) {
+    const executionRouting = resolveStoredExecutionRoutingSnapshot(state.executionRouting);
+    state.executionRouting = executionRouting;
+    state.routingFingerprint = executionRouting.fingerprint;
+    state.launchProfile = executionRouting.defaultRoute;
+  } else if (state.launchProfile) {
+    const executionRouting = singleLaunchProfileExecutionRouting(state.launchProfile);
+    state.executionRouting = executionRouting;
+    state.routingFingerprint = executionRouting.fingerprint;
+  }
+
+  return state;
 }
 
 export function loadFlowRunState(scopeKey: string, flowId: string): FlowRunState | null {
@@ -86,23 +144,20 @@ export function loadFlowRunState(scopeKey: string, flowId: string): FlowRunState
   } catch (error) {
     throw new TaskRunnerError(`Failed to parse flow state file ${filePath}: ${(error as Error).message}`);
   }
-
-  if (!raw || typeof raw !== "object") {
-    throw new TaskRunnerError(`Invalid flow state file format: ${filePath}`);
-  }
-
-  const state = raw as FlowRunState;
-  if (state.schemaVersion !== FLOW_STATE_SCHEMA_VERSION) {
-    throw new TaskRunnerError(`Unsupported flow state schema in ${filePath}: ${state.schemaVersion}`);
-  }
-  if (state.flowId !== flowId) {
-    throw new TaskRunnerError(`Flow state ${filePath} belongs to flow '${state.flowId}', expected '${flowId}'`);
-  }
-  return state;
+  return normalizeFlowRunState(raw, flowId, filePath);
 }
 
 export function saveFlowRunState(state: FlowRunState): void {
   state.updatedAt = nowIso8601();
+  state.schemaVersion = FLOW_STATE_SCHEMA_VERSION;
+  if (state.executionRouting) {
+    state.executionRouting = resolveStoredExecutionRoutingSnapshot(state.executionRouting);
+    state.routingFingerprint = state.executionRouting.fingerprint;
+    state.launchProfile = state.executionRouting.defaultRoute;
+  } else if (state.launchProfile) {
+    state.executionRouting = singleLaunchProfileExecutionRouting(state.launchProfile);
+    state.routingFingerprint = state.executionRouting.fingerprint;
+  }
   ensureScopeWorkspaceDir(state.scopeKey);
   writeFileSync(
     flowStateFile(state.scopeKey, state.flowId),

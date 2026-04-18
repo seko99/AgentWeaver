@@ -278,6 +278,9 @@ export async function runExpandedPhase(
       continue;
     }
     const params = resolveParams(step.params, stepContext);
+    if (step.routingGroup) {
+      params.routingGroup = step.routingGroup;
+    }
     if (step.prompt) {
       params.prompt = renderPrompt(step.prompt, stepContext);
     }

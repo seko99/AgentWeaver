@@ -7,6 +7,8 @@ import { setOutputAdapter, stripAnsi, type OutputAdapter } from "./tui.js";
 import { FlowInterruptedError, TaskRunnerError } from "./errors.js";
 import {
   buildInitialUserInputValues,
+  normalizeUserInputFieldValue,
+  resolveFieldDefinition,
   validateUserInputValues,
   type UserInputFieldDefinition,
   type UserInputFormDefinition,
@@ -61,6 +63,7 @@ type ActiveFormSession = {
   currentFieldIndex: number;
   currentOptionIndex: number;
   currentTextCursorIndex: number;
+  previewScrollOffset: number;
   resolve: (result: UserInputResult) => void;
   reject: (error: Error) => void;
 };
@@ -126,6 +129,10 @@ function makeFlowKey(flowId: string): string {
 
 function escapeBlessedTags(text: string): string {
   return text.replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
+}
+
+function stripBlessedTags(text: string): string {
+  return text.replace(/\{[^}]+\}/g, "");
 }
 
 function textIndexToLineColumn(value: string, index: number): { line: number; column: number } {
@@ -259,6 +266,7 @@ export class InteractiveUi {
   private readonly help: any;
   private readonly confirm: any;
   private readonly formModal: any;
+  private readonly formPreviewBox: any;
   private readonly formLineInput: any;
   private readonly formTextInput: any;
   private readonly formBooleanInput: any;
@@ -449,6 +457,30 @@ export class InteractiveUi {
       hidden: true,
       tags: true,
       border: "line",
+      style: {
+        border: { fg: "cyan" },
+        fg: "white",
+      },
+    });
+
+    this.formPreviewBox = blessed.box({
+      parent: this.formModal,
+      top: 0,
+      left: 0,
+      width: "100%-2",
+      height: 8,
+      hidden: true,
+      tags: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      scrollable: true,
+      alwaysScroll: true,
+      border: "line",
+      scrollbar: {
+        ch: " ",
+        inverse: true,
+      },
       style: {
         border: { fg: "cyan" },
         fg: "white",
@@ -1035,7 +1067,12 @@ export class InteractiveUi {
     if (!this.activeFormSession) {
       return null;
     }
-    return this.activeFormSession.form.fields[this.activeFormSession.currentFieldIndex] ?? null;
+    const field = this.activeFormSession.form.fields[this.activeFormSession.currentFieldIndex] ?? null;
+    if (!field) {
+      return null;
+    }
+    normalizeUserInputFieldValue(field, this.activeFormSession.values);
+    return resolveFieldDefinition(field, this.activeFormSession.values);
   }
 
   private formModalInnerHeight(): number {
@@ -1056,9 +1093,18 @@ export class InteractiveUi {
     return Math.max(24, rawWidth - 2 - paddingLeft - paddingRight);
   }
 
+  private renderedFormLineCount(lines: string[]): number {
+    const width = Math.max(1, this.formModalInnerWidth() - 2);
+    return lines.reduce((total, line) => {
+      const visible = stripAnsi(stripBlessedTags(line));
+      return total + Math.max(1, Math.ceil(visible.length / width));
+    }, 0);
+  }
+
   private renderActiveForm(): void {
     if (!this.activeFormSession) {
       this.formModal.hide();
+      this.hideFormPreviewBox();
       this.hideFormLineInput();
       this.hideFormTextInput();
       this.hideFormBooleanInput();
@@ -1094,6 +1140,7 @@ export class InteractiveUi {
     let hintLines: string[] = [];
 
     if (field.type === "boolean") {
+      this.hideFormPreviewBox();
       this.hideFormLineInput();
       this.hideFormTextInput();
       this.hideFormSelectInput();
@@ -1112,6 +1159,7 @@ export class InteractiveUi {
       ];
       footerHint = ` Form: Space toggle | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel `;
     } else if (field.type === "text") {
+      this.hideFormPreviewBox();
       this.hideFormBooleanInput();
       this.hideFormSelectInput();
       helperLines.push("{cyan-fg}Use the standard editor below.{/cyan-fg}");
@@ -1141,8 +1189,33 @@ export class InteractiveUi {
       this.hideFormLineInput();
       this.hideFormTextInput();
       this.hideFormBooleanInput();
-      helperLines.push("{cyan-fg}Use the list below.{/cyan-fg}");
-      this.ensureFormSelectInputVisible(headerLines.length + helperLines.length, 0);
+      const previewContent = session.form.preview?.trim() ?? "";
+      let previewScrollable = false;
+      if (previewContent.length > 0) {
+        this.hideFormPreviewBox();
+        helperLines.push("{cyan-fg}Review the content above, then choose an action below.{/cyan-fg}");
+        lines.push(...helperLines);
+        const previewLines = previewContent.split("\n");
+        const viewportHeight = this.formPreviewViewportHeight(this.renderedFormLineCount(lines), 0);
+        const maxOffset = Math.max(0, previewLines.length - viewportHeight);
+        session.previewScrollOffset = Math.max(0, Math.min(session.previewScrollOffset, maxOffset));
+        const visibleLines = previewLines.slice(
+          session.previewScrollOffset,
+          session.previewScrollOffset + viewportHeight,
+        );
+        lines.push("", ...visibleLines);
+        previewScrollable = maxOffset > 0;
+        if (previewScrollable) {
+          const firstVisibleLine = session.previewScrollOffset + 1;
+          const lastVisibleLine = session.previewScrollOffset + visibleLines.length;
+          lines.push("", `{gray-fg}Preview ${firstVisibleLine}-${lastVisibleLine} of ${previewLines.length}. Use PageUp/PageDown to scroll.{/gray-fg}`);
+        }
+      } else {
+        this.hideFormPreviewBox();
+        helperLines.push("{cyan-fg}Use the list below.{/cyan-fg}");
+        lines.push(...helperLines);
+      }
+      this.ensureFormSelectInputVisible(this.renderedFormLineCount(lines), 0);
       const preferredOptionIndex = field.type === "single-select"
         ? this.selectedOptionIndexForField(field)
         : session.currentOptionIndex;
@@ -1160,11 +1233,17 @@ export class InteractiveUi {
       this.formSelectInput.select(currentOptionIndex);
       hintLines = [
         `Up/Down: move | Space: ${field.type === "single-select" ? "pick" : "toggle"} | Enter: ${isLastField ? "submit" : "confirm and next"}`,
-        "Tab/Shift+Tab: switch field | Esc: cancel",
+        previewScrollable
+          ? "PageUp/PageDown: scroll preview | Tab/Shift+Tab: switch field | Esc: cancel"
+          : "Tab/Shift+Tab: switch field | Esc: cancel",
       ];
-      footerHint = ` Form: Up/Down move | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel `;
+      footerHint = previewScrollable
+        ? ` Form: Up/Down move | PageUp/PageDown preview | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel `
+        : ` Form: Up/Down move | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel `;
     }
-    lines.push(...helperLines);
+    if (field.type !== "single-select" && field.type !== "multi-select") {
+      lines.push(...helperLines);
+    }
 
     this.formModal.setContent(lines.join("\n"));
     this.formModal.setScroll(0);
@@ -1203,12 +1282,15 @@ export class InteractiveUi {
       const current = String(this.activeFormSession.values[nextField.id] ?? "");
       this.activeFormSession.currentTextCursorIndex = current.length;
       this.activeFormSession.currentOptionIndex = 0;
+      this.activeFormSession.previewScrollOffset = 0;
     } else if (nextField?.type === "single-select" || nextField?.type === "multi-select") {
       this.activeFormSession.currentTextCursorIndex = 0;
       this.activeFormSession.currentOptionIndex = this.selectedOptionIndexForField(nextField);
+      this.activeFormSession.previewScrollOffset = 0;
     } else {
       this.activeFormSession.currentTextCursorIndex = 0;
       this.activeFormSession.currentOptionIndex = 0;
+      this.activeFormSession.previewScrollOffset = 0;
     }
     this.renderActiveForm();
   }
@@ -1343,16 +1425,40 @@ export class InteractiveUi {
   }
 
   private ensureFormSelectInputVisible(headerLineCount: number, footerLineCount: number): void {
-    const reservedTop = Math.max(1, headerLineCount + 2);
+    const previewVisible = this.formPreviewBox.visible;
+    const reservedTop = previewVisible
+      ? Number(this.formPreviewBox.top ?? 1) + Number(this.formPreviewBox.height ?? 6) + 1
+      : Math.max(1, headerLineCount + 2);
     const availableHeight = Math.max(6, this.formModalInnerHeight() - reservedTop - footerLineCount - 2);
     this.formSelectInput.top = reservedTop;
     this.formSelectInput.left = 1;
     this.formSelectInput.width = Math.max(24, this.formModalInnerWidth() - 4);
-    this.formSelectInput.height = Math.max(4, availableHeight - 2);
+    this.formSelectInput.height = previewVisible
+      ? Math.max(5, availableHeight - 1)
+      : Math.max(4, availableHeight - 2);
     this.formSelectInput.show();
     this.formSelectInput.setFront();
     this.formSelectInput.focus();
     this.positionFormHint(this.formSelectInput.top + this.formSelectInput.height);
+  }
+
+  private ensureFormPreviewBoxVisible(headerLineCount: number, footerLineCount: number): void {
+    const reservedTop = Math.max(1, headerLineCount + 2);
+    const hintHeight = 2;
+    const selectHeight = Math.max(5, Math.min(10, Math.floor(this.formModalInnerHeight() * 0.32)));
+    const availableHeight = Math.max(6, this.formModalInnerHeight() - reservedTop - footerLineCount - selectHeight - hintHeight - 3);
+    this.formPreviewBox.top = reservedTop;
+    this.formPreviewBox.left = 1;
+    this.formPreviewBox.width = Math.max(24, this.formModalInnerWidth() - 4);
+    this.formPreviewBox.height = Math.max(6, Math.min(12, availableHeight));
+  }
+
+  private formPreviewViewportHeight(headerLineCount: number, footerLineCount: number): number {
+    const reservedTop = Math.max(1, headerLineCount + 2);
+    const hintHeight = 2;
+    const selectHeight = Math.max(5, Math.min(10, Math.floor(this.formModalInnerHeight() * 0.32)));
+    const availableHeight = Math.max(4, this.formModalInnerHeight() - reservedTop - footerLineCount - selectHeight - hintHeight - 1);
+    return Math.max(4, Math.min(10, availableHeight));
   }
 
   private positionFormHint(top: number): void {
@@ -1379,6 +1485,13 @@ export class InteractiveUi {
     this.formTextInput.hide();
     if (typeof this.formTextInput.blur === "function") {
       this.formTextInput.blur();
+    }
+  }
+
+  private hideFormPreviewBox(): void {
+    this.formPreviewBox.hide();
+    if (typeof this.formPreviewBox.blur === "function") {
+      this.formPreviewBox.blur();
     }
   }
 
@@ -1483,10 +1596,12 @@ export class InteractiveUi {
       };
       this.activeFormSession = null;
       this.formModal.hide();
+      this.hideFormPreviewBox();
       this.hideFormLineInput();
       this.hideFormTextInput();
       this.hideFormBooleanInput();
       this.hideFormSelectInput();
+      this.hideFormHint();
       this.focusPane("flows");
       session.resolve(result);
       this.renderActiveForm();
@@ -1503,10 +1618,12 @@ export class InteractiveUi {
     const session = this.activeFormSession;
     this.activeFormSession = null;
     this.formModal.hide();
+    this.hideFormPreviewBox();
     this.hideFormLineInput();
     this.hideFormTextInput();
     this.hideFormBooleanInput();
     this.hideFormSelectInput();
+    this.hideFormHint();
     this.focusPane("flows");
     session.reject(new TaskRunnerError(`User cancelled form '${session.form.formId}'.`));
     this.renderActiveForm();
@@ -1519,10 +1636,12 @@ export class InteractiveUi {
     const session = this.activeFormSession;
     this.activeFormSession = null;
     this.formModal.hide();
+    this.hideFormPreviewBox();
     this.hideFormLineInput();
     this.hideFormTextInput();
     this.hideFormBooleanInput();
     this.hideFormSelectInput();
+    this.hideFormHint();
     this.focusPane("flows");
     session.reject(new FlowInterruptedError(message));
     this.renderActiveForm();
@@ -1721,6 +1840,38 @@ export class InteractiveUi {
       this.syncActiveSelectFieldValue();
       this.requestRender();
       return;
+    }
+    if (key.name === "pageup" || key.name === "pagedown") {
+      const session = this.activeFormSession;
+      const previewContent = session?.form.preview?.trim() ?? "";
+      if (session && previewContent.length > 0) {
+        const previewLines = previewContent.split("\n");
+        const headerLines: string[] = [`{bold}${session.form.title}{/bold}`];
+        if (session.form.description?.trim()) {
+          headerLines.push("");
+          headerLines.push(session.form.description.trim());
+        }
+        headerLines.push("");
+        headerLines.push(`Field ${session.currentFieldIndex + 1}/${session.form.fields.length}`);
+        headerLines.push(`{yellow-fg}${field.label}{/yellow-fg}`);
+        if (field.help?.trim()) {
+          headerLines.push(field.help.trim());
+        }
+        headerLines.push("");
+        headerLines.push("{cyan-fg}Review the content above, then choose an action below.{/cyan-fg}");
+        const viewportHeight = this.formPreviewViewportHeight(this.renderedFormLineCount(headerLines), 0);
+        if (previewLines.length > viewportHeight) {
+          session.previewScrollOffset = Math.max(
+            0,
+            Math.min(
+              previewLines.length - viewportHeight,
+              session.previewScrollOffset + (key.name === "pageup" ? -viewportHeight : viewportHeight),
+            ),
+          );
+          this.renderActiveForm();
+          return;
+        }
+      }
     }
     if (key.name === "space") {
       this.syncActiveSelectFieldValue();
@@ -2281,6 +2432,7 @@ export class InteractiveUi {
         currentFieldIndex: 0,
         currentOptionIndex: initialOptionIndex,
         currentTextCursorIndex: initialCursorIndex,
+        previewScrollOffset: 0,
         resolve,
         reject,
       };

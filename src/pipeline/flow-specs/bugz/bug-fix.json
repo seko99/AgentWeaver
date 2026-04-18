@@ -9,6 +9,7 @@
         {
           "id": "run_bug_fix",
           "node": "llm-prompt",
+          "routingGroup": "implementation",
           "prompt": {
             "templateRef": "bug-fix",
             "vars": {

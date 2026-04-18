@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
 import { createNodeRegistry } from "./node-registry.js";
 import { createExecutorRegistry } from "./registry.js";
 import { compileFlowSpec } from "./spec-compiler.js";
@@ -85,4 +86,35 @@ export function resolveNamedDeclarativeFlowRef(fileName: string, cwd: string): D
 
 export function loadNamedDeclarativeFlow(fileName: string, cwd: string): LoadedDeclarativeFlow {
   return loadDeclarativeFlow(resolveNamedDeclarativeFlowRef(fileName, cwd));
+}
+
+export function collectFlowRoutingGroups(
+  flow: LoadedDeclarativeFlow,
+  cwd: string,
+  visited = new Set<string>(),
+): ExecutionRoutingGroup[] {
+  if (visited.has(flow.absolutePath)) {
+    return [];
+  }
+  visited.add(flow.absolutePath);
+  const groups = new Set<ExecutionRoutingGroup>();
+  for (const phase of flow.phases) {
+    for (const step of phase.steps) {
+      if (step.routingGroup) {
+        groups.add(step.routingGroup);
+      }
+      if (step.node !== "flow-run") {
+        continue;
+      }
+      const nestedFlowName = step.params?.fileName;
+      if (!nestedFlowName || !("const" in nestedFlowName) || typeof nestedFlowName.const !== "string") {
+        continue;
+      }
+      const nestedFlow = loadNamedDeclarativeFlow(nestedFlowName.const, cwd);
+      for (const nestedGroup of collectFlowRoutingGroups(nestedFlow, cwd, visited)) {
+        groups.add(nestedGroup);
+      }
+    }
+  }
+  return [...groups];
 }

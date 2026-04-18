@@ -90,6 +90,7 @@
             ]
           },
           "node": "llm-prompt",
+          "routingGroup": "planning",
           "prompt": {
             "templateRef": "task-summary",
             "vars": {
@@ -191,6 +192,7 @@
         {
           "id": "run_bug_analyze",
           "node": "llm-prompt",
+          "routingGroup": "planning",
           "prompt": {
             "templateRef": "bug-analyze",
             "vars": {

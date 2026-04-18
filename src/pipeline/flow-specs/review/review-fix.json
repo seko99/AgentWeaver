@@ -114,6 +114,7 @@
         {
           "id": "run_review_fix",
           "node": "llm-prompt",
+          "routingGroup": "repair-loop",
           "prompt": {
             "templateRef": "review-fix",
             "vars": {

@@ -40,6 +40,10 @@ function ensureGlobalConfigDir(): void {
   mkdirSync(globalConfigDir(), { recursive: true });
 }
 
+export function agentweaverConfigDir(): string {
+  return globalConfigDir();
+}
+
 export function loadTieredEnv(projectDir: string): void {
   ensureGlobalConfigDir();
   const shellEnvKeys = new Set(Object.keys(process.env));

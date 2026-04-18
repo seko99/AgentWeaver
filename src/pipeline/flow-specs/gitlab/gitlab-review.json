@@ -104,6 +104,7 @@
           "id": "assess_gitlab_review",
           "when": { "not": { "ref": "context.dryRun" } },
           "node": "llm-prompt",
+          "routingGroup": "review",
           "prompt": {
             "templateRef": "gitlab-review",
             "vars": {

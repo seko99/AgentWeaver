@@ -152,6 +152,7 @@
         {
           "id": "run_plan_revise",
           "node": "llm-prompt",
+          "routingGroup": "planning",
           "prompt": {
             "templateRef": "plan-revise",
             "vars": {

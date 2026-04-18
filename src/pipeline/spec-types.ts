@@ -2,6 +2,7 @@ import type { JsonValue } from "../executors/types.js";
 import type { StructuredArtifactSchemaId } from "../structured-artifacts.js";
 import type { NodeKind } from "./node-registry.js";
 import type { PromptTemplateRef } from "./prompt-registry.js";
+import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
 
 export const ARTIFACT_REF_KINDS = [
   "bug-analyze-file",
@@ -133,6 +134,7 @@ export type StepAfterActionSpec = {
 export type DeclarativeStepSpec = {
   id: string;
   node: NodeKind;
+  routingGroup?: ExecutionRoutingGroup;
   when?: ConditionSpec;
   prompt?: PromptBindingSpec;
   params?: Record<string, ValueSpec>;
@@ -174,6 +176,7 @@ export type ExpandedPhaseSpec = {
 export type ExpandedStepSpec = {
   id: string;
   node: NodeKind;
+  routingGroup?: ExecutionRoutingGroup;
   when?: ConditionSpec;
   prompt?: PromptBindingSpec;
   params?: Record<string, ValueSpec>;
