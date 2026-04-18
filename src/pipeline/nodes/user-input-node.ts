@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 
 import { TaskRunnerError } from "../../errors.js";
+import { buildLogicalKeyForPayload } from "../../artifact-manifest.js";
 import { printSummary } from "../../tui.js";
 import {
   requestUserInputInTerminal,
@@ -176,7 +177,20 @@ export const userInputNode: PipelineNodeDefinition<UserInputNodeParams, UserInpu
         promptSuffix: rendered.promptSuffix,
         summaryText: rendered.summaryText,
       },
-      outputs: [{ kind: "artifact", path: params.outputFile, required: true }],
+      outputs: [
+        {
+          kind: "artifact",
+          path: params.outputFile,
+          required: true,
+          manifest: {
+            publish: true,
+            logicalKey: buildLogicalKeyForPayload(context.issueKey, params.outputFile),
+            payloadFamily: "structured-json",
+            schemaId: "user-input/v1",
+            schemaVersion: 1,
+          },
+        },
+      ],
     };
   },
 };

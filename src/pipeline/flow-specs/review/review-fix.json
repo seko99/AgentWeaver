@@ -164,7 +164,25 @@
               }
             },
             "model": { "ref": "params.llmModel" },
-            "executor": { "ref": "params.llmExecutor" }
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "review-fix-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.latestIteration" }
+                  }
+                },
+                {
+                  "artifact": {
+                    "kind": "review-fix-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.latestIteration" }
+                  }
+                }
+              ]
+            }
           },
           "expect": [
             {

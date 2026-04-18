@@ -112,4 +112,42 @@ describe("flow state routing persistence", () => {
     assert.equal(saved.routingFingerprint, routing.fingerprint);
     assert.equal(saved.selectedRoutingPreset.label, "Balanced");
   });
+
+  it("regenerates the publication run id when preparing persisted state for resume", () => {
+    const scopeKey = "ag-75@test";
+    const flowId = "review";
+    const state = flowStateModule.createFlowRunState(
+      scopeKey,
+      flowId,
+      {
+        runId: "run-1",
+        publicationRunId: "attempt-1",
+        flowKind: "review",
+        flowVersion: 1,
+        terminated: false,
+        phases: [
+          {
+            id: "review",
+            status: "running",
+            repeatVars: {},
+            steps: [
+              {
+                id: "write_review",
+                status: "running",
+              },
+            ],
+          },
+        ],
+      },
+      null,
+    );
+
+    const resumed = flowStateModule.prepareFlowStateForResume(state);
+
+    assert.equal(resumed.executionState.runId, "run-1");
+    assert.notEqual(resumed.executionState.publicationRunId, "attempt-1");
+    assert.equal(typeof resumed.executionState.publicationRunId, "string");
+    assert.equal(resumed.executionState.phases[0].status, "pending");
+    assert.equal(resumed.executionState.phases[0].steps[0].status, "pending");
+  });
 });

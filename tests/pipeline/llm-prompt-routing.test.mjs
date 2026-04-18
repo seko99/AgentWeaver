@@ -143,6 +143,56 @@ describe("llm-prompt routing", () => {
     assert.equal(result.value.executor, "codex");
   });
 
+  it("marks declared required artifacts for manifest publication", async () => {
+    const context = {
+      issueKey: "AG-73",
+      jiraRef: "AG-73",
+      cwd: process.cwd(),
+      env: {},
+      ui: {},
+      dryRun: false,
+      verbose: false,
+      runtime: {},
+      executors: {
+        get() {
+          return {
+            defaultConfig: {},
+            async execute() {
+              return { output: "ok" };
+            },
+          };
+        },
+      },
+      nodes: {},
+    };
+
+    const result = await llmPromptNode.run(context, {
+      prompt: "Review this",
+      labelText: "Running prompt",
+      executor: "codex",
+      requiredArtifacts: ["first.json", "second.md", "first.json"],
+    });
+
+    assert.deepEqual(result.outputs, [
+      {
+        kind: "artifact",
+        path: "first.json",
+        required: true,
+        manifest: {
+          publish: true,
+        },
+      },
+      {
+        kind: "artifact",
+        path: "second.md",
+        required: true,
+        manifest: {
+          publish: true,
+        },
+      },
+    ]);
+  });
+
   it("rejects llm-prompt steps that lack both routingGroup and executor", () => {
     const spec = {
       kind: "test-flow",

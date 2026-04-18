@@ -1,4 +1,5 @@
 import type { ExecutorContext, RuntimeServices } from "../executors/types.js";
+import type { ArtifactLineageInput, ArtifactPayloadFamily } from "../artifact-manifest.js";
 import type { StructuredArtifactCheck } from "../structured-artifacts.js";
 import type { OutputAdapter } from "../tui.js";
 import type { UserInputRequester } from "../user-input.js";
@@ -6,16 +7,27 @@ import type { ResolvedExecutionRouting } from "./execution-routing-config.js";
 import type { NodeRegistry } from "./node-registry.js";
 import type { ExecutorRegistry } from "./registry.js";
 
+export type NodeOutputManifestSpec = {
+  publish?: boolean;
+  logicalKey?: string;
+  schemaId?: string;
+  schemaVersion?: number;
+  payloadFamily?: ArtifactPayloadFamily;
+  inputRefs?: ArtifactLineageInput[];
+};
+
 export type NodeOutputSpec =
   | {
       kind: "artifact";
       path: string;
       required: boolean;
+      manifest?: NodeOutputManifestSpec;
     }
   | {
       kind: "file";
       path: string;
       required: boolean;
+      manifest?: NodeOutputManifestSpec;
     };
 
 export type NodeCheckSpec =

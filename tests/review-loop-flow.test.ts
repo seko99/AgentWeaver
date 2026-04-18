@@ -83,6 +83,32 @@ describe("review-loop flow structure", () => {
     expect(flow.phases.length).toBeGreaterThan(0);
   });
 
+  it("should publish both review-fix artifacts from the review-fix flow", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-fix.json" });
+    const reviewFixPhase = flow.phases.find((p) => p.id === "review-fix");
+    const runStep = reviewFixPhase?.steps.find((s) => s.id === "run_review_fix");
+
+    expect(runStep).toBeDefined();
+    expect(runStep?.params?.requiredArtifacts).toEqual({
+      list: [
+        {
+          artifact: {
+            kind: "review-fix-file",
+            taskKey: { ref: "params.taskKey" },
+            iteration: { ref: "params.latestIteration" },
+          },
+        },
+        {
+          artifact: {
+            kind: "review-fix-json-file",
+            taskKey: { ref: "params.taskKey" },
+            iteration: { ref: "params.latestIteration" },
+          },
+        },
+      ],
+    });
+  });
+
   it("should have entry_cleanup phase as first phase", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     expect(flow.phases[0].id).toBe("entry_cleanup");

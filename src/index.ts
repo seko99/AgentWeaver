@@ -79,6 +79,7 @@ import { resolveCmd } from "./runtime/command-resolution.js";
 import { loadTieredEnv } from "./runtime/env-loader.js";
 import { agentweaverHome } from "./runtime/agentweaver-home.js";
 import { runCommand } from "./runtime/process-runner.js";
+import { createArtifactRegistry } from "./runtime/artifact-registry.js";
 import { resolveDesignReviewInputContract } from "./runtime/design-review-input-contract.js";
 import { resolvePlanReviseInputContract } from "./runtime/plan-revise-input-contract.js";
 import { resolveLatestPlanningBundle } from "./runtime/planning-bundle.js";
@@ -145,6 +146,7 @@ function createRuntimeServices(signal?: AbortSignal): RuntimeServices {
   return {
     resolveCmd,
     runCommand: (argv, options = {}) => runCommand(argv, { ...options, ...(signal ? { signal } : {}) }),
+    artifactRegistry: createArtifactRegistry(),
   };
 }
 

@@ -32,6 +32,14 @@ export function scopeArtifactsFile(scopeKey: string, fileName: string): string {
   return path.join(scopeArtifactsDir(scopeKey), fileName);
 }
 
+export function artifactManifestSidecarPath(payloadPath: string): string {
+  return `${payloadPath}.manifest.json`;
+}
+
+export function artifactIndexFile(scopeKey: string): string {
+  return scopeArtifactsFile(scopeKey, "artifact-index.json");
+}
+
 export function taskWorkspaceDir(taskKey: string): string {
   return scopeWorkspaceDir(taskKey);
 }

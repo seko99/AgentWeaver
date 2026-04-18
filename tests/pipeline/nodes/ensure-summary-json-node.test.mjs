@@ -36,6 +36,7 @@ describe("ensureSummaryJsonNode", () => {
 
     assert.equal(result.value.created, true);
     assert.equal(result.value.repaired, false);
+    assert.equal(result.outputs?.[0]?.manifest?.logicalKey, "artifacts/jira-description-demo.json");
     assert.equal(parsed.summary.includes("Problem"), true);
     assert.equal(parsed.summary.includes("Users cannot filter archived items."), true);
     assert.equal(parsed.summary.includes("Acceptance criteria"), true);
@@ -54,6 +55,7 @@ describe("ensureSummaryJsonNode", () => {
 
     assert.equal(result.value.created, false);
     assert.equal(result.value.repaired, true);
+    assert.equal(result.outputs?.[0]?.manifest?.logicalKey, "artifacts/jira-description-demo.json");
     assert.equal(parsed.summary, "Problem\n\nExisting markdown summary.");
   });
 });

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { TaskRunnerError } from "../../errors.js";
+import { buildLogicalKeyForPayload } from "../../artifact-manifest.js";
 import type { PipelineNodeDefinition } from "../types.js";
 
 export type EnsureSummaryJsonNodeParams = {
@@ -49,7 +50,7 @@ export const ensureSummaryJsonNode: PipelineNodeDefinition<
 > = {
   kind: "ensure-summary-json",
   version: 1,
-  async run(_context, params) {
+  async run(context, params) {
     if (hasValidSummaryArtifact(params.outputFile)) {
       return {
         value: {
@@ -83,7 +84,17 @@ export const ensureSummaryJsonNode: PipelineNodeDefinition<
         created: !repaired,
         repaired,
       },
-      outputs: [{ kind: "artifact", path: params.outputFile, required: true }],
+      outputs: [
+        {
+          kind: "artifact",
+          path: params.outputFile,
+          required: true,
+          manifest: {
+            publish: true,
+            logicalKey: buildLogicalKeyForPayload(context.issueKey, params.outputFile),
+          },
+        },
+      ],
     };
   },
 };

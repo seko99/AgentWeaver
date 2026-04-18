@@ -1,10 +1,12 @@
 import { printInfo } from "../../tui.js";
 import { resolveDesignReviewInputContract } from "../../runtime/design-review-input-contract.js";
 import { resolvePlanReviseInputContract } from "../../runtime/plan-revise-input-contract.js";
+import type { PublishedArtifactRecord } from "../../runtime/artifact-registry.js";
 import { runExpandedPhase } from "../declarative-flow-runner.js";
 import { loadNamedDeclarativeFlow } from "../declarative-flows.js";
 import type { FlowExecutionState } from "../spec-types.js";
 import type { PipelineNodeDefinition } from "../types.js";
+import { ARTIFACT_LINEAGE_REF_PATHS_PARAM } from "../value-resolver.js";
 
 export type FlowRunNodeParams = {
   fileName: string;
@@ -16,7 +18,30 @@ export type FlowRunNodeResult = {
   flowKind: string;
   flowVersion: number;
   executionState: FlowExecutionState;
+  publishedArtifacts: PublishedArtifactRecord[];
 };
+
+type ArtifactLineageRefMap = Record<string, string>;
+
+function withArtifactLineageRefPaths(
+  params: Record<string, unknown>,
+  lineageRefs: ArtifactLineageRefMap,
+): Record<string, unknown> {
+  if (Object.keys(lineageRefs).length === 0) {
+    return params;
+  }
+
+  const existing = params[ARTIFACT_LINEAGE_REF_PATHS_PARAM];
+  const merged =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>), ...lineageRefs }
+      : lineageRefs;
+
+  return {
+    ...params,
+    [ARTIFACT_LINEAGE_REF_PATHS_PARAM]: merged,
+  };
+}
 
 export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeResult> = {
   kind: "flow-run",
@@ -37,7 +62,7 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
       const taskKey = String(flowParams["taskKey"] ?? "");
       if (taskKey) {
         const contract = resolveDesignReviewInputContract(taskKey);
-        resolvedFlowParams = {
+        resolvedFlowParams = withArtifactLineageRefPaths({
           ...flowParams,
           iteration: contract.planningIteration,
           planningIteration: contract.planningIteration,
@@ -62,13 +87,30 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           hasPlanningAnswersJsonFile: contract.hasPlanningAnswersJsonFile,
           planningAnswersJsonFilePath: contract.planningAnswersJsonFilePath,
           planningAnswersJsonFile: contract.planningAnswersJsonFile,
-        };
+        }, {
+          "params.designFile": contract.designFile,
+          "params.designJsonFile": contract.designJsonFile,
+          "params.planFile": contract.planFile,
+          "params.planJsonFile": contract.planJsonFile,
+          ...(contract.qaFilePath ? { "params.qaFile": contract.qaFilePath } : {}),
+          ...(contract.qaJsonFilePath ? { "params.qaJsonFile": contract.qaJsonFilePath } : {}),
+          ...(contract.jiraTaskFilePath ? { "params.jiraTaskFile": contract.jiraTaskFilePath } : {}),
+          ...(contract.jiraAttachmentsManifestFilePath
+            ? { "params.jiraAttachmentsManifestFile": contract.jiraAttachmentsManifestFilePath }
+            : {}),
+          ...(contract.jiraAttachmentsContextFilePath
+            ? { "params.jiraAttachmentsContextFile": contract.jiraAttachmentsContextFilePath }
+            : {}),
+          ...(contract.planningAnswersJsonFilePath
+            ? { "params.planningAnswersJsonFile": contract.planningAnswersJsonFilePath }
+            : {}),
+        });
       }
     } else if (flow.kind === "plan-revise-flow") {
       const taskKey = String(flowParams["taskKey"] ?? "");
       if (taskKey) {
         const contract = resolvePlanReviseInputContract(taskKey);
-        resolvedFlowParams = {
+        resolvedFlowParams = withArtifactLineageRefPaths({
           ...flowParams,
           reviewIteration: contract.reviewIteration,
           reviewFile: contract.reviewFile,
@@ -102,7 +144,26 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           hasPlanningAnswersJsonFile: contract.hasPlanningAnswersJsonFile,
           planningAnswersJsonFilePath: contract.planningAnswersJsonFilePath,
           planningAnswersJsonFile: contract.planningAnswersJsonFile,
-        };
+        }, {
+          "params.reviewFile": contract.reviewFile,
+          "params.reviewJsonFile": contract.reviewJsonFile,
+          "params.designFile": contract.designFile,
+          "params.designJsonFile": contract.designJsonFile,
+          "params.planFile": contract.planFile,
+          "params.planJsonFile": contract.planJsonFile,
+          ...(contract.qaFilePath ? { "params.qaFile": contract.qaFilePath } : {}),
+          ...(contract.qaJsonFilePath ? { "params.qaJsonFile": contract.qaJsonFilePath } : {}),
+          ...(contract.jiraTaskFilePath ? { "params.jiraTaskFile": contract.jiraTaskFilePath } : {}),
+          ...(contract.jiraAttachmentsManifestFilePath
+            ? { "params.jiraAttachmentsManifestFile": contract.jiraAttachmentsManifestFilePath }
+            : {}),
+          ...(contract.jiraAttachmentsContextFilePath
+            ? { "params.jiraAttachmentsContextFile": contract.jiraAttachmentsContextFilePath }
+            : {}),
+          ...(contract.planningAnswersJsonFilePath
+            ? { "params.planningAnswersJsonFile": contract.planningAnswersJsonFilePath }
+            : {}),
+        });
       }
     }
 
@@ -113,13 +174,15 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
       terminationOutcome: "success",
       phases: [],
     };
+    const publishedArtifacts: PublishedArtifactRecord[] = [];
 
     for (const phase of flow.phases) {
-      await runExpandedPhase(phase, context, resolvedFlowParams, flow.constants, {
+      const phaseResult = await runExpandedPhase(phase, context, resolvedFlowParams, flow.constants, {
         executionState,
         flowKind: flow.kind,
         flowVersion: flow.version,
       });
+      publishedArtifacts.push(...phaseResult.steps.flatMap((step) => step.publishedArtifacts ?? []));
       if (executionState.terminated) {
         break;
       }
@@ -130,6 +193,7 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
         flowKind: flow.kind,
         flowVersion: flow.version,
         executionState,
+        publishedArtifacts,
       },
     };
   },
