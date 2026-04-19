@@ -120,6 +120,35 @@ function parseActionSegments(line: string): StyledSegment[] {
 function stylePanelLine(panelTitle: string, line: string): StyledLine {
   const trimmed = line.trim();
 
+  if (panelTitle.includes("Flows")) {
+    const folderMatch = line.match(/^([> ]\s+)(\s*)([▾▸]) (.+)$/);
+    if (folderMatch) {
+      const prefix = folderMatch[1] ?? "";
+      const indent = folderMatch[2] ?? "";
+      const icon = folderMatch[3] ?? "▸";
+      const name = folderMatch[4] ?? "";
+      const selected = prefix.startsWith(">");
+      const lineBackgroundColor = selected ? "cyan" : undefined;
+      return {
+        ...(lineBackgroundColor ? { backgroundColor: lineBackgroundColor } : {}),
+        segments: [
+          {
+            ...(lineBackgroundColor ? { backgroundColor: lineBackgroundColor } : {}),
+            color: selected ? "black" : "gray",
+            text: `${prefix}${indent}`,
+          },
+          {
+            ...(lineBackgroundColor ? { backgroundColor: lineBackgroundColor } : {}),
+            bold: true,
+            color: "magenta",
+            text: `${icon} ${name}`,
+          },
+        ],
+        text: line,
+      };
+    }
+  }
+
   if (panelTitle.includes("Flows") && line.startsWith("> ")) {
     return {
       backgroundColor: "cyan",

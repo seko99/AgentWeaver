@@ -56,6 +56,22 @@ function collectLlmPromptSteps(node, acc = []) {
 }
 
 describe("flow spec routing groups", () => {
+  it("hides helper flows marked with catalogVisibility=hidden from the interactive catalog", () => {
+    const entries = loadInteractiveFlowCatalog(process.cwd());
+    const entryIds = new Set(entries.map((entry) => entry.id));
+
+    assert.equal(entryIds.has("normalize-task-source"), false);
+    assert.equal(entryIds.has("task-source/manual-input"), false);
+    assert.equal(entryIds.has("task-source/jira-fetch"), false);
+    assert.equal(entryIds.has("design-review/design-review-loop"), false);
+    assert.equal(entryIds.has("review/review-project"), false);
+    assert.equal(entryIds.has("review/review-project-loop"), false);
+
+    assert.equal(entryIds.has("instant-task"), true);
+    assert.equal(entryIds.has("auto-common"), true);
+    assert.equal(entryIds.has("plan"), true);
+  });
+
   it("annotates every targeted built-in llm-prompt step with an allowed routing group", () => {
     for (const relativePath of targetedSpecs) {
       const spec = JSON.parse(readFileSync(path.join(distRoot, "pipeline/flow-specs", relativePath), "utf8"));

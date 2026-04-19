@@ -2,6 +2,7 @@
   "kind": "design-review-loop-flow",
   "version": 1,
   "description": "Runs design-review and plan-revise for up to 3 iterations. Stops early on approval. If the final design review still requires revision, notifies the user and asks whether to continue with the latest planning artifacts or stop the parent flow.",
+  "catalogVisibility": "hidden",
   "phases": [
     {
       "repeat": {

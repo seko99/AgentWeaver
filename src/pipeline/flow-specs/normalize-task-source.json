@@ -2,6 +2,7 @@
   "kind": "normalize-task-source-flow",
   "version": 1,
   "description": "Normalizes the available task source into a connector-agnostic task-context artifact for planning and review flows.",
+  "catalogVisibility": "hidden",
   "phases": [
     {
       "id": "normalize",

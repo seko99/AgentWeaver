@@ -112,8 +112,10 @@ export function loadInteractiveFlowCatalog(cwd: string): FlowCatalogEntry[] {
     entries.push(loadProjectCatalogEntry(cwd, filePath));
   }
 
+  const visibleEntries = entries.filter((entry) => entry.flow.catalogVisibility !== "hidden");
+
   const byId = new Map<string, FlowCatalogEntry>();
-  for (const entry of entries) {
+  for (const entry of visibleEntries) {
     const duplicate = byId.get(entry.id);
     if (duplicate) {
       throw new TaskRunnerError(
@@ -122,7 +124,7 @@ export function loadInteractiveFlowCatalog(cwd: string): FlowCatalogEntry[] {
     }
     byId.set(entry.id, entry);
   }
-  return entries;
+  return visibleEntries;
 }
 
 export function findCatalogEntry(flowId: string, entries: FlowCatalogEntry[]): FlowCatalogEntry | undefined {

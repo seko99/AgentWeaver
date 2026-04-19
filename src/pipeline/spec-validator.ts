@@ -398,6 +398,12 @@ export function validateFlowSpec(
   executorRegistry: ExecutorRegistry,
   options: ValidateFlowSpecOptions = {},
 ): void {
+  if (spec.catalogVisibility !== undefined) {
+    assert(
+      spec.catalogVisibility === "visible" || spec.catalogVisibility === "hidden",
+      `Unsupported catalogVisibility '${spec.catalogVisibility}' at flow.catalogVisibility`,
+    );
+  }
   assert(spec.kind.trim().length > 0, "Flow spec kind must be non-empty");
   assert(Number.isInteger(spec.version) && spec.version > 0, "Flow spec version must be a positive integer");
   spec.phases.forEach((item, index) => {

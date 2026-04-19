@@ -18,7 +18,7 @@ import { buildProgressViewModel } from "./progress.js";
 import type { InteractiveSessionOptions } from "./session.js";
 import { selectHeaderLabel } from "./selectors.js";
 import { createInitialInteractiveState, type InteractiveSessionState } from "./state.js";
-import { buildFlowTree, collectFolderKeys, computeVisibleFlowItems, makeFlowKey, makeFolderKey } from "./tree.js";
+import { buildFlowTree, collectInitiallyExpandedFolderKeys, computeVisibleFlowItems, makeFlowKey, makeFolderKey } from "./tree.js";
 import type { FocusPane, FlowTreeNode, InteractiveFlowDefinition, VisibleFlowTreeItem } from "./types.js";
 import type { InteractiveSessionViewModel, InteractiveFormViewModel } from "./view-model.js";
 
@@ -183,7 +183,7 @@ export class InteractiveSessionController {
     this.state = createInitialInteractiveState(options);
     this.flowMap = new Map(options.flows.map((flow) => [flow.id, flow]));
     this.flowTree = buildFlowTree(options.flows);
-    collectFolderKeys(this.flowTree).forEach((key) => this.expandedFlowFolders.add(key));
+    collectInitiallyExpandedFolderKeys(this.flowTree).forEach((key) => this.expandedFlowFolders.add(key));
     this.visibleFlowItems = computeVisibleFlowItems(this.flowTree, this.expandedFlowFolders);
   }
 

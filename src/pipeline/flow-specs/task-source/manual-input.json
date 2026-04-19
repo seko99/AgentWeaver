@@ -2,6 +2,7 @@
   "kind": "task-source-manual-flow",
   "version": 1,
   "description": "Collects manual task input in the current project scope for subsequent normalization and planning. Stored input is reused on reruns and can be edited on interactive restart.",
+  "catalogVisibility": "hidden",
   "phases": [
     {
       "id": "source",

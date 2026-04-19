@@ -2,6 +2,7 @@
   "kind": "review-project-loop-flow",
   "version": 1,
   "description": "Iteratively runs project review → review-fix cycles up to 5 times when no structured planning context is available. Stops early when ready-to-merge is achieved. Each iteration auto-selects the configured blocking severities for fixing. After iteration 5, runs a terminal verification project review to confirm the post-fix state.",
+  "catalogVisibility": "hidden",
   "constants": {
     "autoReviewFixExtraPrompt": "Fix only configured blocking severities."
   },

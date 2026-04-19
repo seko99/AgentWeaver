@@ -167,6 +167,7 @@ export type DeclarativeFlowSpec = {
   kind: string;
   version: number;
   description?: string;
+  catalogVisibility?: "visible" | "hidden";
   constants?: Record<string, JsonValue>;
   phases: Array<DeclarativePhaseSpec | RepeatPhaseSpec>;
 };

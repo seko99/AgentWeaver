@@ -2,6 +2,7 @@
   "kind": "task-source-jira-flow",
   "version": 1,
   "description": "Fetches raw Jira task context and attachments into scope artifacts for subsequent normalization.",
+  "catalogVisibility": "hidden",
   "phases": [
     {
       "id": "source",
