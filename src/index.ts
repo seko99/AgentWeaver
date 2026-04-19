@@ -308,7 +308,6 @@ Optional environment variables:
   GITLAB_TOKEN
   AGENTWEAVER_HOME
   ${AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV}
-  AGENTWEAVER_TUI
   CODEX_BIN
   CODEX_MODEL
   OPENCODE_BIN
@@ -319,7 +318,7 @@ Notes:
   - All flow state and artifacts are stored in the current project scope by default.
   - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.
   - ${AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV} sets the default blocking severities. Default: blocker,critical,high.
-  - AGENTWEAVER_TUI selects the interactive renderer. Supported values are ink and blessed.`;
+  - Interactive mode requires Ink runtime dependencies and a real TTY.`;
 }
 
 function packageVersion(): string {

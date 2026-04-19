@@ -34,7 +34,7 @@ describe("interactive state bootstrap", () => {
     });
 
     assert.equal(state.selectedFlowId, "auto-common");
-    assert.equal(state.selectedFlowItemKey, "folder:default");
+    assert.equal(state.selectedFlowItemKey, "flow:auto-common");
     assert.equal(state.focusedPane, "flows");
     assert.equal(state.summaryVisible, true);
     assert.equal(state.flowTreeKeys[0], "folder:default");

@@ -1,8 +1,12 @@
 import type { InteractiveSessionOptions } from "./session.js";
 import type { FlowStatusState, FocusPane } from "./types.js";
-import { buildFlowTree, computeVisibleFlowItems, makeFlowKey } from "./tree.js";
+import { buildFlowTree, collectFolderKeys, computeVisibleFlowItems, makeFlowKey } from "./tree.js";
 
 export type InteractiveSessionState = {
+  scopeKey: string;
+  jiraIssueKey: string | null;
+  summaryText: string;
+  version: string;
   flowTreeKeys: string[];
   selectedFlowId: string;
   selectedFlowItemKey: string;
@@ -14,17 +18,29 @@ export type InteractiveSessionState = {
   currentExecutor: string | null;
   failedFlowId: string | null;
   flowState: FlowStatusState;
+  runningStartedAt: number | null;
+  spinnerFrame: number;
+  progressScrollOffset: number;
+  summaryScrollOffset: number;
+  logScrollOffset: number;
+  helpScrollOffset: number;
 };
 
 export function createInitialInteractiveState(options: InteractiveSessionOptions): InteractiveSessionState {
   const flowTree = buildFlowTree(options.flows);
-  const visibleFlowItems = computeVisibleFlowItems(flowTree, new Set<string>());
+  const expandedFlowFolders = new Set<string>(collectFolderKeys(flowTree));
+  const visibleFlowItems = computeVisibleFlowItems(flowTree, expandedFlowFolders);
   const selectedFlowId = options.flows[0]?.id ?? "auto-golang";
+  const initiallySelectedItem = visibleFlowItems.find((item) => item.kind === "flow") ?? visibleFlowItems[0];
 
   return {
+    scopeKey: options.scopeKey,
+    jiraIssueKey: options.jiraIssueKey ?? null,
+    summaryText: options.summaryText.trim(),
+    version: options.version ?? "",
     flowTreeKeys: flowTree.map((node) => node.key),
     selectedFlowId,
-    selectedFlowItemKey: visibleFlowItems[0]?.key ?? makeFlowKey(selectedFlowId),
+    selectedFlowItemKey: initiallySelectedItem?.key ?? makeFlowKey(selectedFlowId),
     focusedPane: "flows",
     summaryVisible: options.summaryText.trim().length > 0,
     busy: false,
@@ -36,5 +52,11 @@ export function createInitialInteractiveState(options: InteractiveSessionOptions
       flowId: null,
       executionState: null,
     },
+    runningStartedAt: null,
+    spinnerFrame: 0,
+    progressScrollOffset: 0,
+    summaryScrollOffset: 0,
+    logScrollOffset: 0,
+    helpScrollOffset: 0,
   };
 }

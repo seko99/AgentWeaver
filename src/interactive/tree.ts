@@ -146,3 +146,20 @@ export function computeVisibleFlowItems(
   walk(flowTree, 0);
   return items;
 }
+
+export function collectFolderKeys(flowTree: FlowTreeNode[]): string[] {
+  const keys: string[] = [];
+
+  const walk = (nodes: FlowTreeNode[]): void => {
+    for (const node of nodes) {
+      if (node.kind !== "folder") {
+        continue;
+      }
+      keys.push(node.key);
+      walk(node.children);
+    }
+  };
+
+  walk(flowTree);
+  return keys;
+}

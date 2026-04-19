@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -9,31 +10,21 @@ const sessionFactoryModule = await import(
 );
 
 describe("interactive session renderer selection", () => {
-  it("defaults the requested renderer to ink when AGENTWEAVER_TUI is unset or invalid", () => {
-    assert.equal(sessionFactoryModule.resolveInteractiveRenderer({}), "ink");
-    assert.equal(sessionFactoryModule.resolveInteractiveRenderer({ AGENTWEAVER_TUI: "INK" }), "ink");
-    assert.equal(sessionFactoryModule.resolveInteractiveRenderer({ AGENTWEAVER_TUI: "unknown" }), "ink");
-  });
-
-  it("falls back to blessed when ink is unavailable", () => {
-    assert.equal(
-      sessionFactoryModule.resolveEffectiveInteractiveRenderer({}, false),
-      "blessed",
-    );
-    assert.equal(
-      sessionFactoryModule.resolveEffectiveInteractiveRenderer({ AGENTWEAVER_TUI: "ink" }, false),
-      "blessed",
+  it("explains why interactive mode is unavailable without a TTY", () => {
+    assert.match(
+      sessionFactoryModule.describeInkInteractiveSessionAvailability(),
+      /requires a real TTY|requires installed runtime dependencies/i,
     );
   });
 
-  it("keeps blessed as an explicit rollback path", () => {
-    assert.equal(
-      sessionFactoryModule.resolveEffectiveInteractiveRenderer({ AGENTWEAVER_TUI: "blessed" }, false),
-      "blessed",
-    );
-    assert.equal(
-      sessionFactoryModule.resolveEffectiveInteractiveRenderer({ AGENTWEAVER_TUI: "blessed" }, true),
-      "blessed",
-    );
+  it("declares the Ink runtime dependencies required by the default renderer", async () => {
+    const packageJson = JSON.parse(await readFile(path.resolve(process.cwd(), "package.json"), "utf8"));
+    assert.equal(typeof packageJson.dependencies?.ink, "string");
+    assert.equal(typeof packageJson.dependencies?.react, "string");
+    assert.equal(packageJson.dependencies?.["neo-blessed"], undefined);
+
+    const builtInkSession = await readFile(path.join(distRoot, "interactive/ink/index.js"), "utf8");
+    assert.match(builtInkSession, /import\("ink"\)/);
+    assert.match(builtInkSession, /import\("react"\)/);
   });
 });

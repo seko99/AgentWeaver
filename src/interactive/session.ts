@@ -2,7 +2,6 @@ import type { UserInputFormDefinition, UserInputResult } from "../user-input.js"
 import type { InteractiveFlowDefinition } from "./types.js";
 
 export type FlowLaunchMode = "resume" | "restart";
-export type InteractiveRenderer = "ink" | "blessed";
 
 export type InteractiveSessionOptions = {
   scopeKey: string;
