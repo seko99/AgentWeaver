@@ -21,8 +21,11 @@
             "designIteration": { "ref": "params.designIteration" },
             "planIteration": { "ref": "params.planIteration" },
             "qaIteration": { "ref": "params.qaIteration" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
             "extraPrompt": { "ref": "params.extraPrompt" },
-            "forceRefresh": { "ref": "params.forceRefresh" }
+            "forceRefresh": { "ref": "params.forceRefresh" },
+            "mdLang": { "ref": "params.mdLang" }
           }
         }
       ]

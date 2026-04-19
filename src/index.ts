@@ -90,7 +90,9 @@ import {
   resolveExecutionRouting,
 } from "./runtime/execution-routing.js";
 import { requestInteractiveExecutionRouting } from "./runtime/interactive-execution-routing.js";
-import { InteractiveUi, type InteractiveFlowDefinition } from "./interactive-ui.js";
+import { createInteractiveSession } from "./interactive/create-interactive-session.js";
+import type { InteractiveSession } from "./interactive/session.js";
+import type { InteractiveFlowDefinition } from "./interactive/types.js";
 import {
   bye,
   getOutputAdapter,
@@ -296,6 +298,7 @@ Optional environment variables:
   JIRA_BASE_URL
   GITLAB_TOKEN
   AGENTWEAVER_HOME
+  AGENTWEAVER_TUI
   CODEX_BIN
   CODEX_MODEL
   OPENCODE_BIN
@@ -304,7 +307,8 @@ Optional environment variables:
 Notes:
   - Jira-backed task flows will ask for Jira task via user-input when it is not passed as an argument. task-describe can also work from a manual task description without Jira.
   - All flow state and artifacts are stored in the current project scope by default.
-  - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.`;
+  - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.
+  - AGENTWEAVER_TUI selects the interactive renderer. Supported values are ink and blessed.`;
 }
 
 function packageVersion(): string {
@@ -797,7 +801,7 @@ function loadTaskSummaryMarkdown(taskKey: string): string | null {
 }
 
 function syncInteractiveTaskSummary(
-  ui: InteractiveUi,
+  ui: InteractiveSession,
   scope: ResolvedScope,
   forceRefresh = false,
 ): void {
@@ -1744,7 +1748,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
   let activeFlowId: string | null = null;
 
   let exiting = false;
-  const ui = new InteractiveUi(
+  const ui = createInteractiveSession(
     {
       scopeKey: currentScope.scopeKey,
       jiraIssueKey: currentScope.jiraIssueKey ?? null,

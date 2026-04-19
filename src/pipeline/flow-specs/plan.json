@@ -166,6 +166,7 @@
         },
         {
           "id": "notify_questions_need_answering",
+          "when": { "not": { "equals": [{ "ref": "steps.plan.build_planning_questions_form.value.questionCount" }, { "const": 0 }] } },
           "node": "telegram-notify",
           "params": {
             "message": { "const": "Questions need answering" }

@@ -5,6 +5,19 @@ import { renderMarkdownToTerminal } from "./markdown.js";
 import type { FlowExecutionState } from "./pipeline/spec-types.js";
 import { setOutputAdapter, stripAnsi, type OutputAdapter } from "./tui.js";
 import { FlowInterruptedError, TaskRunnerError } from "./errors.js";
+import { buildProgressViewModel } from "./interactive/progress.js";
+import type {
+  FlowTreeNode,
+  FlowStatus,
+  FlowStatusState,
+  FocusPane,
+  InteractiveFlowDefinition,
+  ProgressViewModelItem,
+  VisibleFlowTreeItem,
+} from "./interactive/types.js";
+import { selectHeaderLabel } from "./interactive/selectors.js";
+import { buildFlowTree, computeVisibleFlowItems, makeFlowKey, makeFolderKey } from "./interactive/tree.js";
+import type { InteractiveSessionOptions } from "./interactive/session.js";
 import {
   buildInitialUserInputValues,
   normalizeUserInputFieldValue,
@@ -15,47 +28,6 @@ import {
   type UserInputFormValues,
   type UserInputResult,
 } from "./user-input.js";
-
-type InteractiveFlowDefinition = {
-  id: string;
-  label: string;
-  description: string;
-  source: "built-in" | "project-local";
-  treePath: string[];
-  sourcePath?: string;
-  phases: Array<{
-    id: string;
-    repeatVars: Record<string, string | number | boolean | null>;
-    steps: Array<{
-      id: string;
-    }>;
-  }>;
-};
-
-type InteractiveUiOptions = {
-  scopeKey: string;
-  jiraIssueKey?: string | null;
-  summaryText: string;
-  cwd: string;
-  gitBranchName: string | null;
-  version: string;
-  flows: InteractiveFlowDefinition[];
-  getRunConfirmation: (flowId: string) => Promise<{
-    resumeAvailable: boolean;
-    hasExistingState: boolean;
-    details?: string | null;
-  }>;
-  onRun: (flowId: string, mode: "resume" | "restart") => Promise<void>;
-  onInterrupt: (flowId: string) => Promise<void>;
-  onExit: () => void;
-};
-
-type FocusPane = "flows" | "progress" | "summary" | "log";
-
-type FlowStatusState = {
-  flowId: string | null;
-  executionState: FlowExecutionState | null;
-};
 
 type ActiveFormSession = {
   form: UserInputFormDefinition;
@@ -79,53 +51,6 @@ type ConfirmSession = {
 
 const CONFIRM_MIN_WIDTH = 44;
 const CONFIRM_MIN_HEIGHT = 8;
-
-type FlowTreeFolderNode = {
-  kind: "folder";
-  key: string;
-  name: string;
-  pathSegments: string[];
-  children: FlowTreeNode[];
-};
-
-type FlowTreeFlowNode = {
-  kind: "flow";
-  key: string;
-  name: string;
-  pathSegments: string[];
-  flow: InteractiveFlowDefinition;
-};
-
-type FlowTreeNode = FlowTreeFolderNode | FlowTreeFlowNode;
-
-type VisibleFlowTreeItem =
-  | {
-      kind: "folder";
-      key: string;
-      name: string;
-      depth: number;
-      pathSegments: string[];
-    }
-  | {
-      kind: "flow";
-      key: string;
-      name: string;
-      depth: number;
-      pathSegments: string[];
-      flow: InteractiveFlowDefinition;
-    };
-
-function compareTreeNames(left: string, right: string): number {
-  return left.localeCompare(right, "ru");
-}
-
-function makeFolderKey(pathSegments: string[]): string {
-  return `folder:${pathSegments.join("/")}`;
-}
-
-function makeFlowKey(flowId: string): string {
-  return `flow:${flowId}`;
-}
 
 function escapeBlessedTags(text: string): string {
   return text.replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
@@ -154,103 +79,6 @@ function textLineColumnToIndex(value: string, line: number, column: number): num
   }
   const targetLine = lines[boundedLine] ?? "";
   return index + Math.max(0, Math.min(targetLine.length, column));
-}
-
-function buildFlowTree(flows: InteractiveFlowDefinition[]): FlowTreeNode[] {
-  const roots = new Map<string, FlowTreeFolderNode>();
-
-  const ensureFolder = (pathSegments: string[]): FlowTreeFolderNode => {
-    const firstSegment = pathSegments[0];
-    if (!firstSegment) {
-      throw new Error("Flow tree folder path cannot be empty.");
-    }
-
-    const rootFolder = roots.get(firstSegment);
-    let currentFolder: FlowTreeFolderNode;
-    if (rootFolder) {
-      currentFolder = rootFolder;
-    } else {
-      currentFolder = {
-        kind: "folder",
-        key: makeFolderKey([firstSegment]),
-        name: firstSegment,
-        pathSegments: [firstSegment],
-        children: [],
-      };
-      roots.set(firstSegment, currentFolder);
-    }
-
-    for (let index = 1; index < pathSegments.length; index += 1) {
-      const segment = pathSegments[index] ?? "";
-      const folderPath = pathSegments.slice(0, index + 1);
-      let nextFolder = currentFolder.children.find(
-        (child): child is FlowTreeFolderNode => child.kind === "folder" && child.name === segment,
-      );
-      if (!nextFolder) {
-        nextFolder = {
-          kind: "folder",
-          key: makeFolderKey(folderPath),
-          name: segment,
-          pathSegments: folderPath,
-          children: [],
-        };
-        currentFolder.children.push(nextFolder);
-      }
-      currentFolder = nextFolder;
-    }
-
-    return currentFolder;
-  };
-
-  for (const flow of flows) {
-    if (flow.treePath.length === 0) {
-      continue;
-    }
-    const folderPath = flow.treePath.slice(0, -1);
-    const leafName = flow.treePath[flow.treePath.length - 1] ?? flow.id;
-    const parent = ensureFolder(folderPath);
-    parent.children.push({
-      kind: "flow",
-      key: makeFlowKey(flow.id),
-      name: leafName,
-      pathSegments: [...flow.treePath],
-      flow,
-    });
-  }
-
-  const sortNodes = (nodes: FlowTreeNode[]): FlowTreeNode[] =>
-    [...nodes]
-      .sort((left, right) => {
-        if (left.kind !== right.kind) {
-          return left.kind === "folder" ? -1 : 1;
-        }
-        return compareTreeNames(left.name, right.name);
-      })
-      .map((node) =>
-        node.kind === "folder"
-          ? {
-              ...node,
-              children: sortNodes(node.children),
-            }
-          : node,
-      );
-
-  const orderedRootNames = ["custom", "default"];
-  const sortedRoots = [...roots.values()].sort((left, right) => {
-    const leftIndex = orderedRootNames.indexOf(left.name);
-    const rightIndex = orderedRootNames.indexOf(right.name);
-    if (leftIndex !== -1 || rightIndex !== -1) {
-      if (leftIndex === -1) {
-        return 1;
-      }
-      if (rightIndex === -1) {
-        return -1;
-      }
-      return leftIndex - rightIndex;
-    }
-    return compareTreeNames(left.name, right.name);
-  });
-  return sortNodes(sortedRoots);
 }
 
 export class InteractiveUi {
@@ -302,7 +130,7 @@ export class InteractiveUi {
   private summaryVisible: boolean;
   private readonly version: string;
 
-  constructor(private readonly options: InteractiveUiOptions) {
+  constructor(private readonly options: InteractiveSessionOptions) {
     if (options.flows.length === 0) {
       throw new Error("Interactive UI requires at least one flow.");
     }
@@ -1967,75 +1795,24 @@ export class InteractiveUi {
           ? this.flowState.executionState
           : null;
 
+    const progressViewModel = buildProgressViewModel(flow, flowState);
     const lines: string[] = [`{bold}${flow.label}{/bold}`, ""];
-    let anchorLine: number | null = null;
-    let sawExecutedItem = false;
-    const rememberAnchor = (status: "pending" | "running" | "done" | "skipped"): void => {
-      if (status === "running") {
-        anchorLine = lines.length;
-        sawExecutedItem = true;
-        return;
-      }
-      if (status === "done" || status === "skipped") {
-        sawExecutedItem = true;
-        return;
-      }
-      if (status === "pending" && sawExecutedItem && anchorLine === null) {
-        anchorLine = lines.length;
-      }
-    };
-    for (const item of this.visiblePhaseItems(flow, flowState)) {
-      if (item.kind === "group") {
-        const visiblePhases = item.phases.filter((phase) => this.shouldDisplayPhase(flow, flowState, phase));
-        if (visiblePhases.length === 0) {
-          continue;
-        }
-        const groupStatus = this.statusForGroup(flow, visiblePhases, flowState);
-        rememberAnchor(groupStatus);
-        lines.push(`${this.symbolForGroup(flow.id, flow, visiblePhases, flowState)} ${this.colorizeProgressLabel(item.label, groupStatus)}`);
-        for (const phase of visiblePhases) {
-          const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
-          const phaseStatus = this.displayStatusForPhase(flowState, flow, phase, phaseState?.status ?? null);
-          rememberAnchor(phaseStatus);
-          lines.push(`  ${this.symbolForStatus(flow.id, phaseStatus)} ${this.colorizeProgressLabel(this.displayPhaseId(phase), phaseStatus)}`);
-          for (const step of phase.steps) {
-            const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
-            const stepStatus = this.displayStatusForStep(flowState, flow, phase, stepState?.status ?? null);
-            rememberAnchor(stepStatus);
-            lines.push(`    ${this.symbolForStatus(flow.id, stepStatus)} ${this.colorizeProgressLabel(step.id, stepStatus)}`);
-          }
-        }
-        lines.push("");
+    for (const item of progressViewModel.items) {
+      if (item.kind === "termination") {
+        const symbol = item.status === "done" ? "{green-fg}✓{/green-fg}" : "{yellow-fg}■{/yellow-fg}";
+        lines.push(`${symbol} ${this.colorizeProgressLabel(item.label, item.status)}`);
+        lines.push(`{gray-fg}${item.detail}{/gray-fg}`);
         continue;
       }
-      const phase = item.phase;
-      if (!this.shouldDisplayPhase(flow, flowState, phase)) {
-        continue;
-      }
-      const phaseState = flowState?.phases.find((candidate) => candidate.id === phase.id);
-      const phaseStatus = this.displayStatusForPhase(flowState, flow, phase, phaseState?.status ?? null);
-      rememberAnchor(phaseStatus);
-      lines.push(`${this.symbolForStatus(flow.id, phaseStatus)} ${this.colorizeProgressLabel(this.displayPhaseId(phase), phaseStatus)}`);
-      for (const step of phase.steps) {
-        const stepState = phaseState?.steps.find((candidate) => candidate.id === step.id);
-        const stepStatus = this.displayStatusForStep(flowState, flow, phase, stepState?.status ?? null);
-        rememberAnchor(stepStatus);
-        lines.push(`  ${this.symbolForStatus(flow.id, stepStatus)} ${this.colorizeProgressLabel(step.id, stepStatus)}`);
-      }
-      lines.push("");
-    }
-    if (flowState?.terminated) {
-      const terminationOutcome = flowState.terminationOutcome ?? "success";
-      if (terminationOutcome === "stopped") {
-        lines.push(`{yellow-fg}■{/yellow-fg} {yellow-fg}Flow stopped before completion{/yellow-fg}`);
-      } else {
-        lines.push(`{green-fg}✓{/green-fg} {green-fg}Flow completed successfully{/green-fg}`);
-      }
-      lines.push(`{gray-fg}Reason: ${flowState.terminationReason ?? "flow terminated"}{/gray-fg}`);
+      const indent = "  ".repeat(item.depth);
+      lines.push(
+        `${indent}${this.symbolForStatus(flow.id, item.status)} ${this.colorizeProgressLabel(item.label, item.status)}`,
+      );
     }
     this.progress.setContent(lines.join("\n").trimEnd());
-    if (this.busy && this.activeFlowId() === flow.id && anchorLine !== null) {
+    if (this.busy && this.activeFlowId() === flow.id && progressViewModel.anchorIndex !== null) {
       const viewportHeight = Math.max(1, Number(this.progress.height) - 2);
+      const anchorLine = progressViewModel.anchorIndex + 2;
       const targetScroll = Math.max(0, anchorLine - Math.floor(viewportHeight / 2));
       this.progress.setScroll(targetScroll);
     }
@@ -2563,34 +2340,7 @@ export class InteractiveUi {
   }
 
   private computeVisibleFlowItems(): VisibleFlowTreeItem[] {
-    const items: VisibleFlowTreeItem[] = [];
-    const walk = (nodes: FlowTreeNode[], depth: number): void => {
-      for (const node of nodes) {
-        if (node.kind === "folder") {
-          items.push({
-            kind: "folder",
-            key: node.key,
-            name: node.name,
-            depth,
-            pathSegments: [...node.pathSegments],
-          });
-          if (this.expandedFlowFolders.has(node.key)) {
-            walk(node.children, depth + 1);
-          }
-          continue;
-        }
-        items.push({
-          kind: "flow",
-          key: node.key,
-          name: node.name,
-          depth,
-          pathSegments: [...node.pathSegments],
-          flow: node.flow,
-        });
-      }
-    };
-    walk(this.flowTree, 0);
-    return items;
+    return computeVisibleFlowItems(this.flowTree, this.expandedFlowFolders);
   }
 
   private selectedFlowTreeItem(): VisibleFlowTreeItem | undefined {
@@ -2598,11 +2348,7 @@ export class InteractiveUi {
   }
 
   private selectedHeaderLabel(): string {
-    const selectedItem = this.selectedFlowTreeItem();
-    if (!selectedItem) {
-      return this.selectedFlowId;
-    }
-    return selectedItem.kind === "folder" ? selectedItem.pathSegments.join("/") : selectedItem.flow.label;
+    return selectHeaderLabel(this.selectedFlowTreeItem(), this.selectedFlowId);
   }
 
   private refreshVisibleFlowItems(): void {
