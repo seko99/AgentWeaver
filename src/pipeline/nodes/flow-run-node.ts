@@ -76,6 +76,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           qaJsonFilePath: contract.qaJsonFilePath,
           qaFile: contract.qaFile,
           qaJsonFile: contract.qaJsonFile,
+          hasTaskContextJsonFile: contract.hasTaskContextJsonFile,
+          taskContextJsonFilePath: contract.taskContextJsonFilePath,
+          taskContextJsonFile: contract.taskContextJsonFile,
           hasJiraTaskFile: contract.hasJiraTaskFile,
           jiraTaskFilePath: contract.jiraTaskFilePath,
           jiraTaskFile: contract.jiraTaskFile,
@@ -98,6 +101,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           "params.planJsonFile": contract.planJsonFile,
           ...(contract.qaFilePath ? { "params.qaFile": contract.qaFilePath } : {}),
           ...(contract.qaJsonFilePath ? { "params.qaJsonFile": contract.qaJsonFilePath } : {}),
+          ...(contract.taskContextJsonFilePath
+            ? { "params.taskContextJsonFile": contract.taskContextJsonFilePath }
+            : {}),
           ...(contract.jiraTaskFilePath ? { "params.jiraTaskFile": contract.jiraTaskFilePath } : {}),
           ...(contract.jiraAttachmentsManifestFilePath
             ? { "params.jiraAttachmentsManifestFile": contract.jiraAttachmentsManifestFilePath }
@@ -139,6 +145,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           revisedPlanJsonFile: contract.revisedPlanJsonFile,
           revisedQaFile: contract.revisedQaFile,
           revisedQaJsonFile: contract.revisedQaJsonFile,
+          hasTaskContextJsonFile: contract.hasTaskContextJsonFile,
+          taskContextJsonFilePath: contract.taskContextJsonFilePath,
+          taskContextJsonFile: contract.taskContextJsonFile,
           hasJiraTaskFile: contract.hasJiraTaskFile,
           jiraTaskFilePath: contract.jiraTaskFilePath,
           jiraTaskFile: contract.jiraTaskFile,
@@ -163,6 +172,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           "params.planJsonFile": contract.planJsonFile,
           ...(contract.qaFilePath ? { "params.qaFile": contract.qaFilePath } : {}),
           ...(contract.qaJsonFilePath ? { "params.qaJsonFile": contract.qaJsonFilePath } : {}),
+          ...(contract.taskContextJsonFilePath
+            ? { "params.taskContextJsonFile": contract.taskContextJsonFilePath }
+            : {}),
           ...(contract.jiraTaskFilePath ? { "params.jiraTaskFile": contract.jiraTaskFilePath } : {}),
           ...(contract.jiraAttachmentsManifestFilePath
             ? { "params.jiraAttachmentsManifestFile": contract.jiraAttachmentsManifestFilePath }
@@ -191,6 +203,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
             designJsonFile: contract.designJsonFile,
             planFile: contract.planFile,
             planJsonFile: contract.planJsonFile,
+            hasTaskContextJsonFile: contract.hasTaskContextJsonFile,
+            taskContextJsonFilePath: contract.taskContextJsonFilePath,
+            taskContextJsonFile: contract.taskContextJsonFile,
             hasJiraTaskFile: contract.hasJiraTaskFile,
             jiraTaskFilePath: contract.jiraTaskFilePath,
             jiraTaskFile: contract.jiraTaskFile,
@@ -202,6 +217,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
             "params.designJsonFile": contract.designJsonFile,
             "params.planFile": contract.planFile,
             "params.planJsonFile": contract.planJsonFile,
+            ...(contract.taskContextJsonFilePath
+              ? { "params.taskContextJsonFile": contract.taskContextJsonFilePath }
+              : {}),
             ...(contract.jiraTaskFilePath ? { "params.jiraTaskFile": contract.jiraTaskFilePath } : {}),
             ...(contract.taskInputJsonFilePath
               ? { "params.taskInputJsonFile": contract.taskInputJsonFilePath }
