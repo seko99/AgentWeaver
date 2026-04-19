@@ -454,7 +454,16 @@ export async function runExpandedPhase(
     if (step.prompt) {
       params.prompt = renderPrompt(step.prompt, stepContext);
     }
-    const result = await runNodeByKind(step.node, pipelineContext, params, { skipChecks: step.expect !== undefined });
+    const result = await runNodeByKind(step.node, pipelineContext, params, {
+      skipChecks: step.expect !== undefined,
+      contextOverrides: {
+        ...(stepState.value !== undefined ? { resumeStepValue: stepState.value } : {}),
+        persistRunningStepValue: async (value) => {
+          stepState.value = value;
+          await options.onStateChange?.(executionState);
+        },
+      },
+    });
     stepState.value = toJsonValue(result.value);
     const stepOutputs = toStepOutputs(result.value);
     if (stepOutputs) {

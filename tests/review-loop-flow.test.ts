@@ -6,8 +6,22 @@ import { loadDeclarativeFlow } from "../src/pipeline/declarative-flows.js";
 import { createNodeRegistry } from "../src/pipeline/node-registry.js";
 import { readyToMergeFile } from "../src/artifacts.js";
 import { evaluateCondition } from "../src/pipeline/value-resolver.js";
+import { resolveReviewLoopBaseIteration } from "../src/pipeline/review-iteration.js";
 
 const TEST_TASK_KEY = "REVIEW-LOOP-TEST-1";
+const REPEATED_ACTUAL_ITERATION_SPEC = {
+  add: [
+    { ref: "params.baseIteration" },
+    { ref: "repeat.iteration" },
+    { const: -1 },
+  ],
+};
+const TERMINAL_ACTUAL_ITERATION_SPEC = {
+  add: [
+    { ref: "params.baseIteration" },
+    { const: 5 },
+  ],
+};
 
 function setupTestScope(): void {
   const artifactsDir = join(process.cwd(), ".agentweaver", "scopes", TEST_TASK_KEY, ".artifacts");
@@ -166,7 +180,7 @@ describe("review-loop flow structure", () => {
     expect(clearStep).toBeDefined();
   });
 
-  it("should have review_iteration_6 in terminal_verification phase", async () => {
+  it("should map terminal verification to baseIteration + 5", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const terminalPhase = flow.phases.find((p) => p.id === "terminal_verification");
     expect(terminalPhase).toBeDefined();
@@ -174,7 +188,7 @@ describe("review-loop flow structure", () => {
       (s) => s.node === "flow-run" && s.params?.fileName && "const" in s.params.fileName && s.params.fileName.const === "review.json",
     );
     expect(terminalReviewStep).toBeDefined();
-    expect(terminalReviewStep!.params?.iteration).toEqual({ const: 6 });
+    expect(terminalReviewStep!.params?.iteration).toEqual(TERMINAL_ACTUAL_ITERATION_SPEC);
   });
 
   it("should have file-check assertion in terminal_verification phase", async () => {
@@ -187,19 +201,21 @@ describe("review-loop flow structure", () => {
     expect(assertStep!.expect!.length).toBeGreaterThan(0);
   });
 
-  it("should NOT have review-fix iteration 6 anywhere in the flow", async () => {
+  it("should derive actual review and review-fix iterations from baseIteration", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
-    for (const phase of flow.phases) {
-      for (const step of phase.steps) {
-        if (step.node === "flow-run" && step.params?.fileName) {
-          const fileName = step.params.fileName as { const: string };
-          if (fileName.const === "review-fix.json") {
-            const latestIteration = step.params?.latestIteration as { const: number } | undefined;
-            expect(latestIteration?.const).not.toBe(6);
-          }
-        }
-      }
-    }
+    const firstPhase = flow.phases.find((phase) => phase.id === "review_iteration_1");
+    const repeatedPhase = flow.phases.find((phase) => phase.id === "review_iteration_2");
+    expect(firstPhase).toBeDefined();
+    expect(repeatedPhase).toBeDefined();
+
+    const firstReviewStep = firstPhase!.steps.find((step) => step.id === "run_review");
+    const firstReviewFixStep = firstPhase!.steps.find((step) => step.id === "run_review_fix");
+    const repeatedReviewStep = repeatedPhase!.steps.find((step) => step.id === "run_review");
+    const repeatedReviewFixStep = repeatedPhase!.steps.find((step) => step.id === "run_review_fix");
+    expect(firstReviewStep?.params?.iteration).toEqual({ ref: "params.baseIteration" });
+    expect(firstReviewFixStep?.params?.latestIteration).toEqual({ ref: "params.baseIteration" });
+    expect(repeatedReviewStep?.params?.iteration).toEqual(REPEATED_ACTUAL_ITERATION_SPEC);
+    expect(repeatedReviewFixStep?.params?.latestIteration).toEqual(REPEATED_ACTUAL_ITERATION_SPEC);
   });
 
   it("should stop early when review iteration produces ready-to-merge", async () => {
@@ -215,6 +231,12 @@ describe("review-loop flow structure", () => {
 });
 
 describe("review-loop flow callers", () => {
+  it("should resolve legacy iteration compatibility with baseIteration precedence", () => {
+    expect(resolveReviewLoopBaseIteration({ iteration: 4 })).toBe(4);
+    expect(resolveReviewLoopBaseIteration({ baseIteration: 7 })).toBe(7);
+    expect(resolveReviewLoopBaseIteration({ baseIteration: 7, iteration: 4 })).toBe(7);
+  });
+
   it("auto-simple should route through plan.json", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
     const planPhase = flow.phases.find((p) => p.id === "plan");
@@ -244,6 +266,7 @@ describe("review-loop flow callers", () => {
     const runStep = reviewLoopPhase!.steps.find((s) => s.node === "flow-run");
     expect(runStep).toBeDefined();
     expect(runStep!.params?.fileName).toEqual({ const: "review-loop.json" });
+    expect(runStep!.params?.baseIteration).toEqual({ ref: "params.baseIteration" });
   });
 
   it("auto-golang should route through review-loop.json", async () => {
@@ -253,10 +276,37 @@ describe("review-loop flow callers", () => {
       for (const step of phase.steps) {
         if (step.node === "flow-run" && step.params?.fileName && "const" in step.params.fileName && step.params.fileName.const === "review-loop.json") {
           foundReviewLoopFlowRun = true;
+          expect(step.params.baseIteration).toEqual({ ref: "params.baseIteration" });
         }
       }
     }
     expect(foundReviewLoopFlowRun).toBe(true);
+  });
+
+  it("auto-common should pass baseIteration into review-loop", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const reviewLoopPhase = flow.phases.find((phase) => phase.id === "review-loop");
+    const runStep = reviewLoopPhase?.steps.find((step) => step.id === "run_review_loop");
+    expect(runStep?.params?.baseIteration).toEqual({ ref: "params.baseIteration" });
+  });
+
+  it("instant-task should pass baseIteration into review-loop", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "instant-task.json" });
+    const reviewLoopPhase = flow.phases.find((phase) => phase.id === "review-loop");
+    const runStep = reviewLoopPhase?.steps.find((step) => step.id === "run_review_loop");
+    expect(runStep?.params?.baseIteration).toEqual({ ref: "params.baseIteration" });
+  });
+
+  it("project review-loop should use the same baseIteration arithmetic", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-project-loop.json" });
+    const firstPhase = flow.phases.find((phase) => phase.id === "review_iteration_1");
+    const repeatedPhase = flow.phases.find((phase) => phase.id === "review_iteration_2");
+    const terminalPhase = flow.phases.find((phase) => phase.id === "terminal_verification");
+    expect(firstPhase?.steps.find((step) => step.id === "run_review")?.params?.iteration).toEqual({ ref: "params.baseIteration" });
+    expect(firstPhase?.steps.find((step) => step.id === "run_review_fix")?.params?.latestIteration).toEqual({ ref: "params.baseIteration" });
+    expect(repeatedPhase?.steps.find((step) => step.id === "run_review")?.params?.iteration).toEqual(REPEATED_ACTUAL_ITERATION_SPEC);
+    expect(repeatedPhase?.steps.find((step) => step.id === "run_review_fix")?.params?.latestIteration).toEqual(REPEATED_ACTUAL_ITERATION_SPEC);
+    expect(terminalPhase?.steps.find((step) => step.id === "run_terminal_review")?.params?.iteration).toEqual(TERMINAL_ACTUAL_ITERATION_SPEC);
   });
 });
 

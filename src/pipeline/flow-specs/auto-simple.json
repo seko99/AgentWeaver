@@ -114,6 +114,7 @@
             "fileName": { "const": "review-loop.json" },
             "labelText": { "const": "Running review-loop" },
             "taskKey": { "ref": "params.taskKey" },
+            "baseIteration": { "ref": "params.baseIteration" },
             "workspaceDir": { "ref": "params.workspaceDir" },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "reviewFixPoints": { "ref": "params.reviewFixPoints" },

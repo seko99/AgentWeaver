@@ -77,6 +77,7 @@ import {
   type LlmExecutorId,
   type ResolvedLaunchProfile,
 } from "./pipeline/launch-profile-config.js";
+import { withCanonicalReviewLoopParams } from "./pipeline/review-iteration.js";
 import type { ExpandedPhaseExecutionState, ExpandedPhaseSpec, ExpandedStepSpec, FlowExecutionState } from "./pipeline/spec-types.js";
 import type { NodeCheckSpec, PipelineContext } from "./pipeline/types.js";
 import { evaluateCondition, resolveValue, type DeclarativeResolverContext } from "./pipeline/value-resolver.js";
@@ -1087,7 +1088,7 @@ async function runDeclarativeFlowBySpecFile(
     config.command,
     { source: "built-in", fileName },
     config,
-    mergedFlowParams,
+    withCanonicalReviewLoopParams(loadDeclarativeFlow({ source: "built-in", fileName }).kind, mergedFlowParams),
     overrides,
     requestUserInput,
     setSummary,
@@ -1133,6 +1134,7 @@ function defaultDeclarativeFlowParams(
     launchProfile,
     executionRouting,
     iteration,
+    baseIteration: iteration,
     latestIteration,
     taskContextIteration: latestTaskContext ?? nextArtifactIteration(config.taskKey, "task-context", "json"),
     taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
@@ -1727,7 +1729,7 @@ async function executeCommand(
       ...(reviewLoopSpec === "review/review-loop.json"
         ? reviewFlowParamsFromContract(config)
         : { taskKey: config.taskKey }),
-      iteration,
+      baseIteration: iteration,
       extraPrompt: config.extraPrompt,
     }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
     return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));

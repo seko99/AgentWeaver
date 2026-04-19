@@ -150,4 +150,104 @@ describe("flow state routing persistence", () => {
     assert.equal(resumed.executionState.phases[0].status, "pending");
     assert.equal(resumed.executionState.phases[0].steps[0].status, "pending");
   });
+
+  it("preserves explicit flow-run resume payloads while resetting running steps to pending", () => {
+    const scopeKey = "ag-76@test";
+    const flowId = "auto-common";
+    const state = flowStateModule.createFlowRunState(
+      scopeKey,
+      flowId,
+      {
+        runId: "run-2",
+        publicationRunId: "attempt-2",
+        flowKind: "auto-common",
+        flowVersion: 1,
+        terminated: false,
+        phases: [
+          {
+            id: "review-loop",
+            status: "running",
+            repeatVars: {},
+            steps: [
+              {
+                id: "run_review_loop",
+                status: "running",
+                value: {
+                  resumeKind: "flow-run",
+                  flowKind: "review-loop-flow",
+                  flowVersion: 1,
+                  executionState: {
+                    flowKind: "review-loop-flow",
+                    flowVersion: 1,
+                    terminated: false,
+                    phases: [
+                      {
+                        id: "review_iteration_1",
+                        status: "done",
+                        repeatVars: {},
+                        steps: [
+                          {
+                            id: "run_review",
+                            status: "done",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  publishedArtifacts: [],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      null,
+    );
+
+    const resumed = flowStateModule.prepareFlowStateForResume(state);
+    const step = resumed.executionState.phases[0].steps[0];
+
+    assert.equal(step.status, "pending");
+    assert.equal(step.value.resumeKind, "flow-run");
+    assert.equal(step.value.executionState.flowKind, "review-loop-flow");
+  });
+
+  it("strips unrelated running-step payloads during resume normalization", () => {
+    const scopeKey = "ag-77@test";
+    const flowId = "auto-common";
+    const state = flowStateModule.createFlowRunState(
+      scopeKey,
+      flowId,
+      {
+        runId: "run-3",
+        publicationRunId: "attempt-3",
+        flowKind: "auto-common",
+        flowVersion: 1,
+        terminated: false,
+        phases: [
+          {
+            id: "review-loop",
+            status: "running",
+            repeatVars: {},
+            steps: [
+              {
+                id: "run_review_loop",
+                status: "running",
+                value: {
+                  transient: true,
+                },
+              },
+            ],
+          },
+        ],
+      },
+      null,
+    );
+
+    const resumed = flowStateModule.prepareFlowStateForResume(state);
+    const step = resumed.executionState.phases[0].steps[0];
+
+    assert.equal(step.status, "pending");
+    assert.equal("value" in step, false);
+  });
 });

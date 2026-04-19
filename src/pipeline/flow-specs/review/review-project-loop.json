@@ -30,9 +30,14 @@
           "node": "flow-run",
           "params": {
             "fileName": { "const": "review-project.json" },
-            "labelText": { "const": "Running project review (iteration 1)" },
+            "labelText": {
+              "template": "Running project review (iteration {iteration})",
+              "vars": {
+                "iteration": { "ref": "params.baseIteration" }
+              }
+            },
             "taskKey": { "ref": "params.taskKey" },
-            "iteration": { "const": 1 },
+            "iteration": { "ref": "params.baseIteration" },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
             "llmModel": { "ref": "params.llmModel" },
@@ -50,7 +55,7 @@
               "artifact": {
                 "kind": "review-json-file",
                 "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "const": 1 }
+                "iteration": { "ref": "params.baseIteration" }
               }
             }
           }
@@ -63,8 +68,9 @@
           },
           "params": {
             "message": {
-              "template": "Review iteration 1: {summary}",
+              "template": "Review iteration {iteration}: {summary}",
               "vars": {
+                "iteration": { "ref": "params.baseIteration" },
                 "summary": { "ref": "steps.review_iteration_1.load_review_summary.value.summary" }
               }
             }
@@ -112,14 +118,14 @@
               "vars": {
                 "workspace": { "ref": "params.workspaceDir" },
                 "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "const": 1 }
+                "iteration": { "ref": "params.baseIteration" }
               }
             },
             "reviewFindingsJsonFile": {
               "artifact": {
                 "kind": "review-json-file",
                 "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "const": 1 }
+                "iteration": { "ref": "params.baseIteration" }
               }
             },
             "selectionMode": { "const": "auto-blocking-severities" },
@@ -141,17 +147,20 @@
           "params": {
             "fileName": { "const": "review-fix.json" },
             "labelText": {
-              "template": "Running review-fix (iteration 1)"
+              "template": "Running review-fix (iteration {iteration})",
+              "vars": {
+                "iteration": { "ref": "params.baseIteration" }
+              }
             },
             "taskKey": { "ref": "params.taskKey" },
-            "latestIteration": { "const": 1 },
+            "latestIteration": { "ref": "params.baseIteration" },
             "reviewAssessmentJsonFile": { "const": null },
             "reviewFixSelectionJsonFile": {
               "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
               "vars": {
                 "workspace": { "ref": "params.workspaceDir" },
                 "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "const": 1 }
+                "iteration": { "ref": "params.baseIteration" }
               }
             },
             "reviewFixPoints": { "ref": "params.reviewFixPoints" },
@@ -183,7 +192,7 @@
               "artifact": {
                 "kind": "review-fix-json-file",
                 "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "const": 1 }
+                "iteration": { "ref": "params.baseIteration" }
               }
             }
           }
@@ -202,8 +211,9 @@
           },
           "params": {
             "message": {
-              "template": "Review fix iteration 1: {summary}",
+              "template": "Review fix iteration {iteration}: {summary}",
               "vars": {
+                "iteration": { "ref": "params.baseIteration" },
                 "summary": { "ref": "steps.review_iteration_1.load_review_fix_summary.value.summary" }
               }
             }
@@ -227,10 +237,25 @@
               "params": {
                 "fileName": { "const": "review-project.json" },
                 "labelText": {
-                  "template": "Running project review (iteration ${iteration})"
+                  "template": "Running project review (iteration {iteration})",
+                  "vars": {
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
+                  }
                 },
                 "taskKey": { "ref": "params.taskKey" },
-                "iteration": { "ref": "repeat.iteration" },
+                "iteration": {
+                  "add": [
+                    { "ref": "params.baseIteration" },
+                    { "ref": "repeat.iteration" },
+                    { "const": -1 }
+                  ]
+                },
                 "extraPrompt": { "ref": "params.extraPrompt" },
                 "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
                 "llmModel": { "ref": "params.llmModel" },
@@ -248,7 +273,13 @@
                   "artifact": {
                     "kind": "review-json-file",
                     "taskKey": { "ref": "params.taskKey" },
-                    "iteration": { "ref": "repeat.iteration" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
                   }
                 }
               }
@@ -261,10 +292,16 @@
               },
               "params": {
                 "message": {
-                  "template": "Review iteration ${iteration}: {summary}",
+                  "template": "Review iteration {iteration}: {summary}",
                   "vars": {
                     "summary": { "ref": "steps.review_iteration_${iteration}.load_review_summary.value.summary" },
-                    "iteration": { "ref": "repeat.iteration" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
                   }
                 }
               }
@@ -311,14 +348,26 @@
                   "vars": {
                     "workspace": { "ref": "params.workspaceDir" },
                     "taskKey": { "ref": "params.taskKey" },
-                    "iteration": { "ref": "repeat.iteration" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
                   }
                 },
                 "reviewFindingsJsonFile": {
                   "artifact": {
                     "kind": "review-json-file",
                     "taskKey": { "ref": "params.taskKey" },
-                    "iteration": { "ref": "repeat.iteration" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
                   }
                 },
                 "selectionMode": { "const": "auto-blocking-severities" },
@@ -340,17 +389,38 @@
               "params": {
                 "fileName": { "const": "review-fix.json" },
                 "labelText": {
-                  "template": "Running review-fix (iteration ${iteration})"
+                  "template": "Running review-fix (iteration {iteration})",
+                  "vars": {
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
+                  }
                 },
                 "taskKey": { "ref": "params.taskKey" },
-                "latestIteration": { "ref": "repeat.iteration" },
+                "latestIteration": {
+                  "add": [
+                    { "ref": "params.baseIteration" },
+                    { "ref": "repeat.iteration" },
+                    { "const": -1 }
+                  ]
+                },
                 "reviewAssessmentJsonFile": { "const": null },
                 "reviewFixSelectionJsonFile": {
                   "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
                   "vars": {
                     "workspace": { "ref": "params.workspaceDir" },
                     "taskKey": { "ref": "params.taskKey" },
-                    "iteration": { "ref": "repeat.iteration" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
                   }
                 },
                 "reviewFixPoints": { "ref": "params.reviewFixPoints" },
@@ -382,7 +452,13 @@
                   "artifact": {
                     "kind": "review-fix-json-file",
                     "taskKey": { "ref": "params.taskKey" },
-                    "iteration": { "ref": "repeat.iteration" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
                   }
                 }
               }
@@ -401,10 +477,16 @@
               },
               "params": {
                 "message": {
-                  "template": "Review fix iteration ${iteration}: {summary}",
+                  "template": "Review fix iteration {iteration}: {summary}",
                   "vars": {
                     "summary": { "ref": "steps.review_iteration_${iteration}.load_review_fix_summary.value.summary" },
-                    "iteration": { "ref": "repeat.iteration" }
+                    "iteration": {
+                      "add": [
+                        { "ref": "params.baseIteration" },
+                        { "ref": "repeat.iteration" },
+                        { "const": -1 }
+                      ]
+                    }
                   }
                 }
               }
@@ -434,9 +516,24 @@
           "node": "flow-run",
           "params": {
             "fileName": { "const": "review-project.json" },
-            "labelText": { "const": "Running terminal verification project review (iteration 6)" },
+            "labelText": {
+              "template": "Running terminal verification project review (iteration {iteration})",
+              "vars": {
+                "iteration": {
+                  "add": [
+                    { "ref": "params.baseIteration" },
+                    { "const": 5 }
+                  ]
+                }
+              }
+            },
             "taskKey": { "ref": "params.taskKey" },
-            "iteration": { "const": 6 },
+            "iteration": {
+              "add": [
+                { "ref": "params.baseIteration" },
+                { "const": 5 }
+              ]
+            },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
             "llmModel": { "ref": "params.llmModel" },
@@ -483,7 +580,7 @@
               "kind": "step-output",
               "value": { "ref": "steps.terminal_verification.check_terminal_ready_to_merge.value.exists" },
               "equals": { "const": true },
-              "message": "Terminal verification failed: ready-to-merge.md was not produced after review_iteration_6. review-project-loop must fail."
+              "message": "Terminal verification failed: ready-to-merge.md was not produced after the terminal review iteration. review-project-loop must fail."
             }
           ]
         }
