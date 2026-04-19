@@ -18,6 +18,7 @@ import {
   ensureScopeWorkspaceDir,
   gitlabReviewFile,
   gitlabReviewJsonFile,
+  instantTaskInputJsonFile,
   latestArtifactIteration,
   nextArtifactIteration,
   readyToMergeFile,
@@ -110,7 +111,7 @@ import {
   stripAnsi,
 } from "./tui.js";
 import { requestUserInputInTerminal, type UserInputRequester } from "./user-input.js";
-import type { UserInputFieldDefinition, UserInputFormDefinition } from "./user-input.js";
+import type { UserInputFieldDefinition, UserInputFormDefinition, UserInputFormValues } from "./user-input.js";
 import { runDoctorCommand } from "./doctor/index.js";
 import {
   attachJiraContext,
@@ -628,7 +629,6 @@ function buildBaseConfig(
 
 function commandRequiresTask(command: string): boolean {
   return (
-    command === "plan" ||
     command === "plan-revise" ||
     command === "bug-analyze" ||
     command === "bug-fix" ||
@@ -644,6 +644,7 @@ function commandRequiresTask(command: string): boolean {
 
 function commandSupportsProjectScope(command: string): boolean {
   return (
+    command === "plan" ||
     command === "git-commit" ||
     command === "gitlab-diff-review" ||
     command === "gitlab-review" ||
@@ -678,6 +679,9 @@ async function resolveScopeForCommand(
 
   if (config.jiraRef?.trim()) {
     return resolveProjectScope(config.scopeName, config.jiraRef);
+  }
+  if (config.command === "plan") {
+    return resolveProjectScope(config.scopeName);
   }
   if (commandRequiresTask(config.command)) {
     try {
@@ -776,6 +780,7 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
   return {
     jiraApiUrl: config.jiraApiUrl,
     taskKey: config.taskKey,
+    taskContextIteration: nextArtifactIteration(config.taskKey, "task-context", "json"),
     taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
     designIteration: nextArtifactIteration(config.taskKey, "design"),
     planIteration: nextArtifactIteration(config.taskKey, "plan"),
@@ -801,6 +806,9 @@ function reviewFlowParamsFromContract(config: Config) {
     designJsonFile: contract.designJsonFile,
     planFile: contract.planFile,
     planJsonFile: contract.planJsonFile,
+    hasTaskContextJsonFile: contract.hasTaskContextJsonFile,
+    taskContextJsonFilePath: contract.taskContextJsonFilePath,
+    taskContextJsonFile: contract.taskContextJsonFile,
     hasJiraTaskFile: contract.hasJiraTaskFile,
     jiraTaskFilePath: contract.jiraTaskFilePath,
     jiraTaskFile: contract.jiraTaskFile,
@@ -819,8 +827,53 @@ function hasStructuredReviewInputs(taskKey: string): boolean {
     return false;
   }
   throw new TaskRunnerError(
-    `Structured review requires either Jira task context or an instant-task input artifact in scope '${taskKey}'.`,
+    `Structured review requires a normalized task-context artifact, or legacy Jira/instant-task context, in scope '${taskKey}'.`,
   );
+}
+
+function latestTaskContextIteration(taskKey: string): number {
+  const iteration = latestArtifactIteration(taskKey, "task-context", "json");
+  if (iteration === null) {
+    throw new TaskRunnerError(
+      `Plan mode requires a normalized task-context artifact in scope '${taskKey}'.`,
+    );
+  }
+  return iteration;
+}
+
+function loadInstantTaskInputDefaults(taskKey: string): UserInputFormValues | null {
+  const artifactPath = instantTaskInputJsonFile(taskKey);
+  if (!existsSync(artifactPath)) {
+    return null;
+  }
+
+  try {
+    validateStructuredArtifacts(
+      [{ path: artifactPath, schemaId: "user-input/v1" }],
+      "Instant-task source input structured artifact is invalid.",
+    );
+    const parsed = JSON.parse(readFileSync(artifactPath, "utf8")) as {
+      values?: Record<string, unknown>;
+    };
+    const values = parsed.values;
+    if (!values || typeof values !== "object" || Array.isArray(values)) {
+      return null;
+    }
+    const normalizedEntries: Array<[string, string | boolean | string[]]> = [];
+    for (const [key, value] of Object.entries(values)) {
+      if (typeof value === "string" || typeof value === "boolean") {
+        normalizedEntries.push([key, value]);
+        continue;
+      }
+      if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+        normalizedEntries.push([key, [...value]]);
+        continue;
+      }
+    }
+    return Object.fromEntries(normalizedEntries);
+  } catch {
+    return null;
+  }
 }
 
 function interactiveFlowDefinition(entry: FlowCatalogEntry): InteractiveFlowDefinition {
@@ -1050,6 +1103,7 @@ function defaultDeclarativeFlowParams(
 ): Record<string, unknown> {
   const iteration = nextReviewIterationForTask(config.taskKey);
   const latestIteration = latestArtifactIteration(config.taskKey, "review");
+  const latestTaskContext = latestArtifactIteration(config.taskKey, "task-context", "json");
   const executionRouting = overrides.executionRouting ?? resolveExecutionRouting({
     defaultRoute: overrides.launchProfile
       ? {
@@ -1080,6 +1134,7 @@ function defaultDeclarativeFlowParams(
     executionRouting,
     iteration,
     latestIteration,
+    taskContextIteration: latestTaskContext ?? nextArtifactIteration(config.taskKey, "task-context", "json"),
     taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
     designIteration: nextArtifactIteration(config.taskKey, "design"),
     planIteration: nextArtifactIteration(config.taskKey, "plan"),
@@ -1166,16 +1221,26 @@ async function executeCommand(
       : {};
   if (config.command === "instant-task") {
     checkPrerequisites(config, launchProfile, executionRouting);
+    const hasPersistedInstantTaskState = loadFlowRunState(config.scope.scopeKey, "instant-task") !== null;
+    const repromptInstantTaskInput =
+      launchMode === "restart"
+      && hasPersistedInstantTaskState
+      && requestUserInput !== requestUserInputInTerminal;
     await runDeclarativeFlowBySpecFile(
       "instant-task.json",
       config,
       {
         taskKey: config.taskKey,
+        taskContextIteration: nextArtifactIteration(config.taskKey, "task-context", "json"),
         designIteration: nextArtifactIteration(config.taskKey, "design"),
         planIteration: nextArtifactIteration(config.taskKey, "plan"),
         qaIteration: nextArtifactIteration(config.taskKey, "qa"),
         extraPrompt: config.extraPrompt,
         mdLang: config.mdLang,
+        repromptInstantTaskInput,
+        ...(repromptInstantTaskInput
+          ? { prefilledInstantTaskInputValues: loadInstantTaskInputDefaults(config.taskKey) ?? undefined }
+          : {}),
       },
       flowOverrides,
       requestUserInput,
@@ -1331,16 +1396,30 @@ async function executeCommand(
   }
 
   if (config.command === "plan") {
-    requireJiraConfig(config);
-    if (config.verbose) {
-      process.stdout.write(`Fetching Jira issue from browse URL: ${config.jiraBrowseUrl}\n`);
-      process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
-      process.stdout.write(`Saving Jira issue JSON to: ${config.jiraTaskFile}\n`);
+    let taskContextIteration: number;
+    if (config.jiraRef) {
+      requireJiraConfig(config);
+      if (config.verbose) {
+        process.stdout.write(`Fetching Jira issue from browse URL: ${config.jiraBrowseUrl}\n`);
+        process.stdout.write(`Resolved Jira API URL: ${config.jiraApiUrl}\n`);
+        process.stdout.write(`Saving Jira issue JSON to: ${config.jiraTaskFile}\n`);
+      }
+      taskContextIteration = nextArtifactIteration(config.taskKey, "task-context", "json");
+      await runDeclarativeFlowBySpecFile("task-source/jira-fetch.json", config, {
+        jiraApiUrl: config.jiraApiUrl,
+        taskKey: config.taskKey,
+      }, flowOverrides, requestUserInput, setSummary, launchMode, runtime);
+      await runDeclarativeFlowBySpecFile("normalize-task-source.json", config, {
+        taskKey: config.taskKey,
+        iteration: taskContextIteration,
+        extraPrompt: config.extraPrompt,
+      }, flowOverrides, requestUserInput, setSummary, launchMode, runtime);
+    } else {
+      taskContextIteration = latestTaskContextIteration(config.taskKey);
     }
     await runDeclarativeFlowBySpecFile("plan.json", config, {
-      jiraApiUrl: config.jiraApiUrl,
       taskKey: config.taskKey,
-      taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),
+      taskContextIteration,
       designIteration: nextArtifactIteration(config.taskKey, "design"),
       planIteration: nextArtifactIteration(config.taskKey, "plan"),
       qaIteration: nextArtifactIteration(config.taskKey, "qa"),
@@ -1392,6 +1471,9 @@ async function executeCommand(
         qaJsonFilePath: inputContract.qaJsonFilePath,
         qaFile: inputContract.qaFile,
         qaJsonFile: inputContract.qaJsonFile,
+        hasTaskContextJsonFile: inputContract.hasTaskContextJsonFile,
+        taskContextJsonFilePath: inputContract.taskContextJsonFilePath,
+        taskContextJsonFile: inputContract.taskContextJsonFile,
         hasJiraTaskFile: inputContract.hasJiraTaskFile,
         jiraTaskFilePath: inputContract.jiraTaskFilePath,
         jiraTaskFile: inputContract.jiraTaskFile,
@@ -1454,6 +1536,9 @@ async function executeCommand(
         revisedPlanJsonFile: inputContract.revisedPlanJsonFile,
         revisedQaFile: inputContract.revisedQaFile,
         revisedQaJsonFile: inputContract.revisedQaJsonFile,
+        hasTaskContextJsonFile: inputContract.hasTaskContextJsonFile,
+        taskContextJsonFilePath: inputContract.taskContextJsonFilePath,
+        taskContextJsonFile: inputContract.taskContextJsonFile,
         hasJiraTaskFile: inputContract.hasJiraTaskFile,
         jiraTaskFilePath: inputContract.jiraTaskFilePath,
         jiraTaskFile: inputContract.jiraTaskFile,

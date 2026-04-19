@@ -5,9 +5,11 @@ import {
   designJsonFile,
   instantTaskInputJsonFile,
   jiraTaskFile,
+  latestArtifactIteration,
   planFile,
   planJsonFile,
   requireArtifacts,
+  taskContextJsonFile,
 } from "../artifacts.js";
 import { TaskRunnerError } from "../errors.js";
 import { validateStructuredArtifacts } from "../structured-artifacts.js";
@@ -27,6 +29,9 @@ export type ReviewInputContract = {
   designJsonFile: string;
   planFile: string;
   planJsonFile: string;
+  hasTaskContextJsonFile: boolean;
+  taskContextJsonFilePath: string | null;
+  taskContextJsonFile: string;
   hasJiraTaskFile: boolean;
   jiraTaskFilePath: string | null;
   jiraTaskFile: string;
@@ -58,7 +63,7 @@ function resolveOptionalPromptFile(filePath: string): OptionalPromptFile {
 
 function resolveOptionalValidatedStructuredFile(
   filePath: string,
-  schemaId: "user-input/v1",
+  schemaId: "user-input/v1" | "task-context/v1",
   message: string,
 ): OptionalPromptFile {
   const resolved = resolveOptionalPromptFile(filePath);
@@ -93,6 +98,9 @@ export function inspectReviewInputContract(taskKey: string): ReviewInputContract
     designJsonFile: designJsonFile(taskKey, planningIteration),
     planFile: planFile(taskKey, planningIteration),
     planJsonFile: planJsonFile(taskKey, planningIteration),
+    hasTaskContextJsonFile: false,
+    taskContextJsonFilePath: null,
+    taskContextJsonFile: OPTIONAL_INPUT_NOT_PROVIDED,
     hasJiraTaskFile: false,
     jiraTaskFilePath: null,
     jiraTaskFile: OPTIONAL_INPUT_NOT_PROVIDED,
@@ -114,6 +122,14 @@ export function inspectReviewInputContract(taskKey: string): ReviewInputContract
     "Structured review requires valid design and plan structured artifacts.",
   );
 
+  const taskContextIteration = latestArtifactIteration(taskKey, "task-context", "json");
+  const taskContext = taskContextIteration === null
+    ? { present: false, path: null, promptValue: OPTIONAL_INPUT_NOT_PROVIDED }
+    : resolveOptionalValidatedStructuredFile(
+      taskContextJsonFile(taskKey, taskContextIteration),
+      "task-context/v1",
+      "Structured review task-context structured artifact is invalid.",
+    );
   const jiraTask = resolveOptionalPromptFile(jiraTaskFile(taskKey));
   const taskInput = resolveOptionalValidatedStructuredFile(
     instantTaskInputJsonFile(taskKey),
@@ -121,13 +137,16 @@ export function inspectReviewInputContract(taskKey: string): ReviewInputContract
     "Structured review instant-task input structured artifact is invalid.",
   );
 
-  if (!jiraTask.present && !taskInput.present) {
+  if (!taskContext.present && !jiraTask.present && !taskInput.present) {
     return {
       status: "missing-task-context",
       planningIteration,
     };
   }
 
+  contract.hasTaskContextJsonFile = taskContext.present;
+  contract.taskContextJsonFilePath = taskContext.path;
+  contract.taskContextJsonFile = taskContext.promptValue;
   contract.hasJiraTaskFile = jiraTask.present;
   contract.jiraTaskFilePath = jiraTask.path;
   contract.jiraTaskFile = jiraTask.promptValue;
@@ -152,7 +171,7 @@ export function resolveReviewInputContract(taskKey: string): ReviewInputContract
     );
   }
   throw new TaskRunnerError(
-    `Structured review requires either Jira task context or an instant-task input artifact in scope '${taskKey}'.`,
+    `Structured review requires a normalized task-context artifact, or legacy Jira/instant-task context, in scope '${taskKey}'.`,
   );
 }
 

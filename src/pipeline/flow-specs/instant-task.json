@@ -1,8 +1,42 @@
 {
   "kind": "instant-task-flow",
   "version": 1,
-  "description": "End-to-end resumable pipeline for ad-hoc work in the current branch-derived scope. Runs: plan-instant (manual task input and Q&A) → design-review loop → implement → review loop, without Jira fetch.",
+  "description": "End-to-end resumable pipeline for ad-hoc work in the current branch-derived scope. Runs: manual source input → task source normalization → plan → design-review loop → implement → review loop, without Jira fetch.",
   "phases": [
+    {
+      "id": "source",
+      "steps": [
+        {
+          "id": "collect_manual_source",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "manual-input.json" },
+            "labelText": { "const": "Collecting manual task source" },
+            "taskKey": { "ref": "params.taskKey" },
+            "repromptInstantTaskInput": { "ref": "params.repromptInstantTaskInput" },
+            "prefilledInstantTaskInputValues": { "ref": "params.prefilledInstantTaskInputValues" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "normalize",
+      "steps": [
+        {
+          "id": "run_normalize_source",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "normalize-task-source.json" },
+            "labelText": { "const": "Normalizing task source" },
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "ref": "params.taskContextIteration" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
+            "extraPrompt": { "ref": "params.extraPrompt" }
+          }
+        }
+      ]
+    },
     {
       "id": "plan",
       "steps": [
@@ -10,9 +44,10 @@
           "id": "run_plan_flow",
           "node": "flow-run",
           "params": {
-            "fileName": { "const": "plan-instant.json" },
-            "labelText": { "const": "Running instant-task planning flow" },
+            "fileName": { "const": "plan.json" },
+            "labelText": { "const": "Running planning flow" },
             "taskKey": { "ref": "params.taskKey" },
+            "taskContextIteration": { "ref": "params.taskContextIteration" },
             "designIteration": { "ref": "params.designIteration" },
             "planIteration": { "ref": "params.planIteration" },
             "qaIteration": { "ref": "params.qaIteration" },

@@ -211,6 +211,7 @@ function renderStyledContent(react: ReactModule, ink: InkModule, panelTitle: str
   const { Fragment, createElement } = react;
   const { Box, Text } = ink;
   const lines = content.length > 0 ? content.split("\n") : [" "];
+  const wrap = panelTitle.includes("Flows") ? "truncate-end" : undefined;
 
   return createElement(
     Box,
@@ -230,6 +231,7 @@ function renderStyledContent(react: ReactModule, ink: InkModule, panelTitle: str
               backgroundColor: lineBackgroundColor,
               bold: styledLine.bold,
               color: styledLine.color,
+              ...(wrap ? { wrap } : {}),
             },
             styledLine.segments.map((segment, segmentIndex) =>
               createElement(
@@ -239,6 +241,7 @@ function renderStyledContent(react: ReactModule, ink: InkModule, panelTitle: str
                   backgroundColor: segment.backgroundColor ?? lineBackgroundColor,
                   bold: segment.bold,
                   color: segment.color,
+                  ...(wrap ? { wrap } : {}),
                 },
                 segment.text,
               )),
@@ -247,6 +250,7 @@ function renderStyledContent(react: ReactModule, ink: InkModule, panelTitle: str
           backgroundColor: lineBackgroundColor,
           bold: styledLine.bold,
           color: styledLine.color,
+          ...(wrap ? { wrap } : {}),
         }, styledLine.text.length > 0 ? styledLine.text : " ");
 
       return createElement(
@@ -308,9 +312,22 @@ export function normalizeInkKeypress(input: string, key: InkInputKey): Controlle
   };
 }
 
-function buildFlowListText(viewModel: ReturnType<InteractiveSessionController["getViewModel"]>): string {
-  return viewModel.flowItems
-    .map((item, index) => `${index === viewModel.selectedFlowIndex ? ">" : " "} ${item.label}`)
+function buildFlowListText(
+  viewModel: ReturnType<InteractiveSessionController["getViewModel"]>,
+  maxLines: number,
+): string {
+  const totalItems = viewModel.flowItems.length;
+  const safeMaxLines = Math.max(1, maxLines);
+  const unclampedStart = viewModel.selectedFlowIndex - Math.floor(safeMaxLines / 2);
+  const maxStart = Math.max(0, totalItems - safeMaxLines);
+  const start = clampScrollOffset(unclampedStart, maxStart);
+  const visibleItems = viewModel.flowItems.slice(start, start + safeMaxLines);
+
+  return visibleItems
+    .map((item, index) => {
+      const absoluteIndex = start + index;
+      return `${absoluteIndex === viewModel.selectedFlowIndex ? ">" : " "} ${item.label}`;
+    })
     .join("\n");
 }
 
@@ -517,7 +534,7 @@ function createInkApp(react: ReactModule, ink: InkModule, controller: Interactiv
               title: viewModel.flowListTitle,
               borderColor: "cyan",
               height: sideFlowListHeight,
-              content: buildFlowListText(viewModel),
+              content: buildFlowListText(viewModel, Math.max(4, sideFlowListHeight - 4)),
             }),
             createElement(Panel, {
               title: "Flow Description",

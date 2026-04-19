@@ -164,6 +164,7 @@
               "plan_json_file": { "ref": "params.planJsonFile" },
               "qa_file": { "ref": "params.qaFile" },
               "qa_json_file": { "ref": "params.qaJsonFile" },
+              "task_context_json_file": { "ref": "params.taskContextJsonFile" },
               "jira_task_file": { "ref": "params.jiraTaskFile" },
               "jira_attachments_manifest_file": { "ref": "params.jiraAttachmentsManifestFile" },
               "jira_attachments_context_file": { "ref": "params.jiraAttachmentsContextFile" },

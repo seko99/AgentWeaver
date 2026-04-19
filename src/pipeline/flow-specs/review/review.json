@@ -13,6 +13,7 @@
           "prompt": {
             "templateRef": "review",
             "vars": {
+              "task_context_json_file": { "ref": "params.taskContextJsonFile" },
               "jira_task_file": { "ref": "params.jiraTaskFile" },
               "task_input_json_file": { "ref": "params.taskInputJsonFile" },
               "design_file": { "ref": "params.designFile" },

@@ -122,6 +122,7 @@ const STRUCTURED_JSON_SCHEMAS_BY_PREFIX: Array<{ prefix: string; schemaId: Struc
   { prefix: "review-assessment-", schemaId: "review-assessment/v1" },
   { prefix: "review-fix-", schemaId: "review-fix-report/v1" },
   { prefix: "review-", schemaId: "review-findings/v1" },
+  { prefix: "task-context-", schemaId: "task-context/v1" },
   { prefix: "task-", schemaId: "task-summary/v1" },
 ];
 

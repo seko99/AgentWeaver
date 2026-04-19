@@ -1,8 +1,41 @@
 {
   "kind": "auto-flow",
   "version": 1,
-  "description": "End-to-end resumable pipeline without language-specific checks. Runs: plan (with Jira fetch and Q&A) → implement → review loop. Simplified alternative to auto-golang for projects that do not need Go linter/test loops.",
+  "description": "End-to-end resumable pipeline without language-specific checks. Runs: Jira fetch → task source normalization → plan → implement → review loop. Simplified alternative to auto-golang for projects that do not need Go linter/test loops.",
   "phases": [
+    {
+      "id": "source",
+      "steps": [
+        {
+          "id": "fetch_jira_source",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "jira-fetch.json" },
+            "labelText": { "const": "Fetching Jira task source" },
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "taskKey": { "ref": "params.taskKey" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "normalize",
+      "steps": [
+        {
+          "id": "run_normalize_source",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "normalize-task-source.json" },
+            "labelText": { "const": "Normalizing task source" },
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "ref": "params.taskContextIteration" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
+            "extraPrompt": { "ref": "params.extraPrompt" }
+          }
+        }
+      ]
+    },
     {
       "id": "plan",
       "steps": [
@@ -12,16 +45,14 @@
           "params": {
             "fileName": { "const": "plan.json" },
             "labelText": { "const": "Running planning flow" },
-            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
             "taskKey": { "ref": "params.taskKey" },
-            "taskSummaryIteration": { "ref": "params.taskSummaryIteration" },
+            "taskContextIteration": { "ref": "params.taskContextIteration" },
             "designIteration": { "ref": "params.designIteration" },
             "planIteration": { "ref": "params.planIteration" },
             "qaIteration": { "ref": "params.qaIteration" },
             "llmExecutor": { "ref": "params.llmExecutor" },
             "llmModel": { "ref": "params.llmModel" },
             "extraPrompt": { "ref": "params.extraPrompt" },
-            "forceRefresh": { "ref": "params.forceRefresh" },
             "mdLang": { "ref": "params.mdLang" }
           }
         }

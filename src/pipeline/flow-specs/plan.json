@@ -1,65 +1,53 @@
 {
   "kind": "plan-flow",
   "version": 1,
-  "description": "Fetches Jira task with attachments, generates clarifying questions for the developer, collects answers, and produces design, implementation plan, and QA plan as structured JSON and markdown artifacts.",
+  "description": "Consumes the normalized task-context artifact, generates clarifying questions for the developer, collects answers, and produces design, implementation plan, and QA plan as structured JSON and markdown artifacts.",
   "phases": [
     {
       "id": "plan",
       "steps": [
         {
-          "id": "fetch_jira",
-          "node": "jira-fetch",
+          "id": "validate_task_context",
+          "node": "file-check",
           "params": {
-            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
-            "outputFile": {
+            "path": {
               "artifact": {
-                "kind": "jira-task-file",
-                "taskKey": { "ref": "params.taskKey" }
+                "kind": "task-context-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.taskContextIteration" }
               }
             },
-            "attachmentsManifestFile": {
-              "artifact": {
-                "kind": "jira-attachments-manifest-file",
-                "taskKey": { "ref": "params.taskKey" }
-              }
-            },
-            "attachmentsContextFile": {
-              "artifact": {
-                "kind": "jira-attachments-context-file",
-                "taskKey": { "ref": "params.taskKey" }
-              }
-            }
+            "panelTitle": { "const": "Task Context" },
+            "foundMessage": { "const": "Normalized task context artifact found for planning." },
+            "tone": { "const": "cyan" }
           },
           "expect": [
             {
               "kind": "require-file",
               "path": {
                 "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "kind": "task-context-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.taskContextIteration" }
                 }
               },
-              "message": "Jira fetch node did not produce the Jira task file."
+              "message": "Plan mode requires a normalized task-context artifact."
             },
             {
-              "kind": "require-file",
-              "path": {
-                "artifact": {
-                  "kind": "jira-attachments-manifest-file",
-                  "taskKey": { "ref": "params.taskKey" }
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "task-context-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.taskContextIteration" }
+                    }
+                  },
+                  "schemaId": "task-context/v1"
                 }
-              },
-              "message": "Jira fetch node did not produce the Jira attachments manifest file."
-            },
-            {
-              "kind": "require-file",
-              "path": {
-                "artifact": {
-                  "kind": "jira-attachments-context-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "message": "Jira fetch node did not produce the Jira attachments context file."
+              ],
+              "message": "Plan mode requires a valid task-context artifact."
             }
           ]
         },
@@ -70,22 +58,11 @@
           "prompt": {
             "templateRef": "plan-questions",
             "vars": {
-              "jira_task_file": {
+              "task_context_json_file": {
                 "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "jira_attachments_manifest_file": {
-                "artifact": {
-                  "kind": "jira-attachments-manifest-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "jira_attachments_context_file": {
-                "artifact": {
-                  "kind": "jira-attachments-context-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "kind": "task-context-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.taskContextIteration" }
                 }
               },
               "planning_questions_json_file": {
@@ -213,21 +190,16 @@
           "prompt": {
             "templateRef": "plan",
             "vars": {
-              "jira_task_file": {
+              "task_context_json_file": {
                 "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "kind": "task-context-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.taskContextIteration" }
                 }
               },
-              "jira_attachments_manifest_file": {
+              "planning_answers_json_file": {
                 "artifact": {
-                  "kind": "jira-attachments-manifest-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "jira_attachments_context_file": {
-                "artifact": {
-                  "kind": "jira-attachments-context-file",
+                  "kind": "planning-answers-json-file",
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
@@ -275,10 +247,7 @@
               }
             },
             "extraPrompt": {
-              "appendPrompt": {
-                "base": { "ref": "params.extraPrompt" },
-                "suffix": { "ref": "steps.plan.collect_planning_answers.value.promptSuffix" }
-              }
+              "ref": "params.extraPrompt"
             },
             "format": "task-prompt"
           },

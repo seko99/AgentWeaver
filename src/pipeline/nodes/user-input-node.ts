@@ -4,6 +4,7 @@ import { TaskRunnerError } from "../../errors.js";
 import { buildLogicalKeyForPayload } from "../../artifact-manifest.js";
 import { printSummary } from "../../tui.js";
 import {
+  applyInitialUserInputValues,
   requestUserInputInTerminal,
   validateUserInputValues,
   type UserInputFieldDefinition,
@@ -18,6 +19,7 @@ export type UserInputNodeParams = {
   description?: string;
   submitLabel?: string;
   fields: UserInputFieldDefinition[];
+  initialValues?: UserInputFormValues;
   outputFile: string;
 };
 
@@ -174,12 +176,13 @@ export const userInputNode: PipelineNodeDefinition<UserInputNodeParams, UserInpu
   kind: "user-input",
   version: 1,
   async run(context, params) {
+    const fields = applyInitialUserInputValues(params.fields, params.initialValues);
     const form: UserInputFormDefinition = {
       formId: params.formId,
       title: params.title,
       ...(params.description ? { description: params.description } : {}),
       ...(params.submitLabel ? { submitLabel: params.submitLabel } : {}),
-      fields: params.fields,
+      fields,
     };
 
     const requester = context.requestUserInput ?? requestUserInputInTerminal;

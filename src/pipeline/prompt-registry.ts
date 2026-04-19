@@ -8,8 +8,6 @@ import {
   IMPLEMENT_PROMPT_TEMPLATE,
   JIRA_DESCRIPTION_PROMPT_TEMPLATE,
   MR_DESCRIPTION_PROMPT_TEMPLATE,
-  PLAN_INSTANT_PROMPT_TEMPLATE,
-  PLAN_INSTANT_QUESTIONS_PROMPT_TEMPLATE,
   PLAN_PROMPT_TEMPLATE,
   PLAN_QUESTIONS_PROMPT_TEMPLATE,
   PLAN_REVISE_PROMPT_TEMPLATE,
@@ -19,6 +17,8 @@ import {
   REVIEW_SUMMARY_PROMPT_TEMPLATE,
   RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
   RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
+  TASK_CONTEXT_FROM_JIRA_PROMPT_TEMPLATE,
+  TASK_CONTEXT_FROM_MANUAL_PROMPT_TEMPLATE,
   TASK_SUMMARY_PROMPT_TEMPLATE,
 } from "../prompts.js";
 
@@ -32,8 +32,6 @@ export type PromptTemplateRef =
   | "implement"
   | "task-describe"
   | "mr-description"
-  | "plan-instant"
-  | "plan-instant-questions"
   | "plan-questions"
   | "plan"
   | "plan-revise"
@@ -43,6 +41,8 @@ export type PromptTemplateRef =
   | "review-summary"
   | "run-go-linter-loop-fix"
   | "run-go-tests-loop-fix"
+  | "task-context-from-jira"
+  | "task-context-from-manual"
   | "task-summary";
 
 const promptTemplates: Record<PromptTemplateRef, string> = {
@@ -55,8 +55,6 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   implement: IMPLEMENT_PROMPT_TEMPLATE,
   "task-describe": JIRA_DESCRIPTION_PROMPT_TEMPLATE,
   "mr-description": MR_DESCRIPTION_PROMPT_TEMPLATE,
-  "plan-instant": PLAN_INSTANT_PROMPT_TEMPLATE,
-  "plan-instant-questions": PLAN_INSTANT_QUESTIONS_PROMPT_TEMPLATE,
   "plan-questions": PLAN_QUESTIONS_PROMPT_TEMPLATE,
   plan: PLAN_PROMPT_TEMPLATE,
   "plan-revise": PLAN_REVISE_PROMPT_TEMPLATE,
@@ -66,6 +64,8 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "review-summary": REVIEW_SUMMARY_PROMPT_TEMPLATE,
   "run-go-linter-loop-fix": RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
   "run-go-tests-loop-fix": RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
+  "task-context-from-jira": TASK_CONTEXT_FROM_JIRA_PROMPT_TEMPLATE,
+  "task-context-from-manual": TASK_CONTEXT_FROM_MANUAL_PROMPT_TEMPLATE,
   "task-summary": TASK_SUMMARY_PROMPT_TEMPLATE,
 };
 

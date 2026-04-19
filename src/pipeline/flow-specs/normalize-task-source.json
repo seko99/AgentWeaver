@@ -1,0 +1,310 @@
+{
+  "kind": "normalize-task-source-flow",
+  "version": 1,
+  "description": "Normalizes the available task source into a connector-agnostic task-context artifact for planning and review flows.",
+  "phases": [
+    {
+      "id": "normalize",
+      "steps": [
+        {
+          "id": "validate_jira_source",
+          "when": {
+            "exists": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Jira Task Source" },
+            "foundMessage": { "const": "Raw Jira task context found and will be normalized." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira task source is missing."
+            }
+          ]
+        },
+        {
+          "id": "run_normalize_from_jira",
+          "when": {
+            "exists": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "node": "llm-prompt",
+          "routingGroup": "planning",
+          "prompt": {
+            "templateRef": "task-context-from-jira",
+            "vars": {
+              "jira_task_file": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "jira_attachments_manifest_file": {
+                "artifact": {
+                  "kind": "jira-attachments-manifest-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "jira_attachments_context_file": {
+                "artifact": {
+                  "kind": "jira-attachments-context-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "task_context_file": {
+                "artifact": {
+                  "kind": "task-context-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "task_context_json_file": {
+                "artifact": {
+                  "kind": "task-context-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Normalizing Jira task context" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "task-context-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
+                },
+                {
+                  "artifact": {
+                    "kind": "task-context-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "validate_manual_source",
+          "when": {
+            "all": [
+              {
+                "not": {
+                  "exists": {
+                    "artifact": {
+                      "kind": "jira-task-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  }
+                }
+              },
+              {
+                "exists": {
+                  "artifact": {
+                    "kind": "instant-task-input-json-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "instant-task-input-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Manual Task Source" },
+            "foundMessage": { "const": "Manual task input found and will be normalized." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "instant-task-input-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "user-input/v1"
+                }
+              ],
+              "message": "Manual task source input is missing or invalid."
+            }
+          ]
+        },
+        {
+          "id": "run_normalize_from_manual",
+          "when": {
+            "all": [
+              {
+                "not": {
+                  "exists": {
+                    "artifact": {
+                      "kind": "jira-task-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  }
+                }
+              },
+              {
+                "exists": {
+                  "artifact": {
+                    "kind": "instant-task-input-json-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "llm-prompt",
+          "routingGroup": "planning",
+          "prompt": {
+            "templateRef": "task-context-from-manual",
+            "vars": {
+              "task_input_file": {
+                "artifact": {
+                  "kind": "instant-task-input-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "task_context_file": {
+                "artifact": {
+                  "kind": "task-context-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "task_context_json_file": {
+                "artifact": {
+                  "kind": "task-context-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Normalizing manual task context" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "artifact": {
+                    "kind": "task-context-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
+                },
+                {
+                  "artifact": {
+                    "kind": "task-context-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "params.iteration" }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "validate_task_context_json",
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "task-context-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.iteration" }
+              }
+            },
+            "panelTitle": { "const": "Normalized Task Context" },
+            "foundMessage": { "const": "Normalized task context artifact found." },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "task-context-json-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              },
+              "message": "Task source normalization did not produce the task-context artifact."
+            },
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "task-context-json-file",
+                      "taskKey": { "ref": "params.taskKey" },
+                      "iteration": { "ref": "params.iteration" }
+                    }
+                  },
+                  "schemaId": "task-context/v1"
+                }
+              ],
+              "message": "Task source normalization produced an invalid task-context artifact."
+            }
+          ],
+          "after": [
+            {
+              "kind": "set-summary-from-file",
+              "path": {
+                "artifact": {
+                  "kind": "task-context-file",
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.iteration" }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

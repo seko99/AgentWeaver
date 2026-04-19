@@ -217,6 +217,8 @@ describe("instant-task command and flow", () => {
   it("uses the expected top-level pipeline phases", () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "instant-task.json" });
     assert.deepEqual(flow.phases.map((phase) => phase.id), [
+      "source",
+      "normalize",
       "plan",
       "design_review_loop",
       "implement",
@@ -224,12 +226,31 @@ describe("instant-task command and flow", () => {
     ]);
   });
 
-  it("reuses the stored instant-task input artifact instead of recollecting it on reruns", () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "plan-instant.json" });
-    const planPhase = flow.phases.find((phase) => phase.id === "plan");
-    const collectStep = planPhase?.steps.find((step) => step.id === "collect_task_source");
+  it("reuses the stored instant-task input artifact unless interactive restart requests editing", () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "task-source/manual-input.json" });
+    const sourcePhase = flow.phases.find((phase) => phase.id === "source");
+    const editStep = sourcePhase?.steps.find((step) => step.id === "edit_task_source");
+    const collectStep = sourcePhase?.steps.find((step) => step.id === "collect_task_source");
+    const validateStep = sourcePhase?.steps.find((step) => step.id === "validate_task_source_artifact");
 
+    assert.ok(editStep, "edit_task_source step should exist");
     assert.ok(collectStep, "collect_task_source step should exist");
+    assert.ok(validateStep, "validate_task_source_artifact step should exist");
+    assert.deepEqual(editStep.when, {
+      all: [
+        {
+          ref: "params.repromptInstantTaskInput",
+        },
+        {
+          exists: {
+            artifact: {
+              kind: "instant-task-input-json-file",
+              taskKey: { ref: "params.taskKey" },
+            },
+          },
+        },
+      ],
+    });
     assert.deepEqual(collectStep.when, {
       not: {
         exists: {
@@ -240,10 +261,27 @@ describe("instant-task command and flow", () => {
         },
       },
     });
+    assert.deepEqual(validateStep.when, {
+      all: [
+        {
+          not: {
+            ref: "params.repromptInstantTaskInput",
+          },
+        },
+        {
+          exists: {
+            artifact: {
+              kind: "instant-task-input-json-file",
+              taskKey: { ref: "params.taskKey" },
+            },
+          },
+        },
+      ],
+    });
   });
 
   it("requires the exact rerun planning iteration artifacts before reporting plan success", () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "plan-instant.json" });
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
     const planPhase = flow.phases.find((phase) => phase.id === "plan");
     const runPlanStep = planPhase?.steps.find((step) => step.id === "run_plan");
 
@@ -317,14 +355,14 @@ describe("instant-task command and flow", () => {
     assert.notEqual(reviewResult.status, 0, `${reviewResult.stdout}\n${reviewResult.stderr}`);
     assert.match(
       reviewResult.stderr,
-      /Structured review requires either Jira task context or an instant-task input artifact/,
+      /Structured review requires a normalized task-context artifact, or legacy Jira\/instant-task context/,
     );
 
     const reviewLoopResult = await runCli(["review-loop", "--dry"]);
     assert.notEqual(reviewLoopResult.status, 0, `${reviewLoopResult.stdout}\n${reviewLoopResult.stderr}`);
     assert.match(
       reviewLoopResult.stderr,
-      /Structured review requires either Jira task context or an instant-task input artifact/,
+      /Structured review requires a normalized task-context artifact, or legacy Jira\/instant-task context/,
     );
   });
 

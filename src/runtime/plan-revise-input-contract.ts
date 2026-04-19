@@ -15,6 +15,7 @@ import {
   planningAnswersJsonFile,
   qaFile,
   qaJsonFile,
+  taskContextJsonFile,
   requireArtifacts,
 } from "../artifacts.js";
 import { TaskRunnerError } from "../errors.js";
@@ -62,6 +63,9 @@ export type PlanReviseInputContract = {
   hasPlanningAnswersJsonFile: boolean;
   planningAnswersJsonFilePath: string | null;
   planningAnswersJsonFile: string;
+  hasTaskContextJsonFile: boolean;
+  taskContextJsonFilePath: string | null;
+  taskContextJsonFile: string;
   hasTaskInputJsonFile: boolean;
   taskInputJsonFilePath: string | null;
   taskInputJsonFile: string;
@@ -120,7 +124,7 @@ function resolveOptionalPromptFile(filePath: string): OptionalPromptFile {
 
 function resolveOptionalValidatedStructuredFile(
   filePath: string,
-  schemaId: "user-input/v1",
+  schemaId: "user-input/v1" | "task-context/v1",
   message: string,
 ): OptionalPromptFile {
   const resolved = resolveOptionalPromptFile(filePath);
@@ -227,6 +231,14 @@ export function resolvePlanReviseInputContract(taskKey: string): PlanReviseInput
     "user-input/v1",
     "Plan-revise planning answers structured artifact is invalid.",
   );
+  const taskContextIteration = latestArtifactIteration(taskKey, "task-context", "json");
+  const taskContext = taskContextIteration === null
+    ? { present: false, path: null, promptValue: OPTIONAL_INPUT_NOT_PROVIDED }
+    : resolveOptionalValidatedStructuredFile(
+      taskContextJsonFile(taskKey, taskContextIteration),
+      "task-context/v1",
+      "Plan-revise task-context structured artifact is invalid.",
+    );
   const taskInput = resolveOptionalValidatedStructuredFile(
     instantTaskInputJsonFile(taskKey),
     "user-input/v1",
@@ -262,6 +274,9 @@ export function resolvePlanReviseInputContract(taskKey: string): PlanReviseInput
     hasPlanningAnswersJsonFile: planningAnswers.present,
     planningAnswersJsonFilePath: planningAnswers.path,
     planningAnswersJsonFile: planningAnswers.promptValue,
+    hasTaskContextJsonFile: taskContext.present,
+    taskContextJsonFilePath: taskContext.path,
+    taskContextJsonFile: taskContext.promptValue,
     hasTaskInputJsonFile: taskInput.present,
     taskInputJsonFilePath: taskInput.path,
     taskInputJsonFile: taskInput.promptValue,

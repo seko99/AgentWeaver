@@ -44,7 +44,7 @@ describe("design-review-verdict-node", () => {
   it("should load auto-simple flow spec", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
     const phaseIds = flow.phases.map((p) => p.id);
-    expect(phaseIds).toEqual(["plan", "implement", "review-loop"]);
+    expect(phaseIds).toEqual(["source", "normalize", "plan", "implement", "review-loop"]);
   });
 
   it("should not have design_review gate in auto-simple", async () => {

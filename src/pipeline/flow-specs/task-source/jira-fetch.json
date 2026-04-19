@@ -1,0 +1,69 @@
+{
+  "kind": "task-source-jira-flow",
+  "version": 1,
+  "description": "Fetches raw Jira task context and attachments into scope artifacts for subsequent normalization.",
+  "phases": [
+    {
+      "id": "source",
+      "steps": [
+        {
+          "id": "fetch_jira",
+          "node": "jira-fetch",
+          "params": {
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "outputFile": {
+              "artifact": {
+                "kind": "jira-task-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "attachmentsManifestFile": {
+              "artifact": {
+                "kind": "jira-attachments-manifest-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "attachmentsContextFile": {
+              "artifact": {
+                "kind": "jira-attachments-context-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-task-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira task file."
+            },
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-attachments-manifest-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira attachments manifest file."
+            },
+            {
+              "kind": "require-file",
+              "path": {
+                "artifact": {
+                  "kind": "jira-attachments-context-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              },
+              "message": "Jira fetch node did not produce the Jira attachments context file."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

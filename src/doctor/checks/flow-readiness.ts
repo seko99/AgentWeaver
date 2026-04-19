@@ -7,9 +7,9 @@ import { validateStructuredArtifact } from "../../structured-artifacts.js";
 import type { StructuredArtifactSchemaId } from "../../structured-artifacts.js";
 import {
   designJsonFile,
-  jiraDescriptionJsonFile,
   latestArtifactIteration,
   planJsonFile,
+  taskContextJsonFile,
 } from "../../artifacts.js";
 import { inspectLatestPlanningBundle } from "../../runtime/planning-bundle.js";
 
@@ -243,28 +243,28 @@ function checkPlanJiraWorkflowContinuity(scopeKey: string): WorkflowContinuityEn
 
 function checkPlanProjectWorkflowContinuity(scopeKey: string): WorkflowContinuityEntry {
   const entry = createEntry("plan", "project");
-  const latestDescriptionIteration = getLatestJsonArtifactIteration(scopeKey, "jira-description");
+  const latestTaskContextIteration = getLatestJsonArtifactIteration(scopeKey, "task-context");
 
-  if (latestDescriptionIteration === null) {
+  if (latestTaskContextIteration === null) {
     setEntryState(
       entry,
       WorkflowContinuityState.NeedsPreviousStage,
-      "Missing task description artifact from task-describe.",
+      "Missing normalized task-context artifact.",
     );
   } else {
     checkStructuredArtifactFile(
       entry,
-      jiraDescriptionJsonFile(scopeKey, latestDescriptionIteration),
-      "jira-description/v1",
-      "Missing task description artifact from task-describe.",
-      "Task description artifact schema is invalid",
+      taskContextJsonFile(scopeKey, latestTaskContextIteration),
+      "task-context/v1",
+      "Missing normalized task-context artifact.",
+      "Task-context artifact schema is invalid",
     );
   }
 
   if (entry.state === WorkflowContinuityState.NeedsPreviousStage) {
-    entry.nextStep = "Run task-describe first to create a task description artifact for this scope.";
+    entry.nextStep = "Run a source flow that produces task-context for this scope before running plan:project.";
   } else if (entry.state === WorkflowContinuityState.InvalidState) {
-    entry.nextStep = "Regenerate the task description artifact before running plan:project.";
+    entry.nextStep = "Regenerate the task-context artifact before running plan:project.";
   }
 
   return entry;

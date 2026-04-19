@@ -46,6 +46,8 @@ export const ARTIFACT_REF_KINDS = [
   "run-go-linter-result-json-file",
   "run-go-tests-result-json-file",
   "review-summary-file",
+  "task-context-file",
+  "task-context-json-file",
   "task-summary-file",
   "task-summary-json-file",
   "task-describe-input-json-file",

@@ -46,6 +46,8 @@ import {
   taskSummaryFile,
   taskDescribeInputJsonFile,
   taskSummaryJsonFile,
+  taskContextFile,
+  taskContextJsonFile,
   gitStatusJsonFile,
   gitCommitMessageJsonFile,
   gitCommitInputJsonFile,
@@ -250,6 +252,10 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
         throw new TaskRunnerError("review-summary-file requires iteration");
       }
       return artifactFile("review-summary", taskKey, iteration);
+    case "task-context-file":
+      return taskContextFile(taskKey, iteration);
+    case "task-context-json-file":
+      return taskContextJsonFile(taskKey, iteration);
     case "task-summary-file":
       return taskSummaryFile(taskKey, iteration);
     case "task-summary-json-file":
