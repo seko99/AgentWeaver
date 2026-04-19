@@ -6,12 +6,12 @@ In architectural terms, flow specs are the language AgentWeaver uses for harness
 
 The current implementation lives in:
 
-- [src/pipeline/spec-types.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-types.ts)
-- [src/pipeline/spec-loader.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-loader.ts)
-- [src/pipeline/spec-validator.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-validator.ts)
-- [src/pipeline/spec-compiler.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/spec-compiler.ts)
-- [src/pipeline/declarative-flow-runner.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/declarative-flow-runner.ts)
-- [src/pipeline/value-resolver.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/value-resolver.ts)
+- [src/pipeline/spec-types.ts](src/pipeline/spec-types.ts)
+- [src/pipeline/spec-loader.ts](src/pipeline/spec-loader.ts)
+- [src/pipeline/spec-validator.ts](src/pipeline/spec-validator.ts)
+- [src/pipeline/spec-compiler.ts](src/pipeline/spec-compiler.ts)
+- [src/pipeline/declarative-flow-runner.ts](src/pipeline/declarative-flow-runner.ts)
+- [src/pipeline/value-resolver.ts](src/pipeline/value-resolver.ts)
 
 If this document and the code disagree, the code is the source of truth.
 
@@ -189,8 +189,8 @@ Examples in the current codebase include:
 
 See:
 
-- [src/pipeline/node-registry.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/node-registry.ts)
-- [src/pipeline/nodes/](/home/seko/Projects/ai/AgentWeaver/src/pipeline/nodes)
+- [src/pipeline/node-registry.ts](src/pipeline/node-registry.ts)
+- [src/pipeline/nodes/](src/pipeline/nodes)
 
 ## Prompt Binding
 
@@ -226,8 +226,8 @@ At least one of `templateRef` or `inlineTemplate` must be present when `prompt` 
 
 See:
 
-- [src/pipeline/prompt-registry.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/prompt-registry.ts)
-- [src/pipeline/prompt-runtime.ts](/home/seko/Projects/ai/AgentWeaver/src/pipeline/prompt-runtime.ts)
+- [src/pipeline/prompt-registry.ts](src/pipeline/prompt-registry.ts)
+- [src/pipeline/prompt-runtime.ts](src/pipeline/prompt-runtime.ts)
 
 ## Params
 
@@ -406,6 +406,13 @@ Example:
 
 This reads the file and updates runtime summary state through `context.setSummary(...)`.
 
+The target file does not have to be a dedicated `task-summary-file`. Any markdown artifact can be published into the runtime summary pane this way. In the built-in flows, for example:
+
+- `bug-analyze` can publish a cached task summary markdown artifact
+- `normalize-task-source` publishes the normalized task-context markdown artifact
+
+From the operator's perspective, the TUI summary pane is therefore a generic runtime summary surface populated by flow specs, not a hard-coded view of one artifact kind.
+
 ## Nested Flows with `flow-run`
 
 The `flow-run` node executes another declarative flow by file name.
@@ -429,6 +436,14 @@ Resolution rules:
 - if it matches exactly one project-local flow spec, it is used
 - ambiguous names fail validation/runtime
 - constant `fileName` values are validated up front
+
+Important implementation detail: `flow-run` is not always a pure parameter passthrough. For some built-in nested flow kinds, the runtime enriches the child flow params from scope-local artifact contracts before execution. In particular:
+
+- `design-review-flow` resolves the latest planning bundle plus optional normalized task context, Jira context, planning answers, and manual task input
+- `plan-revise-flow` resolves the latest design-review verdict, source planning artifacts, optional normalized task context, Jira context, planning answers, and manual task input
+- `review-flow` resolves the latest planning artifacts plus optional normalized task context, Jira context, and manual task input
+
+This contract injection is what allows child specs to reference params such as `params.designFile`, `params.planJsonFile`, or `params.taskContextJsonFile` without each caller having to wire every artifact path manually.
 
 ## Persisted State vs Runtime State
 
