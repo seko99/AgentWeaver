@@ -2,8 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+import { readyToMergeFile } from "../src/artifacts.js";
+import { createPipelineContext } from "../src/pipeline/context.js";
 import { loadDeclarativeFlow } from "../src/pipeline/declarative-flows.js";
 import { designReviewVerdictNode } from "../src/pipeline/nodes/design-review-verdict-node.js";
+import { flowRunNode } from "../src/pipeline/nodes/flow-run-node.js";
+import type { FlowRunResumeEnvelope } from "../src/pipeline/flow-run-resume.js";
+import { createArtifactRegistry } from "../src/runtime/artifact-registry.js";
 
 const TEMP_SCOPE = "test-scope-design-review-verdict";
 
@@ -224,6 +229,7 @@ it("should use iteration 1 by default when not specified in design-review-verdic
     const runStep = reviewLoopPhase!.steps.find((s) => s.node === "flow-run");
     expect(runStep).toBeDefined();
     expect(runStep!.params?.fileName).toEqual({ const: "review-loop.json" });
+    expect(runStep!.params?.baseIteration).toEqual({ ref: "params.baseIteration" });
   });
 
   it("auto-common should have notify_task_complete after review-loop phase", async () => {
@@ -276,5 +282,107 @@ it("should use iteration 1 by default when not specified in design-review-verdic
     expect(runIndex).toBeLessThan(notifyIndex);
     expect(runStep!.stopFlowIf).toBeDefined();
     expect(notifyStep!.stopFlowIf).toBeUndefined();
+  });
+});
+
+describe("flow-run nested resume", () => {
+  const TASK_KEY = "AUTO-COMMON-NESTED-RESUME";
+  const flowFilePath = join(process.cwd(), ".agentweaver", ".flows", "nested-resume-child.json");
+  const inputPath = join(process.cwd(), ".agentweaver", "scopes", TASK_KEY, ".artifacts", "nested-input.txt");
+
+  beforeEach(() => {
+    mkdirSync(join(process.cwd(), ".agentweaver", ".flows"), { recursive: true });
+    mkdirSync(join(process.cwd(), ".agentweaver", "scopes", TASK_KEY, ".artifacts"), { recursive: true });
+    writeFileSync(flowFilePath, `${JSON.stringify({
+      kind: "test-child-flow",
+      version: 1,
+      phases: [
+        {
+          id: "cleanup",
+          steps: [
+            {
+              id: "clear_ready_to_merge",
+              node: "clear-ready-to-merge",
+              params: {
+                taskKey: { ref: "params.taskKey" },
+              },
+            },
+          ],
+        },
+        {
+          id: "read_target",
+          steps: [
+            {
+              id: "read_target",
+              node: "read-file",
+              params: {
+                path: { ref: "params.inputPath" },
+              },
+            },
+          ],
+        },
+      ],
+    }, null, 2)}\n`);
+    writeFileSync(readyToMergeFile(TASK_KEY), "ready");
+  });
+
+  afterEach(() => {
+    rmSync(flowFilePath, { force: true });
+    rmSync(join(process.cwd(), ".agentweaver", "scopes", TASK_KEY), { recursive: true, force: true });
+  });
+
+  it("should restore saved child execution state instead of restarting from phase 1", async () => {
+    let persistedEnvelope: FlowRunResumeEnvelope | null = null;
+    const baseContext = createPipelineContext({
+      issueKey: TASK_KEY,
+      jiraRef: TASK_KEY,
+      dryRun: false,
+      verbose: false,
+      runtime: {
+        resolveCmd: () => "",
+        runCommand: async () => "",
+        artifactRegistry: createArtifactRegistry(),
+      },
+    });
+
+    await expect(flowRunNode.run(
+      {
+        ...baseContext,
+        persistRunningStepValue: async (value) => {
+          persistedEnvelope = value as FlowRunResumeEnvelope;
+        },
+      },
+      {
+        fileName: "nested-resume-child.json",
+        taskKey: TASK_KEY,
+        inputPath,
+      },
+    )).rejects.toThrow();
+
+    expect(persistedEnvelope?.resumeKind).toBe("flow-run");
+    expect(persistedEnvelope?.executionState.phases.find((phase) => phase.id === "cleanup")?.steps[0]?.value).toEqual({
+      cleared: true,
+    });
+    expect(persistedEnvelope?.executionState.phases.find((phase) => phase.id === "read_target")?.status).toBe("running");
+
+    writeFileSync(inputPath, "resume-ok\n");
+
+    const resumed = await flowRunNode.run(
+      {
+        ...baseContext,
+        resumeStepValue: persistedEnvelope ?? undefined,
+      },
+      {
+        fileName: "nested-resume-child.json",
+        taskKey: TASK_KEY,
+        inputPath,
+      },
+    );
+
+    expect(resumed.value.resumeKind).toBe("flow-run");
+    expect(resumed.value.executionState.phases.find((phase) => phase.id === "cleanup")?.steps[0]?.value).toEqual({
+      cleared: true,
+    });
+    expect(resumed.value.executionState.phases.find((phase) => phase.id === "read_target")?.steps[0]?.status).toBe("done");
   });
 });

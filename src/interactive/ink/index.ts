@@ -51,6 +51,11 @@ type InkPanelProps = {
   content: string;
   flexGrow?: number;
   height?: number;
+  scrollbar?: {
+    startLine: number;
+    totalLines: number;
+    viewportLines: number;
+  };
   title: string;
   width?: number | string;
 };
@@ -82,6 +87,13 @@ function hasRuntimeModule(moduleName: string): boolean {
 function clampScrollOffset(value: number, maxOffset: number): number {
   return Math.min(Math.max(0, value), maxOffset);
 }
+
+type ScrollWindow = {
+  text: string;
+  startLine: number;
+  totalLines: number;
+  viewportLines: number;
+};
 
 function buildSolidFill(width: number, height: number): string {
   const safeWidth = Math.max(1, width);
@@ -296,11 +308,44 @@ function renderStyledContent(react: ReactModule, ink: InkModule, panelTitle: str
 }
 
 export function sliceFromScroll(text: string, offset: number, maxLines = 12): string {
+  return resolveScrollWindow(text, offset, maxLines).text;
+}
+
+function resolveScrollWindow(text: string, offset: number, maxLines = 12): ScrollWindow {
   const lines = text.split("\n");
-  const boundedOffset = clampScrollOffset(offset, Math.max(0, lines.length - 1));
-  const start = Math.max(0, boundedOffset - maxLines + 1);
+  const viewportLines = Math.max(1, maxLines);
+  const boundedOffset = clampScrollOffset(offset, Math.max(0, lines.length - viewportLines));
+  const start = boundedOffset;
   const visible = lines.slice(start, start + maxLines);
-  return visible.join("\n");
+  return {
+    text: visible.join("\n"),
+    startLine: start,
+    totalLines: lines.length,
+    viewportLines,
+  };
+}
+
+function buildScrollbarLines(scrollbar: NonNullable<InkPanelProps["scrollbar"]>): Array<{ char: string; color: string }> {
+  const viewport = Math.max(1, scrollbar.viewportLines);
+  const total = Math.max(0, scrollbar.totalLines);
+  if (total <= viewport) {
+    return Array.from({ length: viewport }, () => ({ char: " ", color: "gray" }));
+  }
+
+  const thumbSize = Math.max(1, Math.round((viewport * viewport) / total));
+  const maxStart = Math.max(1, total - viewport);
+  const maxThumbOffset = Math.max(0, viewport - thumbSize);
+  const thumbStart = maxThumbOffset === 0
+    ? 0
+    : Math.round((scrollbar.startLine / maxStart) * maxThumbOffset);
+
+  return Array.from({ length: viewport }, (_, index) => {
+    const inThumb = index >= thumbStart && index < thumbStart + thumbSize;
+    return {
+      char: inThumb ? "█" : "│",
+      color: inThumb ? "cyan" : "gray",
+    };
+  });
 }
 
 type ControllerKeypress = Parameters<InteractiveSessionController["handleKeypress"]>[1];
@@ -364,7 +409,18 @@ function createPanelComponent(react: ReactModule, ink: InkModule) {
   const { createElement } = react;
   const { Box, Text } = ink;
 
-  return function InkPanel({ backgroundColor, borderColor = "green", content, flexGrow, height, title, width }: InkPanelProps) {
+  return function InkPanel({
+    backgroundColor,
+    borderColor = "green",
+    content,
+    flexGrow,
+    height,
+    scrollbar,
+    title,
+    width,
+  }: InkPanelProps) {
+    const scrollbarLines = scrollbar ? buildScrollbarLines(scrollbar) : null;
+
     return createElement(
       Box,
       {
@@ -390,11 +446,41 @@ function createPanelComponent(react: ReactModule, ink: InkModule) {
       createElement(
         Box,
         {
+          flexDirection: "row",
           flexGrow: 1,
           width: "100%",
           backgroundColor,
         },
-        renderStyledContent(react, ink, title, content, backgroundColor),
+        createElement(
+          Box,
+          {
+            flexGrow: 1,
+            width: scrollbarLines ? undefined : "100%",
+            backgroundColor,
+          },
+          renderStyledContent(react, ink, title, content, backgroundColor),
+        ),
+        scrollbarLines
+          ? createElement(
+              Box,
+              {
+                flexDirection: "column",
+                width: 1,
+                marginLeft: 1,
+                backgroundColor,
+              },
+              scrollbarLines.map((line, index) =>
+                createElement(
+                  Text,
+                  {
+                    key: `scrollbar-${title}-${index}`,
+                    backgroundColor,
+                    color: line.color,
+                  },
+                  line.char,
+                )),
+            )
+          : null,
       ),
     );
   };
@@ -490,15 +576,32 @@ function createInkApp(react: ReactModule, ink: InkModule, controller: Interactiv
     const terminalRows = Math.max(stdout.rows ?? 24, 20);
     const terminalColumns = Math.max(stdout.columns ?? 80, 80);
     const bodyHeight = Math.max(terminalRows - 8, 12);
+    const minRightLogHeight = 4;
+    const minRightSummaryHeight = 4;
     const sideStatusHeight = 6;
     const sideDescriptionHeight = Math.max(8, Math.floor(bodyHeight * 0.22));
     const sideFlowListHeight = Math.max(8, bodyHeight - sideDescriptionHeight - sideStatusHeight);
     const formModalWidth = Math.max(56, Math.floor(terminalColumns * 0.72));
     const formContentWidth = Math.max(8, formModalWidth - 8);
     const viewModel = controller.getViewModel({ formContentWidth });
-    const rightSummaryHeight = viewModel.summaryVisible ? Math.max(8, Math.floor(bodyHeight * 0.24)) : 0;
-    const rightProgressHeight = Math.max(8, Math.floor(bodyHeight * 0.34));
-    const rightLogHeight = Math.max(8, bodyHeight - rightProgressHeight - rightSummaryHeight);
+    const rightProgressHeight = sideFlowListHeight;
+    const rightLowerAreaHeight = Math.max(0, bodyHeight - rightProgressHeight);
+    const desiredRightSummaryHeight = viewModel.summaryVisible ? Math.max(8, Math.floor(bodyHeight * 0.24)) : 0;
+    const maxRightSummaryHeight = Math.max(0, rightLowerAreaHeight - minRightLogHeight);
+    const rightSummaryHeight = viewModel.summaryVisible
+      ? Math.min(desiredRightSummaryHeight, maxRightSummaryHeight)
+      : 0;
+    const summaryPanelVisible = viewModel.summaryVisible && rightSummaryHeight >= minRightSummaryHeight;
+    const rightLogHeight = Math.max(
+      minRightLogHeight,
+      rightLowerAreaHeight - (summaryPanelVisible ? rightSummaryHeight : 0),
+    );
+    const progressViewportLines = Math.max(4, rightProgressHeight - 4);
+    const progressWindow = resolveScrollWindow(
+      viewModel.progressText,
+      viewModel.progressScrollOffset,
+      progressViewportLines,
+    );
     const overlayPanels: unknown[] = [];
 
     if (viewModel.helpVisible) {
@@ -585,9 +688,14 @@ function createInkApp(react: ReactModule, ink: InkModule, controller: Interactiv
               title: viewModel.progressTitle,
               borderColor: "green",
               height: rightProgressHeight,
-              content: sliceFromScroll(viewModel.progressText, viewModel.progressScrollOffset, Math.max(4, rightProgressHeight - 4)),
+              content: progressWindow.text,
+              scrollbar: {
+                startLine: progressWindow.startLine,
+                totalLines: progressWindow.totalLines,
+                viewportLines: progressWindow.viewportLines,
+              },
             }),
-            viewModel.summaryVisible
+            summaryPanelVisible
               ? createElement(Panel, {
                   title: viewModel.summaryTitle,
                   borderColor: "green",

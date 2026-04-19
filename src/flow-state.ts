@@ -3,6 +3,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 import { ensureScopeWorkspaceDir, flowStateFile } from "./artifacts.js";
 import { TaskRunnerError } from "./errors.js";
+import { isFlowRunResumeEnvelope } from "./pipeline/flow-run-resume.js";
 import type { ResolvedExecutionRouting, SelectedExecutionPreset } from "./pipeline/execution-routing-config.js";
 import type { ResolvedLaunchProfile } from "./pipeline/launch-profile-config.js";
 import type {
@@ -216,6 +217,7 @@ function normalizeStepState(step: ExpandedStepExecutionState): ExpandedStepExecu
   if (step.status !== "running") {
     return step;
   }
+  const resumeValue = isFlowRunResumeEnvelope(step.value) ? step.value : undefined;
   const {
     finishedAt: _finishedAt,
     outputs: _outputs,
@@ -227,6 +229,7 @@ function normalizeStepState(step: ExpandedStepExecutionState): ExpandedStepExecu
   return {
     ...rest,
     status: "pending",
+    ...(resumeValue ? { value: resumeValue } : {}),
   };
 }
 

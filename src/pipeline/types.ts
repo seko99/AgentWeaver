@@ -67,6 +67,8 @@ export type PipelineContext = {
   setSummary?: (markdown: string) => void;
   requestUserInput?: UserInputRequester;
   executionRouting?: ResolvedExecutionRouting;
+  resumeStepValue?: import("../executors/types.js").JsonValue;
+  persistRunningStepValue?: (value: import("../executors/types.js").JsonValue) => Promise<void>;
 };
 
 export type PipelineNodeDefinition<TParams, TResult> = {
