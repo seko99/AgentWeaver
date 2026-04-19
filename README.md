@@ -10,7 +10,7 @@ Typical usage looks like:
 
 The important part is not that exact chain. The point is that AgentWeaver lets you design, operate, and evolve durable agent harnesses instead of accumulating one-off prompts and shell glue.
 
-Для planning-heavy задач типовой путь теперь может включать и `plan -> design-review -> implement`, где `design-review` проверяет качество артефактов планирования до начала кодинга.
+For planning-heavy work, a typical path can now include `plan -> design-review -> implement`, where `design-review` critiques planning artifacts before coding starts.
 
 ## What It Does
 
@@ -72,7 +72,7 @@ This keeps workflow design in JSON while keeping implementation details in typed
 User-invokable built-in commands currently map to these flow specs:
 
 - `plan` — fetches Jira task with attachments, generates clarifying questions for the developer, collects answers, and produces design, implementation plan, and QA plan as structured JSON and markdown artifacts
-- `design-review` — выполняет структурированную критику planning artifacts и пишет dedicated artifact `design-review/v1`; статус `approved_with_warnings` считается ready-to-proceed и по-прежнему допускает `ready-to-merge.md`
+- `design-review` — performs a structured critique of the latest planning artifacts and writes a dedicated `design-review/v1` artifact; `approved_with_warnings` is treated as ready to proceed and may still produce `ready-to-merge.md`
 - `task-describe` — generates a brief task description from a Jira issue or from manual input; when Jira is provided, fetches the issue and summarizes it; otherwise accepts free-form text and analyzes the codebase to produce a richer description
 - `implement` — runs LLM-backed implementation based on previously approved design and plan artifacts; executes code changes locally in the project working directory
 - `review` — performs code review of current changes against the task design and plan; produces structured review findings with severity levels and a ready-to-merge verdict
@@ -87,7 +87,7 @@ User-invokable built-in commands currently map to these flow specs:
 - `run-go-tests-loop` — runs `run_go_tests.py` and analyzes failures; if tests fail, sends the error output to LLM for a fix and retries; repeats up to 5 attempts, stopping early on success
 - `run-go-linter-loop` — runs `run_go_linter.py` and analyzes output; if the linter reports issues, sends them to LLM for a fix and retries; repeats up to 5 attempts, stopping early on success
 - `auto-golang` — end-to-end resumable pipeline for Go projects: plan → implement → linter loop → test loop → review loop → final linter loop → final test loop; supports `--from` to restart from a specific phase and `auto-status`/`auto-reset` for state management
-- `auto-common` — planning-aware pipeline with mandatory design-review gate before implementation: plan → design review → optional plan revision (once) → implement → review loop; blocks implementation when design review verdict is `needs_revision` twice
+- `auto-common` — planning-aware pipeline with a mandatory design-review gate before implementation: plan → design-review loop → implement → review loop; design-review can iterate with `plan-revise` up to 3 times, and if the final verdict still requires revision the operator must explicitly choose whether to continue with the latest planning artifacts or stop
 - `auto-simple` — preserved simplified pipeline equivalent to the legacy auto-common behavior: plan → implement → review loop; no planning review gate, suitable for projects that do not need design review before coding
 - `doctor` — diagnostics command that runs system, executor, and flow readiness health checks; supports filtering by category or check ID and JSON output
 
@@ -260,7 +260,7 @@ Notes:
 - `--prompt <text>` appends extra instructions to the prompt
 - `--scope <name>` is supported by scope-flexible flows such as `implement`, `review`, `review-fix`, `review-loop`, `run-go-tests-loop`, `run-go-linter-loop`, `gitlab-review`, and `gitlab-diff-review`
 - `--md-lang <en|ru>` currently applies to `plan`
-- `--force` only affects interactive mode and forces regeneration of task summary in Jira-backed flows
+- `--force` only affects interactive mode: it skips loading cached summary-pane content on startup so Jira-backed flows that regenerate summary artifacts can repopulate it during the run
 - Jira-backed flows ask for Jira input interactively when it is omitted
 - `task-describe` can also work from manual task description input without Jira
 - `gitlab-review` and `gitlab-diff-review` ask for a GitLab merge request URL interactively
@@ -276,7 +276,7 @@ Notes:
 - reset via `auto-reset`
 - resume validation against saved launch profile and required artifacts
 
-`auto-common` is the planning-aware built-in automation flow. After `plan`, it runs `design-review` and blocks implementation until the verdict is `approved` or `approved_with_warnings`. When the verdict is `needs_revision`, it runs `plan-revise` once and then a second `design-review`. If the second verdict is still `needs_revision`, the pipeline stops before `implement`.
+`auto-common` is the planning-aware built-in automation flow. After `plan`, it runs a `design-review` loop and blocks implementation until the verdict is `approved` or `approved_with_warnings`. When the verdict is `needs_revision`, it runs `plan-revise` and then another `design-review`, for up to 3 design-review iterations total. If the final verdict still requires revision, the pipeline asks the operator whether to continue with the latest planning artifacts or stop before `implement`.
 
 `auto-simple` is the preserved simplified pipeline: `plan → implement → review loop`, with no planning review gate and no revise rounds. It is behaviorally equivalent to the legacy `auto-common` before the planning gate was introduced.
 
@@ -305,7 +305,7 @@ The runtime uses artifacts as the contract between stages, including markdown ou
 
 ## Interactive TUI
 
-Running without a command opens the full-screen TUI. It acts as the operator console for the harness: browsing flows, launching them in scope, following activity, and reviewing summaries.
+Running without a command opens the full-screen TUI. It acts as the operator console for the harness: browsing flows, launching them in scope, following current execution, and reviewing summaries.
 
 Interactive mode is Ink-only. It requires:
 
@@ -321,6 +321,13 @@ Current navigation:
 - `PgUp` / `PgDn` — scroll focused pane
 - `h` — open help
 - `q` or `Ctrl+C` — exit
+
+Current layout:
+
+- left column: `Flows`, `Flow Description`, `Status`
+- right column: `Current Flow`, optional `Task Summary`, `Activity`
+- `Current Flow` is intentionally tall and scrollable; in the current layout it uses the same height budget as `Flows`
+- the `Task Summary` pane is runtime-driven and shows whichever markdown artifact the active flow publishes into summary state, such as a normalized task context or a cached task summary
 
 Flow discovery behavior:
 
