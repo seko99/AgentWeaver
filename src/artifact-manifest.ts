@@ -88,6 +88,24 @@ export type PayloadContract = {
   schemaVersion: number;
 };
 
+export type ParsedArtifactId = {
+  scopeKey: string;
+  logicalKey: string;
+  version: number;
+};
+
+export type ParsedArtifactReference =
+  | {
+      kind: "artifact-id";
+      artifactId: string;
+      parsedId: ParsedArtifactId;
+    }
+  | {
+      kind: "logical-ref";
+      logicalKey: string;
+      version: "latest" | number;
+    };
+
 const STRUCTURED_JSON_SCHEMAS_BY_PREFIX: Array<{ prefix: string; schemaId: StructuredArtifactSchemaId }> = [
   { prefix: "bug-analyze-", schemaId: "bug-analysis/v1" },
   { prefix: "bug-fix-design-", schemaId: "bug-fix-design/v1" },
@@ -109,6 +127,8 @@ const STRUCTURED_JSON_SCHEMAS_BY_PREFIX: Array<{ prefix: string; schemaId: Struc
 
 const LOGICAL_KEY_PATTERN = "^[a-z0-9][a-z0-9._/-]*$";
 const CONTENT_HASH_PATTERN = "^sha256:[a-f0-9]{64}$";
+const ARTIFACT_ID_PATTERN = /^(?<scope>.+):(?<logicalKey>[a-z0-9][a-z0-9._/-]*):v(?<version>[1-9]\d*)$/;
+const LOGICAL_REF_PATTERN = /^(?<logicalKey>[a-z0-9][a-z0-9._/-]*)@(?<selector>latest|v[1-9]\d*)$/;
 
 export function parseSchemaVersion(schemaId: string): number {
   const match = /\/v(\d+)$/.exec(schemaId);
@@ -180,6 +200,51 @@ export function buildPublicationKey(input: {
 
 export function buildArtifactId(scopeKey: string, logicalKey: string, version: number): string {
   return `${scopeKey}:${logicalKey}:v${version}`;
+}
+
+export function parseArtifactId(value: string): ParsedArtifactId | null {
+  const match = ARTIFACT_ID_PATTERN.exec(value);
+  if (!match?.groups) {
+    return null;
+  }
+  const scopeKey = match.groups.scope;
+  const logicalKey = match.groups.logicalKey;
+  const versionText = match.groups.version;
+  if (!scopeKey || !logicalKey || !versionText) {
+    return null;
+  }
+  return {
+    scopeKey,
+    logicalKey,
+    version: Number.parseInt(versionText, 10),
+  };
+}
+
+export function parseArtifactReference(value: string): ParsedArtifactReference | null {
+  const parsedId = parseArtifactId(value);
+  if (parsedId) {
+    return {
+      kind: "artifact-id",
+      artifactId: value,
+      parsedId,
+    };
+  }
+
+  const match = LOGICAL_REF_PATTERN.exec(value);
+  if (!match?.groups) {
+    return null;
+  }
+
+  const logicalKey = match.groups.logicalKey;
+  const selector = match.groups.selector;
+  if (!logicalKey || !selector) {
+    return null;
+  }
+  return {
+    kind: "logical-ref",
+    logicalKey,
+    version: selector === "latest" ? "latest" : Number.parseInt(selector.slice(1), 10),
+  };
 }
 
 export function inferPayloadContract(scopeKey: string, payloadPath: string, override?: Partial<PayloadContract>): PayloadContract {

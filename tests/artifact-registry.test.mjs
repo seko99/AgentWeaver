@@ -247,6 +247,166 @@ describe("artifact registry", () => {
     assert.equal(resumed.manifest.supersedes, first.artifact_id);
     assert.notEqual(resumed.manifest.publication_key, first.manifest.publication_key);
   });
+
+  it("resolves artifacts by logical reference and exact artifact id", () => {
+    const scopeKey = "ag-78c@test";
+    const registry = createArtifactRegistry();
+    const firstPath = writeScopeFile(scopeKey, ".artifacts/plan-ag-78c@test-1.json", "{\n  \"summary\": \"one\"\n}\n");
+    const secondPath = writeScopeFile(scopeKey, ".artifacts/plan-ag-78c@test-2.json", "{\n  \"summary\": \"two\"\n}\n");
+
+    const first = registry.publish({
+      scopeKey,
+      runId: "run-1",
+      flowId: "plan-flow",
+      phaseId: "plan",
+      stepId: "write_plan",
+      nodeKind: "codex-prompt",
+      nodeVersion: 1,
+      kind: "artifact",
+      payloadPath: firstPath,
+      inputs: [],
+    });
+    const second = registry.publish({
+      scopeKey,
+      runId: "run-2",
+      flowId: "plan-flow",
+      phaseId: "plan",
+      stepId: "write_plan_again",
+      nodeKind: "codex-prompt",
+      nodeVersion: 1,
+      kind: "artifact",
+      payloadPath: secondPath,
+      inputs: [],
+    });
+
+    const latest = registry.resolveArtifact(scopeKey, `${first.logical_key}@latest`);
+    const firstById = registry.resolveArtifact(scopeKey, first.artifact_id);
+    const firstByVersion = registry.resolveArtifact(scopeKey, `${first.logical_key}@v1`);
+
+    assert.equal(first.version, 1);
+    assert.equal(existsSync(artifactManifestSidecarPath(firstPath)), true);
+    assert.equal(existsSync(artifactIndexFile(scopeKey)), true);
+    assert.equal(latest.artifact_id, second.artifact_id);
+    assert.equal(firstById.artifact_id, first.artifact_id);
+    assert.equal(firstByVersion.artifact_id, first.artifact_id);
+    assert.throws(
+      () => registry.resolveArtifact(scopeKey, first.logical_key),
+      /Expected an artifact_id or a logical reference/,
+    );
+    assert.throws(
+      () => registry.resolveArtifact(scopeKey, `other-scope:${first.logical_key}:v1`),
+      /belongs to scope 'other-scope'/,
+    );
+    assert.throws(
+      () => registry.resolveArtifact(scopeKey, `${first.logical_key}@v99`),
+      /was not found/,
+    );
+  });
+
+  it("rebuilds the index during reads and ignores interrupted temp files", () => {
+    const scopeKey = "ag-78d@test";
+    const registry = createArtifactRegistry();
+    const outputPath = writeScopeFile(scopeKey, "ready-to-merge.md", "ready v1\n");
+
+    const first = registry.publish({
+      scopeKey,
+      runId: "run-1",
+      flowId: "review-flow",
+      phaseId: "finalize",
+      stepId: "mark_ready",
+      nodeKind: "clear-ready-to-merge",
+      nodeVersion: 1,
+      kind: "artifact",
+      payloadPath: outputPath,
+      inputs: [],
+    });
+
+    writeFileSync(outputPath, "ready v2\n", "utf8");
+    const second = registry.publish({
+      scopeKey,
+      runId: "run-2",
+      flowId: "review-flow",
+      phaseId: "finalize",
+      stepId: "mark_ready_again",
+      nodeKind: "clear-ready-to-merge",
+      nodeVersion: 1,
+      kind: "artifact",
+      payloadPath: outputPath,
+      inputs: [],
+    });
+
+    const sidecarPath = artifactManifestSidecarPath(outputPath);
+    const staleTempPath = `${sidecarPath}.tmp-${process.pid}-stale`;
+    const indexPath = artifactIndexFile(scopeKey);
+    const indexTempPath = `${indexPath}.tmp-${process.pid}-stale`;
+
+    writeFileSync(sidecarPath, `${JSON.stringify(first.manifest, null, 2)}\n`, "utf8");
+    writeFileSync(indexPath, "{broken\n", "utf8");
+    writeFileSync(staleTempPath, "{broken\n", "utf8");
+    writeFileSync(indexTempPath, "{broken\n", "utf8");
+
+    const recoveredByPath = registry.loadManifestByPayloadPath(outputPath);
+    const recoveredByRef = registry.resolveArtifact(scopeKey, `${first.logical_key}@latest`);
+
+    assert.equal(recoveredByPath?.artifact_id, second.artifact_id);
+    assert.equal(recoveredByRef.artifact_id, second.artifact_id);
+    assert.equal(existsSync(staleTempPath), false);
+    assert.equal(existsSync(indexTempPath), false);
+
+    const rebuiltIndex = JSON.parse(readFileSync(indexPath, "utf8"));
+    assert.equal(rebuiltIndex.records.length, 2);
+    assert.equal(
+      rebuiltIndex.records.find((record) => record.artifact_id === second.artifact_id)?.is_latest,
+      true,
+    );
+  });
+
+  it("does not delete non-registry scope files whose names contain .tmp- during read recovery", () => {
+    const scopeKey = "ag-78e@test";
+    const registry = createArtifactRegistry();
+    const outputPath = writeScopeFile(scopeKey, "ready-to-merge.md", "ready v1\n");
+    const preservedPath = writeScopeFile(scopeKey, "notes/customer.tmp-copy.md", "keep me\n");
+
+    const first = registry.publish({
+      scopeKey,
+      runId: "run-1",
+      flowId: "review-flow",
+      phaseId: "finalize",
+      stepId: "mark_ready",
+      nodeKind: "clear-ready-to-merge",
+      nodeVersion: 1,
+      kind: "artifact",
+      payloadPath: outputPath,
+      inputs: [],
+    });
+
+    writeFileSync(outputPath, "ready v2\n", "utf8");
+    const second = registry.publish({
+      scopeKey,
+      runId: "run-2",
+      flowId: "review-flow",
+      phaseId: "finalize",
+      stepId: "mark_ready_again",
+      nodeKind: "clear-ready-to-merge",
+      nodeVersion: 1,
+      kind: "artifact",
+      payloadPath: outputPath,
+      inputs: [],
+    });
+
+    const sidecarPath = artifactManifestSidecarPath(outputPath);
+    const staleTempPath = `${sidecarPath}.tmp-${process.pid}-stale`;
+
+    writeFileSync(sidecarPath, `${JSON.stringify(first.manifest, null, 2)}\n`, "utf8");
+    writeFileSync(staleTempPath, "{broken\n", "utf8");
+
+    const recovered = registry.resolveArtifact(scopeKey, `${first.logical_key}@latest`);
+
+    assert.equal(recovered.artifact_id, second.artifact_id);
+    assert.equal(existsSync(staleTempPath), false);
+    assert.equal(existsSync(preservedPath), true);
+    assert.equal(readFileSync(preservedPath, "utf8"), "keep me\n");
+  });
 });
 
 describe("runner publication", () => {

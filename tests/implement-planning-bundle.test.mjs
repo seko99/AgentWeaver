@@ -100,6 +100,35 @@ function writeJsonArtifact(taskKey, prefix, iteration, payload) {
   return filePath;
 }
 
+function writeManifestSidecar(filePath, artifactId) {
+  writeFileSync(
+    `${filePath}.manifest.json`,
+    `${JSON.stringify({
+      artifact_id: artifactId,
+      logical_key: "artifacts/testing.json",
+      scope: "test-scope",
+      run_id: "run-1",
+      flow_id: "plan",
+      phase_id: "plan",
+      step_id: "write",
+      kind: "artifact",
+      version: 1,
+      payload_family: "helper-json",
+      schema_id: "helper-json/v1",
+      schema_version: 1,
+      created_at: "2026-04-19T00:00:00.000Z",
+      producer: { node: "test-node", summary: "test-node" },
+      inputs: [],
+      content_hash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      status: "ready",
+      payload_path: filePath,
+      manifest_path: `${filePath}.manifest.json`,
+      publication_key: "run-1:plan:plan:write:artifacts/testing.json",
+    }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 function writePlanningBundle(taskKey, iteration, options = {}) {
   if (options.withDesignMarkdown !== false) {
     writeMarkdownArtifact(taskKey, "design", iteration);
@@ -183,6 +212,31 @@ describe("resolveLatestPlanningBundle", () => {
         return true;
       },
     );
+  });
+
+  it("keeps resolving the newest bundle when manifest sidecars are present in the scope", () => {
+    const taskKey = "ag-76b@test";
+    writePlanningBundle(taskKey, 1);
+    const iterationTwo = {
+      designMarkdown: writeMarkdownArtifact(taskKey, "design", 2),
+      designJson: writeJsonArtifact(taskKey, "design", 2, VALID_DESIGN),
+      planMarkdown: writeMarkdownArtifact(taskKey, "plan", 2),
+      planJson: writeJsonArtifact(taskKey, "plan", 2, VALID_PLAN),
+      qaMarkdown: writeMarkdownArtifact(taskKey, "qa", 2),
+      qaJson: writeJsonArtifact(taskKey, "qa", 2, VALID_QA),
+    };
+
+    writeManifestSidecar(iterationTwo.designMarkdown, "ag-76b@test:design-ag-76b@test:v1");
+    writeManifestSidecar(iterationTwo.designJson, "ag-76b@test:artifacts/design-ag-76b@test.json:v1");
+    writeManifestSidecar(iterationTwo.planMarkdown, "ag-76b@test:plan-ag-76b@test:v1");
+    writeManifestSidecar(iterationTwo.planJson, "ag-76b@test:artifacts/plan-ag-76b@test.json:v1");
+
+    const bundle = resolveLatestPlanningBundle(taskKey);
+
+    assert.equal(bundle.planningIteration, 2);
+    assert.match(bundle.designFile, /design-ag-76b@test-2\.md$/);
+    assert.match(bundle.planJsonFile, /plan-ag-76b@test-2\.json$/);
+    assert.match(bundle.qaJsonFile, /qa-ag-76b@test-2\.json$/);
   });
 });
 

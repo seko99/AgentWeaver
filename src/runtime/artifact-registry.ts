@@ -17,6 +17,7 @@ import {
   createProducerSummary,
   diagnosticsForManifest,
   inferPayloadContract,
+  parseArtifactReference,
   validateArtifactManifest,
   type ArtifactIndexRecord,
   type ArtifactLineageInput,
@@ -62,6 +63,7 @@ export type PublishedArtifactRecord = ArtifactIndexRecord & {
 
 export type ArtifactRegistry = {
   publish: (input: PublishArtifactInput) => PublishedArtifactRecord;
+  resolveArtifact: (scopeKey: string, reference: string) => ArtifactManifest;
   loadManifestByPayloadPath: (payloadPath: string) => ArtifactManifest | null;
   listScopeArtifacts: (scopeKey: string) => PublishedArtifactRecord[];
   rebuildIndex: (scopeKey: string) => PublishedArtifactRecord[];
@@ -147,7 +149,9 @@ function collectManifestFiles(rootDir: string): string[] {
     if (!current) {
       continue;
     }
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
+    const entries = readdirSync(current, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
       const fullPath = path.join(current, entry.name);
       if (entry.isDirectory()) {
         queue.push(fullPath);
@@ -190,17 +194,127 @@ function writeManifestHistory(scopeKey: string, manifest: ArtifactManifest): voi
   writeJsonAtomic(historyManifestPath(scopeKey, manifest.artifact_id), manifest);
 }
 
+function isRegistryTempFile(scopeKey: string, filePath: string): boolean {
+  const relativePath = path.relative(scopeWorkspaceDir(scopeKey), filePath);
+  if (relativePath.startsWith("..")) {
+    return false;
+  }
+  if (/\.manifest\.json\.tmp-[^/\\]+$/.test(relativePath)) {
+    return true;
+  }
+  return relativePath.startsWith(`${path.join(".artifacts", path.basename(artifactIndexFile(scopeKey)))}.tmp-`);
+}
+
 function removeStaleTempFiles(scopeKey: string): void {
-  const manifestRoot = historyDir(scopeKey);
-  if (!existsSync(manifestRoot)) {
+  const workspaceDir = scopeWorkspaceDir(scopeKey);
+  if (!existsSync(workspaceDir)) {
     return;
   }
-  for (const entry of readdirSync(manifestRoot, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.includes(".tmp-")) {
+  const queue = [workspaceDir];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) {
       continue;
     }
-    rmSync(path.join(manifestRoot, entry.name), { force: true });
+    const entries = readdirSync(current, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(fullPath);
+        continue;
+      }
+      if (entry.isFile() && isRegistryTempFile(scopeKey, fullPath)) {
+        rmSync(fullPath, { force: true });
+      }
+    }
   }
+}
+
+function indexRecordEquals(left: ArtifactIndexRecord, right: ArtifactIndexRecord): boolean {
+  return left.artifact_id === right.artifact_id
+    && left.logical_key === right.logical_key
+    && left.payload_path === right.payload_path
+    && left.manifest_path === right.manifest_path
+    && left.version === right.version
+    && left.status === right.status
+    && left.schema_id === right.schema_id
+    && left.schema_version === right.schema_version
+    && left.created_at === right.created_at
+    && left.content_hash === right.content_hash
+    && left.producer_summary === right.producer_summary
+    && left.supersedes === right.supersedes
+    && left.is_latest === right.is_latest;
+}
+
+function selectLatestReadyManifest(manifests: ArtifactManifest[]): ArtifactManifest | null {
+  return manifests
+    .filter((manifest) => manifest.status === "ready")
+    .sort((left, right) => right.version - left.version)[0] ?? null;
+}
+
+function selectNewestManifest(manifests: ArtifactManifest[]): ArtifactManifest | null {
+  return manifests
+    .slice()
+    .sort((left, right) => right.version - left.version)[0] ?? null;
+}
+
+function buildScopeRecords(
+  scopeKey: string,
+  computeDiagnostics: (manifest: ArtifactManifest) => ReturnType<typeof diagnosticsForManifest>,
+): PublishedArtifactRecord[] {
+  const manifests = collectScopeManifests(scopeKey).map((manifest) => ({
+    ...manifest,
+    diagnostics: computeDiagnostics(manifest),
+  }));
+  const latestByLogicalKey = new Map<string, string>();
+  for (const manifest of manifests) {
+    if (manifest.status === "ready") {
+      latestByLogicalKey.set(manifest.logical_key, manifest.artifact_id);
+    }
+  }
+  return manifests.map((manifest) => ({
+    ...toIndexRecord(manifest),
+    is_latest: latestByLogicalKey.get(manifest.logical_key) === manifest.artifact_id,
+    manifest,
+  }));
+}
+
+function readIndexProjection(scopeKey: string): ArtifactIndexRecord[] | null {
+  const indexPath = artifactIndexFile(scopeKey);
+  if (!existsSync(indexPath)) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(indexPath, "utf8")) as { records?: ArtifactIndexRecord[] };
+    return Array.isArray(parsed.records) ? parsed.records : null;
+  } catch {
+    return null;
+  }
+}
+
+function syncIndexProjection(scopeKey: string, records: PublishedArtifactRecord[]): void {
+  const projected = records.map(({ manifest: _manifest, ...record }) => record);
+  const current = readIndexProjection(scopeKey);
+  if (!current && projected.length === 0) {
+    return;
+  }
+  const needsRewrite = !current
+    || current.length !== projected.length
+    || current.some((record, index) => !indexRecordEquals(record, projected[index] as ArtifactIndexRecord));
+
+  if (!needsRewrite) {
+    return;
+  }
+
+  writeJsonAtomic(
+    artifactIndexFile(scopeKey),
+    {
+      scope: scopeKey,
+      generated_at: nowIso8601(),
+      records: projected,
+    },
+  );
 }
 
 export function createArtifactRegistry(): ArtifactRegistry {
@@ -297,59 +411,76 @@ export function createArtifactRegistry(): ArtifactRegistry {
       };
     },
 
+    resolveArtifact(scopeKey, reference) {
+      removeStaleTempFiles(scopeKey);
+      const parsedReference = parseArtifactReference(reference);
+      if (!parsedReference) {
+        throw new TaskRunnerError(
+          `Artifact reference '${reference}' is invalid. Expected an artifact_id or a logical reference in the form <logical_key>@latest or <logical_key>@vN.`,
+        );
+      }
+
+      const records = buildScopeRecords(scopeKey, this.computeDiagnostics);
+      syncIndexProjection(scopeKey, records);
+      const manifests = records.map((record) => record.manifest);
+
+      if (parsedReference.kind === "artifact-id") {
+        if (parsedReference.parsedId.scopeKey !== scopeKey) {
+          throw new TaskRunnerError(
+            `Artifact id '${reference}' belongs to scope '${parsedReference.parsedId.scopeKey}', expected '${scopeKey}'.`,
+          );
+        }
+        const manifest = manifests.find((candidate) => candidate.artifact_id === parsedReference.artifactId);
+        if (!manifest) {
+          throw new TaskRunnerError(`Artifact '${reference}' was not found in scope '${scopeKey}'.`);
+        }
+        return manifest;
+      }
+
+      const candidates = manifests.filter((candidate) => candidate.logical_key === parsedReference.logicalKey);
+      if (parsedReference.version === "latest") {
+        const manifest = selectLatestReadyManifest(candidates);
+        if (!manifest) {
+          throw new TaskRunnerError(
+            `No ready artifact found for logical reference '${reference}' in scope '${scopeKey}'.`,
+          );
+        }
+        return manifest;
+      }
+
+      const manifest = candidates.find((candidate) => candidate.version === parsedReference.version);
+      if (!manifest) {
+        throw new TaskRunnerError(`Artifact reference '${reference}' was not found in scope '${scopeKey}'.`);
+      }
+      return manifest;
+    },
+
     loadManifestByPayloadPath(payloadPath) {
       const manifest = tryLoadManifest(artifactManifestSidecarPath(payloadPath));
       const scopeKey = scopeKeyFromPayloadPath(payloadPath);
       if (!scopeKey) {
         return manifest;
       }
-      const candidates = collectScopeManifests(scopeKey)
-        .filter((candidate) => candidate.payload_path === payloadPath)
-        .sort((left, right) => right.version - left.version);
-      const latestHistory = candidates[0] ?? null;
-      if (!manifest) {
-        return latestHistory;
-      }
-      if (!latestHistory) {
-        return manifest;
-      }
-      return latestHistory.version > manifest.version ? latestHistory : manifest;
+      removeStaleTempFiles(scopeKey);
+      const records = buildScopeRecords(scopeKey, this.computeDiagnostics);
+      syncIndexProjection(scopeKey, records);
+      const candidates = records
+        .map((record) => record.manifest)
+        .filter((candidate) => candidate.payload_path === payloadPath);
+      return selectLatestReadyManifest(candidates) ?? selectNewestManifest(candidates) ?? manifest;
     },
 
     listScopeArtifacts(scopeKey) {
-      return collectScopeManifests(scopeKey).map((manifest) => ({
-        ...toIndexRecord(manifest),
-        manifest: {
-          ...manifest,
-          diagnostics: this.computeDiagnostics(manifest),
-        },
-      }));
+      removeStaleTempFiles(scopeKey);
+      const records = buildScopeRecords(scopeKey, this.computeDiagnostics);
+      syncIndexProjection(scopeKey, records);
+      return records;
     },
 
     rebuildIndex(scopeKey) {
-      const manifests = collectScopeManifests(scopeKey).map((manifest) => ({
-        ...manifest,
-        diagnostics: this.computeDiagnostics(manifest),
-      }));
-      const latestByLogicalKey = new Map<string, string>();
-      for (const manifest of manifests) {
-        if (manifest.status === "ready") {
-          latestByLogicalKey.set(manifest.logical_key, manifest.artifact_id);
-        }
-      }
-      const records = manifests.map((manifest) => ({
-        ...toIndexRecord(manifest),
-        is_latest: latestByLogicalKey.get(manifest.logical_key) === manifest.artifact_id,
-        manifest,
-      }));
-      writeJsonAtomic(
-        artifactIndexFile(scopeKey),
-        {
-          scope: scopeKey,
-          generated_at: nowIso8601(),
-          records: records.map(({ manifest: _manifest, ...record }) => record),
-        },
-      );
+      removeStaleTempFiles(scopeKey);
+      const records = buildScopeRecords(scopeKey, this.computeDiagnostics);
+      syncIndexProjection(scopeKey, records);
       return records;
     },
 

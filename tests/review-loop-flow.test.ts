@@ -200,6 +200,28 @@ describe("review-loop flow structure", () => {
 });
 
 describe("review-loop flow callers", () => {
+  it("auto-simple should route through plan.json", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
+    const planPhase = flow.phases.find((p) => p.id === "plan");
+    expect(planPhase).toBeDefined();
+    const runStep = planPhase!.steps.find((s) => s.node === "flow-run");
+    expect(runStep).toBeDefined();
+    expect(runStep!.params?.fileName).toEqual({ const: "plan.json" });
+  });
+
+  it("auto-golang should route through plan.json", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
+    let foundPlanFlowRun = false;
+    for (const phase of flow.phases) {
+      for (const step of phase.steps) {
+        if (step.node === "flow-run" && step.params?.fileName && "const" in step.params.fileName && step.params.fileName.const === "plan.json") {
+          foundPlanFlowRun = true;
+        }
+      }
+    }
+    expect(foundPlanFlowRun).toBe(true);
+  });
+
   it("auto-simple should route through review-loop.json", async () => {
     const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");

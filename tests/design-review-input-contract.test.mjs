@@ -95,6 +95,12 @@ function writeJsonArtifact(taskKey, prefix, iteration, payload) {
   return filePath;
 }
 
+function writeSidecarArtifactIndex(taskKey) {
+  const filePath = path.join(artifactsDir(taskKey), "artifact-index.json");
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, "{\n  \"scope\": \"test\",\n  \"records\": []\n}\n", "utf8");
+}
+
 function writePlanningRun(taskKey, iteration, options = {}) {
   if (options.withDesignMarkdown !== false) {
     writeMarkdownArtifact(taskKey, "design", iteration);
@@ -204,5 +210,18 @@ describe("resolveDesignReviewInputContract", () => {
     assert.equal(contract.planningAnswersJsonFile, planningAnswersPath);
     assert.equal(contract.hasJiraAttachmentsManifestFile, false);
     assert.equal(contract.jiraAttachmentsManifestFile, OPTIONAL_INPUT_NOT_PROVIDED);
+  });
+
+  it("keeps the design-review contract stable when artifact registry files are present", () => {
+    const taskKey = "ag-35@test";
+    writePlanningRun(taskKey, 1);
+    writeSidecarArtifactIndex(taskKey);
+
+    const contract = resolveDesignReviewInputContract(taskKey);
+
+    assert.equal(contract.planningIteration, 1);
+    assert.match(contract.designJsonFile, /design-ag-35@test-1\.json$/);
+    assert.match(contract.planJsonFile, /plan-ag-35@test-1\.json$/);
+    assert.equal(contract.hasQaArtifacts, false);
   });
 });
