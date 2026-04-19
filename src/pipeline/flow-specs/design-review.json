@@ -122,10 +122,12 @@
           "prompt": {
             "templateRef": "design-review",
             "vars": {
+              "task_context_json_file": { "ref": "params.taskContextJsonFile" },
               "jira_task_file": { "ref": "params.jiraTaskFile" },
               "jira_attachments_manifest_file": { "ref": "params.jiraAttachmentsManifestFile" },
               "jira_attachments_context_file": { "ref": "params.jiraAttachmentsContextFile" },
               "planning_answers_json_file": { "ref": "params.planningAnswersJsonFile" },
+              "task_input_json_file": { "ref": "params.taskInputJsonFile" },
               "design_file": { "ref": "params.designFile" },
               "design_json_file": { "ref": "params.designJsonFile" },
               "plan_file": { "ref": "params.planFile" },

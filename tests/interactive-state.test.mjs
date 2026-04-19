@@ -39,4 +39,40 @@ describe("interactive state bootstrap", () => {
     assert.equal(state.summaryVisible, true);
     assert.equal(state.flowTreeKeys[0], "folder:default");
   });
+
+  it("keeps technical subfolders collapsed by default and selects the first visible flow", () => {
+    const state = stateModule.createInitialInteractiveState({
+      scopeKey: "ag-86",
+      jiraIssueKey: "AG-86",
+      summaryText: "",
+      cwd: process.cwd(),
+      gitBranchName: "feature/ink",
+      version: "0.1.15",
+      getRunConfirmation: async () => ({ resumeAvailable: false, hasExistingState: false }),
+      onRun: async () => {},
+      onInterrupt: async () => {},
+      onExit: () => {},
+      flows: [
+        {
+          id: "custom-review",
+          label: "Custom Review",
+          description: "Run the custom review flow.",
+          source: "project-local",
+          treePath: ["custom", "review", "custom-review"],
+          phases: [],
+        },
+        {
+          id: "auto-common",
+          label: "Auto Common",
+          description: "Run the common auto flow.",
+          source: "built-in",
+          treePath: ["default", "auto-common"],
+          phases: [],
+        },
+      ],
+    });
+
+    assert.equal(state.selectedFlowId, "auto-common");
+    assert.equal(state.selectedFlowItemKey, "flow:auto-common");
+  });
 });

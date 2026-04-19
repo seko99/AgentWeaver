@@ -27,6 +27,7 @@ export const BUILT_IN_COMMAND_FLOW_IDS = [
   "git-commit",
   "gitlab-diff-review",
   "gitlab-review",
+  "instant-task",
   "mr-description",
   "plan",
   "plan-revise",
@@ -49,6 +50,7 @@ const BUILT_IN_COMMAND_FLOW_FILES: Record<(typeof BUILT_IN_COMMAND_FLOW_IDS)[num
   "git-commit": "git-commit.json",
   "gitlab-diff-review": "gitlab/gitlab-diff-review.json",
   "gitlab-review": "gitlab/gitlab-review.json",
+  "instant-task": "instant-task.json",
   "mr-description": "gitlab/mr-description.json",
   plan: "plan.json",
   "plan-revise": "plan-revise.json",
@@ -110,8 +112,10 @@ export function loadInteractiveFlowCatalog(cwd: string): FlowCatalogEntry[] {
     entries.push(loadProjectCatalogEntry(cwd, filePath));
   }
 
+  const visibleEntries = entries.filter((entry) => entry.flow.catalogVisibility !== "hidden");
+
   const byId = new Map<string, FlowCatalogEntry>();
-  for (const entry of entries) {
+  for (const entry of visibleEntries) {
     const duplicate = byId.get(entry.id);
     if (duplicate) {
       throw new TaskRunnerError(
@@ -120,7 +124,7 @@ export function loadInteractiveFlowCatalog(cwd: string): FlowCatalogEntry[] {
     }
     byId.set(entry.id, entry);
   }
-  return entries;
+  return visibleEntries;
 }
 
 export function findCatalogEntry(flowId: string, entries: FlowCatalogEntry[]): FlowCatalogEntry | undefined {

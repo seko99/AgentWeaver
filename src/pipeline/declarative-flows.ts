@@ -16,6 +16,7 @@ export type LoadedDeclarativeFlow = {
   kind: string;
   version: number;
   description?: string;
+  catalogVisibility?: "visible" | "hidden";
   constants: Record<string, unknown>;
   phases: ExpandedPhaseSpec[];
   source: FlowSpecSource["source"];
@@ -51,6 +52,7 @@ export function loadDeclarativeFlow(flow: DeclarativeFlowRef | string): LoadedDe
     kind: spec.kind,
     version: spec.version,
     ...(spec.description !== undefined ? { description: spec.description } : {}),
+    ...(spec.catalogVisibility !== undefined ? { catalogVisibility: spec.catalogVisibility } : {}),
     constants: spec.constants ?? {},
     phases,
     source: ref.source,

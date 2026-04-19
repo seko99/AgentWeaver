@@ -214,8 +214,20 @@ export function jiraDescriptionJsonFile(taskKey: string, iteration?: number): st
   return versionedJsonArtifactFile(taskKey, "jira-description", iteration);
 }
 
+export function taskContextFile(taskKey: string, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, "task-context", iteration);
+}
+
+export function taskContextJsonFile(taskKey: string, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, "task-context", iteration);
+}
+
 export function taskDescribeInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `task-describe-input-${taskKey}.json`);
+}
+
+export function instantTaskInputJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `instant-task-input-${taskKey}.json`);
 }
 
 export function gitStatusJsonFile(taskKey: string): string {

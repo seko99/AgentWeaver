@@ -1,0 +1,216 @@
+{
+  "kind": "task-source-manual-flow",
+  "version": 1,
+  "description": "Collects manual task input in the current project scope for subsequent normalization and planning. Stored input is reused on reruns and can be edited on interactive restart.",
+  "catalogVisibility": "hidden",
+  "phases": [
+    {
+      "id": "source",
+      "steps": [
+        {
+          "id": "edit_task_source",
+          "when": {
+            "all": [
+              {
+                "ref": "params.repromptInstantTaskInput"
+              },
+              {
+                "exists": {
+                  "artifact": {
+                    "kind": "instant-task-input-json-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "user-input",
+          "params": {
+            "formId": { "const": "instant-task-input" },
+            "title": { "const": "Instant Task Input" },
+            "description": {
+              "const": "Review and edit the saved instant-task request for this branch-derived lineage before restarting planning."
+            },
+            "submitLabel": { "const": "Restart planning" },
+            "fields": {
+              "list": [
+                {
+                  "const": {
+                    "id": "task_description",
+                    "type": "text",
+                    "label": "Task description",
+                    "help": "Update the requested work for this restart. Leave the field empty to keep the current value.",
+                    "required": true,
+                    "multiline": true,
+                    "rows": 5,
+                    "placeholder": "e.g. add an instant-task command that runs planning, implementation, and review without Jira"
+                  }
+                },
+                {
+                  "const": {
+                    "id": "additional_instructions",
+                    "type": "text",
+                    "label": "Additional instructions",
+                    "help": "Update optional constraints, references, or implementation notes for this restart.",
+                    "required": false,
+                    "multiline": true,
+                    "rows": 4,
+                    "placeholder": "e.g. keep the existing Jira-backed flows unchanged, add tests for review routing"
+                  }
+                }
+              ]
+            },
+            "initialValues": { "ref": "params.prefilledInstantTaskInputValues" },
+            "outputFile": {
+              "artifact": {
+                "kind": "instant-task-input-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "instant-task-input-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "user-input/v1"
+                }
+              ],
+              "message": "Instant-task source input is missing or invalid."
+            }
+          ]
+        },
+        {
+          "id": "collect_task_source",
+          "when": {
+            "not": {
+              "exists": {
+                "artifact": {
+                  "kind": "instant-task-input-json-file",
+                  "taskKey": { "ref": "params.taskKey" }
+                }
+              }
+            }
+          },
+          "node": "user-input",
+          "params": {
+            "formId": { "const": "instant-task-input" },
+            "title": { "const": "Instant Task Input" },
+            "description": {
+              "const": "Describe the task for this branch-derived lineage. The saved task input will be reused on reruns unless you choose interactive restart and edit it."
+            },
+            "submitLabel": { "const": "Start planning" },
+            "fields": {
+              "list": [
+                {
+                  "const": {
+                    "id": "task_description",
+                    "type": "text",
+                    "label": "Task description",
+                    "help": "Describe the requested work. This text becomes the source-of-truth input for the instant-task lineage.",
+                    "required": true,
+                    "multiline": true,
+                    "rows": 5,
+                    "placeholder": "e.g. add an instant-task command that runs planning, implementation, and review without Jira"
+                  }
+                },
+                {
+                  "const": {
+                    "id": "additional_instructions",
+                    "type": "text",
+                    "label": "Additional instructions",
+                    "help": "Optional extra constraints, references, or implementation notes for the same task lineage.",
+                    "required": false,
+                    "multiline": true,
+                    "rows": 4,
+                    "placeholder": "e.g. keep the existing Jira-backed flows unchanged, add tests for review routing"
+                  }
+                }
+              ]
+            },
+            "outputFile": {
+              "artifact": {
+                "kind": "instant-task-input-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "instant-task-input-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "user-input/v1"
+                }
+              ],
+              "message": "Instant-task source input is missing or invalid."
+            }
+          ]
+        },
+        {
+          "id": "validate_task_source_artifact",
+          "when": {
+            "all": [
+              {
+                "not": {
+                  "ref": "params.repromptInstantTaskInput"
+                }
+              },
+              {
+                "exists": {
+                  "artifact": {
+                    "kind": "instant-task-input-json-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                }
+              }
+            ]
+          },
+          "node": "file-check",
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "instant-task-input-json-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Instant Task Source Artifact" },
+            "foundMessage": {
+              "const": "Validated the saved instant-task source artifact before continuing planning."
+            },
+            "tone": { "const": "cyan" }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                {
+                  "path": {
+                    "artifact": {
+                      "kind": "instant-task-input-json-file",
+                      "taskKey": { "ref": "params.taskKey" }
+                    }
+                  },
+                  "schemaId": "user-input/v1"
+                }
+              ],
+              "message": "Instant-task source input is missing or invalid."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

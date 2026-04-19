@@ -1,19 +1,20 @@
 {
-  "kind": "auto-flow",
+  "kind": "instant-task-flow",
   "version": 1,
-  "description": "End-to-end resumable pipeline without language-specific checks. Runs: Jira fetch → task source normalization → plan → implement → review loop. Simplified alternative to auto-golang for projects that do not need Go linter/test loops.",
+  "description": "End-to-end resumable pipeline for ad-hoc work in the current branch-derived scope. Runs: manual source input → task source normalization → plan → design-review loop → implement → review loop, without Jira fetch.",
   "phases": [
     {
       "id": "source",
       "steps": [
         {
-          "id": "fetch_jira_source",
+          "id": "collect_manual_source",
           "node": "flow-run",
           "params": {
-            "fileName": { "const": "jira-fetch.json" },
-            "labelText": { "const": "Fetching Jira task source" },
-            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
-            "taskKey": { "ref": "params.taskKey" }
+            "fileName": { "const": "manual-input.json" },
+            "labelText": { "const": "Collecting manual task source" },
+            "taskKey": { "ref": "params.taskKey" },
+            "repromptInstantTaskInput": { "ref": "params.repromptInstantTaskInput" },
+            "prefilledInstantTaskInputValues": { "ref": "params.prefilledInstantTaskInputValues" }
           }
         }
       ]
@@ -59,6 +60,31 @@
       ]
     },
     {
+      "id": "design_review_loop",
+      "steps": [
+        {
+          "id": "run_design_review_loop",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "design-review-loop.json" },
+            "labelText": { "const": "Running design-review loop" },
+            "taskKey": { "ref": "params.taskKey" },
+            "workspaceDir": { "ref": "params.workspaceDir" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" }
+          },
+          "stopFlowIf": {
+            "equals": [
+              { "ref": "steps.design_review_loop.run_design_review_loop.value.executionState.terminationOutcome" },
+              { "const": "stopped" }
+            ]
+          },
+          "stopFlowOutcome": "stopped"
+        }
+      ]
+    },
+    {
       "id": "implement",
       "steps": [
         {
@@ -71,6 +97,7 @@
         {
           "id": "run_implement",
           "node": "llm-prompt",
+          "routingGroup": "implementation",
           "prompt": {
             "templateRef": "implement",
             "vars": {
@@ -110,6 +137,15 @@
         {
           "id": "run_review_loop",
           "node": "flow-run",
+          "stopFlowIf": {
+            "not": {
+              "equals": [
+                { "ref": "steps.review-loop.run_review_loop.value.executionState.terminationOutcome" },
+                { "const": "success" }
+              ]
+            }
+          },
+          "stopFlowOutcome": "stopped",
           "params": {
             "fileName": { "const": "review-loop.json" },
             "labelText": { "const": "Running review-loop" },

@@ -1,6 +1,6 @@
 import type { InteractiveSessionOptions } from "./session.js";
 import type { FlowStatusState, FocusPane } from "./types.js";
-import { buildFlowTree, collectFolderKeys, computeVisibleFlowItems, makeFlowKey } from "./tree.js";
+import { buildFlowTree, collectInitiallyExpandedFolderKeys, computeVisibleFlowItems, makeFlowKey } from "./tree.js";
 
 export type InteractiveSessionState = {
   scopeKey: string;
@@ -28,10 +28,10 @@ export type InteractiveSessionState = {
 
 export function createInitialInteractiveState(options: InteractiveSessionOptions): InteractiveSessionState {
   const flowTree = buildFlowTree(options.flows);
-  const expandedFlowFolders = new Set<string>(collectFolderKeys(flowTree));
+  const expandedFlowFolders = new Set<string>(collectInitiallyExpandedFolderKeys(flowTree));
   const visibleFlowItems = computeVisibleFlowItems(flowTree, expandedFlowFolders);
-  const selectedFlowId = options.flows[0]?.id ?? "auto-golang";
   const initiallySelectedItem = visibleFlowItems.find((item) => item.kind === "flow") ?? visibleFlowItems[0];
+  const selectedFlowId = initiallySelectedItem?.kind === "flow" ? initiallySelectedItem.flow.id : options.flows[0]?.id ?? "auto-golang";
 
   return {
     scopeKey: options.scopeKey,

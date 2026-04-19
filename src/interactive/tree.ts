@@ -163,3 +163,23 @@ export function collectFolderKeys(flowTree: FlowTreeNode[]): string[] {
   walk(flowTree);
   return keys;
 }
+
+export function collectInitiallyExpandedFolderKeys(flowTree: FlowTreeNode[]): string[] {
+  const keys: string[] = [];
+
+  const walk = (nodes: FlowTreeNode[]): void => {
+    for (const node of nodes) {
+      if (node.kind !== "folder") {
+        continue;
+      }
+      const expandedByDefault = node.pathSegments.length === 1 && node.name === "default";
+      if (expandedByDefault) {
+        keys.push(node.key);
+      }
+      walk(node.children);
+    }
+  };
+
+  walk(flowTree);
+  return keys;
+}

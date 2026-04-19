@@ -122,6 +122,7 @@ const STRUCTURED_JSON_SCHEMAS_BY_PREFIX: Array<{ prefix: string; schemaId: Struc
   { prefix: "review-assessment-", schemaId: "review-assessment/v1" },
   { prefix: "review-fix-", schemaId: "review-fix-report/v1" },
   { prefix: "review-", schemaId: "review-findings/v1" },
+  { prefix: "task-context-", schemaId: "task-context/v1" },
   { prefix: "task-", schemaId: "task-summary/v1" },
 ];
 
@@ -273,6 +274,9 @@ export function inferPayloadContract(scopeKey: string, payloadPath: string, over
       return { payloadFamily: "helper-json", schemaId: "helper-json/v1", schemaVersion: 1 };
     }
     if (baseName.startsWith("planning-answers-")) {
+      return { payloadFamily: "structured-json", schemaId: "user-input/v1", schemaVersion: 1 };
+    }
+    if (baseName.startsWith("instant-task-input-")) {
       return { payloadFamily: "structured-json", schemaId: "user-input/v1", schemaVersion: 1 };
     }
     for (const candidate of STRUCTURED_JSON_SCHEMAS_BY_PREFIX) {

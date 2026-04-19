@@ -4,6 +4,7 @@ import { TaskRunnerError } from "../../errors.js";
 import { buildLogicalKeyForPayload } from "../../artifact-manifest.js";
 import { printSummary } from "../../tui.js";
 import {
+  applyInitialUserInputValues,
   requestUserInputInTerminal,
   validateUserInputValues,
   type UserInputFieldDefinition,
@@ -18,6 +19,7 @@ export type UserInputNodeParams = {
   description?: string;
   submitLabel?: string;
   fields: UserInputFieldDefinition[];
+  initialValues?: UserInputFormValues;
   outputFile: string;
 };
 
@@ -106,6 +108,29 @@ function buildTaskDescribePromptSuffix(
   };
 }
 
+function buildInstantTaskPromptSuffix(
+  params: UserInputNodeParams,
+  values: UserInputFormValues,
+): { promptSuffix: string; summaryText: string } {
+  const taskDescription = typeof values.task_description === "string" ? values.task_description.trim() : "";
+  const additionalInstructions =
+    typeof values.additional_instructions === "string" ? values.additional_instructions.trim() : "";
+
+  return {
+    promptSuffix: [
+      "Use the manual instant-task request below as the source of truth for task intent.",
+      `User input file: ${params.outputFile}`,
+      `Task description:\n${taskDescription}`,
+      additionalInstructions ? `Additional instructions:\n${additionalInstructions}` : "",
+    ]
+      .filter((item) => item.trim().length > 0)
+      .join("\n\n"),
+    summaryText: additionalInstructions
+      ? `Task source: instant-task\n\n${taskDescription}\n\nAdditional instructions:\n${additionalInstructions}`
+      : `Task source: instant-task\n\n${taskDescription}`,
+  };
+}
+
 function buildPromptSuffix(params: UserInputNodeParams, values: UserInputFormValues): { promptSuffix: string; summaryText: string } {
   if (params.formId === "review-fix-selection") {
     return buildReviewFixPromptSuffix(params, values);
@@ -113,6 +138,10 @@ function buildPromptSuffix(params: UserInputNodeParams, values: UserInputFormVal
 
   if (params.formId === "task-describe-source-input") {
     return buildTaskDescribePromptSuffix(params, values);
+  }
+
+  if (params.formId === "instant-task-input") {
+    return buildInstantTaskPromptSuffix(params, values);
   }
 
   if (params.fields.length === 0) {
@@ -147,12 +176,13 @@ export const userInputNode: PipelineNodeDefinition<UserInputNodeParams, UserInpu
   kind: "user-input",
   version: 1,
   async run(context, params) {
+    const fields = applyInitialUserInputValues(params.fields, params.initialValues);
     const form: UserInputFormDefinition = {
       formId: params.formId,
       title: params.title,
       ...(params.description ? { description: params.description } : {}),
       ...(params.submitLabel ? { submitLabel: params.submitLabel } : {}),
-      fields: params.fields,
+      fields,
     };
 
     const requester = context.requestUserInput ?? requestUserInputInTerminal;

@@ -758,6 +758,47 @@
       "publication_key"
     ]
   },
+  "task-context/v1": {
+    "type": "object",
+    "properties": {
+      "source_type": {
+        "type": "string",
+        "nonEmpty": true,
+        "enum": ["jira", "manual"]
+      },
+      "title": { "type": "string", "nonEmpty": true },
+      "summary": { "type": "string", "nonEmpty": true },
+      "problem": { "type": "string", "nonEmpty": true },
+      "goal": { "type": "string", "nonEmpty": true },
+      "acceptance_criteria": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "constraints": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "references": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      },
+      "notes": {
+        "type": "array",
+        "items": { "type": "string", "nonEmpty": true }
+      }
+    },
+    "required": [
+      "source_type",
+      "title",
+      "summary",
+      "problem",
+      "goal",
+      "acceptance_criteria",
+      "constraints",
+      "references",
+      "notes"
+    ]
+  },
   "task-summary/v1": {
     "type": "object",
     "properties": {

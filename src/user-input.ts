@@ -92,6 +92,39 @@ export function buildInitialUserInputValues(fields: UserInputFieldDefinition[]):
   return Object.fromEntries(fields.map((field) => [field.id, defaultValueForField(field)]));
 }
 
+export function applyInitialUserInputValues(
+  fields: UserInputFieldDefinition[],
+  initialValues: UserInputFormValues | undefined,
+): UserInputFieldDefinition[] {
+  if (!initialValues) {
+    return fields;
+  }
+
+  return fields.map((field) => {
+    const initialValue = initialValues[field.id];
+    if (initialValue === undefined) {
+      return field;
+    }
+    if (field.type === "boolean" && typeof initialValue === "boolean") {
+      return { ...field, default: initialValue };
+    }
+    if (field.type === "text" && typeof initialValue === "string") {
+      return { ...field, default: initialValue };
+    }
+    if (field.type === "single-select" && typeof initialValue === "string") {
+      return { ...field, default: initialValue };
+    }
+    if (
+      field.type === "multi-select"
+      && Array.isArray(initialValue)
+      && initialValue.every((item) => typeof item === "string")
+    ) {
+      return { ...field, default: [...initialValue] };
+    }
+    return field;
+  });
+}
+
 function defaultSelectValue(
   field: Extract<UserInputFieldDefinition, { type: "single-select" | "multi-select" }>,
 ): string | string[] {

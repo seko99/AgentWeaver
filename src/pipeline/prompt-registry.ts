@@ -17,6 +17,8 @@ import {
   REVIEW_SUMMARY_PROMPT_TEMPLATE,
   RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
   RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
+  TASK_CONTEXT_FROM_JIRA_PROMPT_TEMPLATE,
+  TASK_CONTEXT_FROM_MANUAL_PROMPT_TEMPLATE,
   TASK_SUMMARY_PROMPT_TEMPLATE,
 } from "../prompts.js";
 
@@ -39,6 +41,8 @@ export type PromptTemplateRef =
   | "review-summary"
   | "run-go-linter-loop-fix"
   | "run-go-tests-loop-fix"
+  | "task-context-from-jira"
+  | "task-context-from-manual"
   | "task-summary";
 
 const promptTemplates: Record<PromptTemplateRef, string> = {
@@ -60,6 +64,8 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "review-summary": REVIEW_SUMMARY_PROMPT_TEMPLATE,
   "run-go-linter-loop-fix": RUN_GO_LINTER_LOOP_FIX_PROMPT_TEMPLATE,
   "run-go-tests-loop-fix": RUN_GO_TESTS_LOOP_FIX_PROMPT_TEMPLATE,
+  "task-context-from-jira": TASK_CONTEXT_FROM_JIRA_PROMPT_TEMPLATE,
+  "task-context-from-manual": TASK_CONTEXT_FROM_MANUAL_PROMPT_TEMPLATE,
   "task-summary": TASK_SUMMARY_PROMPT_TEMPLATE,
 };
 
