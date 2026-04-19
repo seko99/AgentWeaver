@@ -181,10 +181,16 @@ function stylePanelLine(panelTitle: string, line: string): StyledLine {
     if (/^Field \d+\/\d+/.test(trimmed)) {
       return { bold: true, color: "cyan", text: line };
     }
-    if (trimmed === "Preview:" || trimmed === "Options:") {
+    if (trimmed === "Preview:" || trimmed === "Options:" || trimmed === "Text input:") {
       return { bold: true, color: "magenta", text: line };
     }
+    if (/^[┌└][─]+[┐┘]$/.test(trimmed) || /^│ .* │$/.test(trimmed)) {
+      return { color: "cyan", text: line };
+    }
     if (/^Preview \d+-\d+ of \d+/.test(trimmed)) {
+      return { color: "gray", text: line };
+    }
+    if (trimmed.startsWith("Hint:")) {
       return { color: "gray", text: line };
     }
   }
@@ -286,10 +292,8 @@ export function normalizeInkKeypress(input: string, key: InkInputKey): Controlle
     name = "escape";
   } else if (key.tab) {
     name = "tab";
-  } else if (key.backspace) {
+  } else if (key.backspace || key.delete || input === "\b" || input === "\x7f") {
     name = "backspace";
-  } else if (key.delete) {
-    name = "delete";
   } else if (input === " ") {
     name = "space";
   } else if (input.length === 1) {
@@ -436,7 +440,6 @@ function createInkApp(react: ReactModule, ink: InkModule, controller: Interactiv
       void controller.handleKeypress(input, normalizeInkKeypress(input, key as InkInputKey));
     });
 
-    const viewModel = controller.getViewModel();
     const { stdout } = useStdout();
     const terminalRows = Math.max(stdout.rows ?? 24, 20);
     const terminalColumns = Math.max(stdout.columns ?? 80, 80);
@@ -444,6 +447,9 @@ function createInkApp(react: ReactModule, ink: InkModule, controller: Interactiv
     const sideStatusHeight = 6;
     const sideDescriptionHeight = Math.max(8, Math.floor(bodyHeight * 0.22));
     const sideFlowListHeight = Math.max(8, bodyHeight - sideDescriptionHeight - sideStatusHeight);
+    const formModalWidth = Math.max(56, Math.floor(terminalColumns * 0.72));
+    const formContentWidth = Math.max(8, formModalWidth - 8);
+    const viewModel = controller.getViewModel({ formContentWidth });
     const rightSummaryHeight = viewModel.summaryVisible ? Math.max(8, Math.floor(bodyHeight * 0.24)) : 0;
     const rightProgressHeight = Math.max(8, Math.floor(bodyHeight * 0.34));
     const rightLogHeight = Math.max(8, bodyHeight - rightProgressHeight - rightSummaryHeight);
@@ -477,13 +483,12 @@ function createInkApp(react: ReactModule, ink: InkModule, controller: Interactiv
     }
     if (viewModel.form) {
       const modalHeight = Math.max(10, Math.floor(terminalRows * 0.68));
-      const modalWidth = Math.max(56, Math.floor(terminalColumns * 0.72));
       overlayPanels.push(
         createOverlayBox(react, ink, Panel, {
           key: "form",
           borderColor: "magenta",
           height: modalHeight,
-          width: modalWidth,
+          width: formModalWidth,
           title: viewModel.form.title,
           content: viewModel.form.content,
         }),
