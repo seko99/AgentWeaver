@@ -47,6 +47,12 @@ import {
 } from "./flow-state.js";
 import { requireJiraTaskFile } from "./jira.js";
 import { validateStructuredArtifacts } from "./structured-artifacts.js";
+import {
+  AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV,
+  parseReviewSeverityCsv,
+  resolveReviewBlockingSeveritiesFromEnv,
+  type ReviewSeverity,
+} from "./review-severity.js";
 import { summarizeBuildFailure as summarizeBuildFailureViaPipeline } from "./pipeline/build-failure-summary.js";
 import { runNodeChecks } from "./pipeline/checks.js";
 import { createPipelineContext } from "./pipeline/context.js";
@@ -159,6 +165,7 @@ type BaseConfig = {
   jiraRef?: string | null;
   scopeName?: string | null;
   reviewFixPoints?: string | null;
+  reviewBlockingSeverities: ReviewSeverity[];
   extraPrompt?: string | null;
   autoFromPhase?: string | null;
   mdLang?: "en" | "ru" | null;
@@ -187,6 +194,7 @@ type ParsedArgs = {
   command: CommandName;
   jiraRef?: string;
   scopeName?: string;
+  reviewBlockingSeverities?: ReviewSeverity[];
   dry: boolean;
   verbose: boolean;
   prompt?: string;
@@ -260,9 +268,9 @@ function usage(): string {
   agentweaver plan-revise [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver implement [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
-  agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
-  agentweaver review-fix [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
-  agentweaver review-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
+  agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [--blocking-severities <list>] [<jira-browse-url|jira-issue-key>]
+  agentweaver review-fix [--dry] [--verbose] [--prompt <text>] [--scope <name>] [--blocking-severities <list>] [<jira-browse-url|jira-issue-key>]
+  agentweaver review-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [--blocking-severities <list>] [<jira-browse-url|jira-issue-key>]
   agentweaver run-go-tests-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver run-go-linter-loop [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
@@ -287,6 +295,7 @@ Flags:
   --verbose       Show live stdout/stderr of launched commands
   --scope         Explicit workflow scope name for non-Jira runs
   --prompt        Extra prompt text appended to the base prompt
+  --blocking-severities  Comma-separated severities that block merge and drive review-fix auto-selection
   --md-lang       Language for markdown output files: en (English) or ru (Russian, default)
 
 Required environment variables:
@@ -298,6 +307,7 @@ Optional environment variables:
   JIRA_BASE_URL
   GITLAB_TOKEN
   AGENTWEAVER_HOME
+  ${AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV}
   AGENTWEAVER_TUI
   CODEX_BIN
   CODEX_MODEL
@@ -308,6 +318,7 @@ Notes:
   - Jira-backed task flows will ask for Jira task via user-input when it is not passed as an argument. task-describe can also work from a manual task description without Jira.
   - All flow state and artifacts are stored in the current project scope by default.
   - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.
+  - ${AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV} sets the default blocking severities. Default: blocker,critical,high.
   - AGENTWEAVER_TUI selects the interactive renderer. Supported values are ink and blessed.`;
 }
 
@@ -590,6 +601,7 @@ function buildBaseConfig(
     jiraRef?: string | null;
     scopeName?: string | null;
     reviewFixPoints?: string | null;
+    reviewBlockingSeverities?: ReviewSeverity[] | null;
     extraPrompt?: string | null;
     autoFromPhase?: string | null;
     mdLang?: "en" | "ru" | null;
@@ -603,6 +615,7 @@ function buildBaseConfig(
     jiraRef: options.jiraRef ?? null,
     scopeName: options.scopeName ?? null,
     reviewFixPoints: options.reviewFixPoints ?? null,
+    reviewBlockingSeverities: options.reviewBlockingSeverities ?? resolveReviewBlockingSeveritiesFromEnv(),
     extraPrompt: options.extraPrompt ?? null,
     autoFromPhase: options.autoFromPhase ? validateAutoPhaseId(options.autoFromPhase) : null,
     mdLang: options.mdLang ?? null,
@@ -753,6 +766,7 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
     qaIteration: nextArtifactIteration(config.taskKey, "qa"),
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
+    reviewBlockingSeverities: config.reviewBlockingSeverities,
     forceRefresh: forceRefreshSummary,
     mdLang: config.mdLang,
     runGoTestsScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_tests.py"),
@@ -1011,6 +1025,7 @@ function defaultDeclarativeFlowParams(
     workspaceDir: scopeWorkspaceDir(config.taskKey),
     extraPrompt: config.extraPrompt,
     reviewFixPoints: config.reviewFixPoints,
+    reviewBlockingSeverities: config.reviewBlockingSeverities,
     mdLang: config.mdLang,
     llmExecutor: launchProfile.executor,
     llmModel: launchProfile.model,
@@ -1638,6 +1653,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   let prompt: string | undefined;
   let autoFromPhase: string | undefined;
   let scopeName: string | undefined;
+  let reviewBlockingSeverities: ReviewSeverity[] | undefined;
   let helpPhases = false;
   let jiraRef: string | undefined;
   let mdLang: "en" | "ru" | undefined;
@@ -1665,6 +1681,15 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     if (token === "--scope") {
       scopeName = argv[index + 1];
       index += 1;
+      continue;
+    }
+    if (token === "--blocking-severities") {
+      reviewBlockingSeverities = parseReviewSeverityCsv(argv[index + 1] ?? "");
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--blocking-severities=")) {
+      reviewBlockingSeverities = parseReviewSeverityCsv(token.slice("--blocking-severities=".length));
       continue;
     }
     if (token === "--from") {
@@ -1720,6 +1745,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     helpPhases,
     ...(jiraRef !== undefined ? { jiraRef } : {}),
     ...(scopeName !== undefined ? { scopeName } : {}),
+    ...(reviewBlockingSeverities !== undefined ? { reviewBlockingSeverities } : {}),
     ...(prompt !== undefined ? { prompt } : {}),
     ...(autoFromPhase !== undefined ? { autoFromPhase } : {}),
     ...(mdLang !== undefined ? { mdLang } : {}),
@@ -1731,6 +1757,7 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
   return buildBaseConfig(args.command, {
     ...(args.jiraRef !== undefined ? { jiraRef: args.jiraRef } : {}),
     ...(args.scopeName !== undefined ? { scopeName: args.scopeName } : {}),
+    ...(args.reviewBlockingSeverities !== undefined ? { reviewBlockingSeverities: args.reviewBlockingSeverities } : {}),
     ...(args.prompt !== undefined ? { extraPrompt: args.prompt } : {}),
     ...(args.autoFromPhase !== undefined ? { autoFromPhase: args.autoFromPhase } : {}),
     ...(args.mdLang !== undefined ? { mdLang: args.mdLang } : {}),

@@ -612,7 +612,7 @@
         "items": {
           "type": "object",
           "properties": {
-            "severity": { "type": "string", "nonEmpty": true },
+            "severity": { "type": "string", "enum": ["blocker", "critical", "high", "medium", "low", "info"] },
             "title": { "type": "string", "nonEmpty": true },
             "description": { "type": "string", "nonEmpty": true }
           },

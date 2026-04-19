@@ -126,6 +126,16 @@
           ]
         },
         {
+          "id": "review_verdict",
+          "node": "review-verdict",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "params": {
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "ref": "params.iteration" },
+            "blockingSeverities": { "ref": "params.reviewBlockingSeverities" }
+          }
+        },
+        {
           "id": "check_ready_to_merge",
           "node": "file-check",
           "params": {

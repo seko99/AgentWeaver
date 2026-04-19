@@ -65,6 +65,11 @@ describe("clear-ready-to-merge node", () => {
 
     rmSync(scopeDir, { recursive: true, force: true });
   });
+
+  it("should register review-verdict node", async () => {
+    const registry = createNodeRegistry();
+    expect(registry.has("review-verdict")).toBe(true);
+  });
 });
 
 describe("review-loop flow structure", () => {
@@ -120,6 +125,16 @@ describe("review-loop flow structure", () => {
     expect(entryCleanupPhase).toBeDefined();
     const clearStep = entryCleanupPhase!.steps.find((s) => s.node === "clear-ready-to-merge");
     expect(clearStep).toBeDefined();
+  });
+
+  it("should run review-verdict inside review.json", async () => {
+    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review.json" });
+    const reviewPhase = flow.phases.find((p) => p.id === "review");
+    expect(reviewPhase).toBeDefined();
+    const verdictStep = reviewPhase!.steps.find((s) => s.id === "review_verdict");
+    expect(verdictStep).toBeDefined();
+    expect(verdictStep!.node).toBe("review-verdict");
+    expect(verdictStep!.params?.blockingSeverities).toEqual({ ref: "params.reviewBlockingSeverities" });
   });
 
   it("should have review_iteration_1 phase", async () => {

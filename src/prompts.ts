@@ -81,9 +81,9 @@ export const IMPLEMENT_PROMPT_TEMPLATE =
 export const REVIEW_PROMPT_TEMPLATE =
   "Conduct a code review of the current changes. " +
   "Use only structured artifacts as source of truth: the task in {jira_task_file}, design in {design_json_file}, and plan in {plan_json_file}. " +
+  "Use exactly one severity per finding from this list: blocker, critical, high, medium, low, info. " +
   `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
-  "Then write the derivative markdown version to {review_file}. " +
-  "If ready_to_merge=true and there are no blockers preventing merge - create the ready-to-merge.md file.";
+  "Then write the derivative markdown version to {review_file}. ";
 
 export const DESIGN_REVIEW_PROMPT_TEMPLATE =
   "Conduct a structured planning critique as a specification critic, not as an implementer. " +
@@ -106,23 +106,24 @@ export const DESIGN_REVIEW_PROMPT_TEMPLATE =
 export const REVIEW_PROJECT_PROMPT_TEMPLATE =
   "Conduct a code review of current changes in the project without Jira context. " +
   "Evaluate the quality of changes based on current code, tests, regression risks, and overall engineering quality. " +
+  "Use exactly one severity per finding from this list: blocker, critical, high, medium, low, info. " +
   `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
-  "Then write the derivative markdown version to {review_file}. " +
-  "If ready_to_merge=true and there are no blockers, create the {ready_to_merge_file} file.";
+  "Then write the derivative markdown version to {review_file}. ";
 
 export const GITLAB_DIFF_REVIEW_PROMPT_TEMPLATE =
   "Conduct a code review of the GitLab merge request diff. " +
   "Use the structured diff artifact {gitlab_diff_json_file} as source of truth, and markdown {gitlab_diff_file} only as a convenient human-readable representation. " +
   "Evaluate only the changes from the diff: correctness, regression risks, missing tests, dangerous edge cases, contract violations, and maintainability. " +
+  "Use exactly one severity per finding from this list: blocker, critical, high, medium, low, info. " +
   `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
-  "Then write the derivative markdown version to {review_file}. " +
-  "If ready_to_merge=true and there are no blockers, create the {ready_to_merge_file} file.";
+  "Then write the derivative markdown version to {review_file}. ";
 
 export const GITLAB_REVIEW_PROMPT_TEMPLATE =
   "Validate GitLab merge request review comments. " +
   "Use the structured GitLab review artifact {gitlab_review_json_file} as source of truth, and markdown {gitlab_review_file} only as a convenient human-readable representation. " +
   "Determine which comments are valid actionable findings that should be addressed in the current code. " +
   "Ignore comments that are obsolete, already resolved, duplicates, purely conversational, or not actionable. " +
+  "Use exactly one severity per finding from this list: blocker, critical, high, medium, low, info. " +
   "Normalize the remaining actionable findings into the review findings schema with accurate severities, concise titles, and concrete descriptions. " +
   "For each remaining finding, assess whether the complaint is fair in the current code and propose a concrete fix. " +
   `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +

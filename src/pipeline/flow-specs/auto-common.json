@@ -121,6 +121,7 @@
             "workspaceDir": { "ref": "params.workspaceDir" },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+            "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
             "llmExecutor": { "ref": "params.llmExecutor" },
             "llmModel": { "ref": "params.llmModel" }
           }

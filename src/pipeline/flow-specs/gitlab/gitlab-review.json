@@ -240,6 +240,7 @@
             },
             "reviewFixSelectionJsonFile": { "ref": "params.reviewFixSelectionJsonFile" },
             "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+            "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "llmModel": { "ref": "params.llmModel" },
             "llmExecutor": { "ref": "params.llmExecutor" }

@@ -1,13 +1,16 @@
 import { writeFileSync } from "node:fs";
 
 import { readFileSync } from "node:fs";
+import { buildLogicalKeyForPayload } from "../../artifact-manifest.js";
 import { TaskRunnerError } from "../../errors.js";
+import { normalizeReviewSeverity, resolveBlockingReviewSeverities } from "../../review-severity.js";
 import type { PipelineNodeDefinition } from "../types.js";
 
 export type WriteSelectionFileNodeParams = {
   outputFile: string;
   reviewFindingsJsonFile: string;
-  selectionMode: "auto-blockers-criticals";
+  selectionMode: "auto-blocking-severities";
+  blockingSeverities?: string[] | null;
 };
 
 export type WriteSelectionFileNodeResult = {
@@ -28,8 +31,6 @@ type ReviewFindingsArtifact = {
   findings?: ReviewFinding[];
 };
 
-const SEVERITY_AUTO_SELECT = ["blocker", "critical"];
-
 export const writeSelectionFileNode: PipelineNodeDefinition<WriteSelectionFileNodeParams, WriteSelectionFileNodeResult> = {
   kind: "write-selection-file",
   version: 1,
@@ -45,16 +46,17 @@ export const writeSelectionFileNode: PipelineNodeDefinition<WriteSelectionFileNo
 
     const reviewFindings = parsed as ReviewFindingsArtifact;
     const findings = Array.isArray(reviewFindings.findings) ? reviewFindings.findings : [];
+    const blockingSeverities = resolveBlockingReviewSeverities(params.blockingSeverities);
     const selectedFindings = findings
       .filter((finding) => {
-        const severity = typeof finding.severity === "string" ? finding.severity.trim().toLowerCase() : "";
+        const severity = normalizeReviewSeverity(finding.severity);
         const disposition = typeof finding.disposition === "string" ? finding.disposition.trim().toLowerCase() : null;
-        return SEVERITY_AUTO_SELECT.includes(severity) && disposition !== "resolved" && disposition != null;
+        return severity !== null && blockingSeverities.includes(severity) && disposition !== "resolved";
       })
       .map((finding) => finding.title)
       .filter((title): title is string => typeof title === "string" && title.trim().length > 0);
 
-    const applyAll = selectedFindings.length === 0;
+    const applyAll = false;
     const artifact = {
       form_id: "review-fix-selection",
       submitted_at: new Date().toISOString(),
@@ -74,6 +76,20 @@ export const writeSelectionFileNode: PipelineNodeDefinition<WriteSelectionFileNo
         selectedFindings,
         applyAll,
       },
+      outputs: [
+        {
+          kind: "artifact",
+          path: params.outputFile,
+          required: true,
+          manifest: {
+            publish: true,
+            logicalKey: buildLogicalKeyForPayload(_context.issueKey, params.outputFile),
+            payloadFamily: "structured-json",
+            schemaId: "user-input/v1",
+            schemaVersion: 1,
+          },
+        },
+      ],
     };
   },
 };
