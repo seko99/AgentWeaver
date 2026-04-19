@@ -118,6 +118,34 @@ function insertCursor(value: string, index: number): string {
   return `${value.slice(0, boundedIndex)}│${value.slice(boundedIndex)}`;
 }
 
+function wrapTextLine(line: string, width: number): string[] {
+  if (line.length === 0) {
+    return [""];
+  }
+  const chunks: string[] = [];
+  for (let index = 0; index < line.length; index += width) {
+    chunks.push(line.slice(index, index + width));
+  }
+  return chunks;
+}
+
+function buildTextInputBox(value: string, cursorIndex: number, requestedWidth?: number): string[] {
+  const rendered = insertCursor(value, cursorIndex);
+  const naturalWidth = rendered.split("\n").reduce((max, line) => Math.max(max, line.length), 0);
+  const width = requestedWidth !== undefined
+    ? Math.max(8, requestedWidth)
+    : clamp(naturalWidth, 18, 52);
+  const renderedLines = rendered
+    .split("\n")
+    .flatMap((line) => wrapTextLine(line, width));
+
+  return [
+    `┌${"─".repeat(width + 2)}┐`,
+    ...renderedLines.map((line) => `│ ${line.padEnd(width, " ")} │`),
+    `└${"─".repeat(width + 2)}┘`,
+  ];
+}
+
 function normalizeLogText(text: string): string[] {
   const normalized = text
     .split("\n")
@@ -373,7 +401,7 @@ export class InteractiveSessionController {
     this.emitChange();
   }
 
-  getViewModel(): InteractiveSessionViewModel {
+  getViewModel(layout?: { formContentWidth?: number }): InteractiveSessionViewModel {
     const selectedItem = this.selectedFlowTreeItem();
     const activeFlowId = this.activeFlowId();
     const selectedFlow = selectedItem?.kind === "flow" ? selectedItem.flow : null;
@@ -413,7 +441,7 @@ export class InteractiveSessionController {
       logText: this.logText,
       logScrollOffset: this.state.logScrollOffset,
       confirmText: this.renderConfirmText(),
-      form: this.renderFormView(),
+      form: this.renderFormView(layout),
     };
   }
 
@@ -582,7 +610,7 @@ export class InteractiveSessionController {
     return lines.join("\n");
   }
 
-  private renderFormView(): InteractiveFormViewModel | null {
+  private renderFormView(layout?: { formContentWidth?: number }): InteractiveFormViewModel | null {
     const session = this.activeFormSession;
     const field = this.currentFormField();
     if (!session || !field) {
@@ -605,7 +633,11 @@ export class InteractiveSessionController {
       footer = `Form: Space toggle | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel`;
     } else if (field.type === "text") {
       const current = String(session.values[field.id] ?? "");
-      lines.push("", field.multiline ? insertCursor(current || field.placeholder || "", session.currentTextCursorIndex) : `> ${insertCursor(current, session.currentTextCursorIndex)}`);
+      lines.push("", "Text input:");
+      lines.push(...buildTextInputBox(current, session.currentTextCursorIndex, layout?.formContentWidth));
+      if (!current && field.placeholder?.trim()) {
+        lines.push(`Hint: ${field.placeholder.trim()}`);
+      }
       footer = field.multiline
         ? "Form: Enter newline | Tab switch | Ctrl+S submit | Esc cancel"
         : `Form: Type text | Enter ${isLastField ? "submit" : "next"} | Tab switch | Esc cancel`;

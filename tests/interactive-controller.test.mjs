@@ -130,6 +130,10 @@ describe("interactive controller", () => {
     let view = controller.getViewModel();
     assert.equal(view.form?.title, "User Input");
     assert.match(view.form?.content ?? "", /Demo Form/);
+    assert.match(view.form?.content ?? "", /Text input:/);
+    assert.match(view.form?.content ?? "", /┌/);
+    assert.match(view.form?.content ?? "", /│ │/);
+    assert.match(view.form?.content ?? "", /└/);
 
     await controller.handleKeypress("A", { name: "a" });
     await controller.handleKeypress("", { name: "enter" });
@@ -139,6 +143,50 @@ describe("interactive controller", () => {
 
     view = controller.getViewModel();
     assert.equal(view.form, null);
+  });
+
+  it("shows text input placeholders separately from the editable field", () => {
+    const controller = createController();
+    controller.requestUserInput({
+      formId: "placeholder-form",
+      title: "Placeholder Form",
+      fields: [
+        {
+          id: "jira",
+          type: "text",
+          label: "Jira issue key",
+          required: true,
+          placeholder: "DEMO-1234",
+        },
+      ],
+    });
+
+    const view = controller.getViewModel();
+    assert.match(view.form?.content ?? "", /Text input:/);
+    assert.match(view.form?.content ?? "", /┌/);
+    assert.match(view.form?.content ?? "", /│ │/);
+    assert.match(view.form?.content ?? "", /Hint: DEMO-1234/);
+  });
+
+  it("renders text input box at the provided modal width before typing", () => {
+    const controller = createController();
+    controller.requestUserInput({
+      formId: "wide-form",
+      title: "Wide Form",
+      fields: [
+        {
+          id: "summary",
+          type: "text",
+          label: "Summary",
+          required: true,
+        },
+      ],
+    });
+
+    const view = controller.getViewModel({ formContentWidth: 30 });
+    const boxTopLine = (view.form?.content ?? "").split("\n").find((line) => line.startsWith("┌"));
+
+    assert.equal(boxTopLine, `┌${"─".repeat(32)}┐`);
   });
 
   it("maps Ink key events into the controller key format", () => {
@@ -199,6 +247,49 @@ describe("interactive controller", () => {
       }),
       { name: "space", ctrl: false, shift: false, meta: false },
     );
+    assert.deepEqual(
+      inkSessionModule.normalizeInkKeypress("\x7f", {
+        upArrow: false,
+        downArrow: false,
+        leftArrow: false,
+        rightArrow: false,
+        pageDown: false,
+        pageUp: false,
+        return: false,
+        escape: false,
+        ctrl: false,
+        shift: false,
+        tab: false,
+        backspace: false,
+        delete: true,
+        meta: false,
+      }),
+      { name: "backspace", ctrl: false, shift: false, meta: false },
+    );
+  });
+
+  it("deletes text with backspace inside form inputs", async () => {
+    const controller = createController();
+    const request = controller.requestUserInput({
+      formId: "backspace-form",
+      title: "Backspace Form",
+      fields: [
+        {
+          id: "name",
+          type: "text",
+          label: "Name",
+          required: true,
+        },
+      ],
+    });
+
+    await controller.handleKeypress("A", { name: "a" });
+    await controller.handleKeypress("B", { name: "b" });
+    await controller.handleKeypress("", { name: "backspace" });
+    await controller.handleKeypress("", { name: "enter" });
+
+    const result = await request;
+    assert.equal(result.values.name, "A");
   });
 
   it("asks for confirmation before exiting the application", async () => {
