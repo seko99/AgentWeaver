@@ -275,6 +275,9 @@ export function inferPayloadContract(scopeKey: string, payloadPath: string, over
     if (baseName.startsWith("planning-answers-")) {
       return { payloadFamily: "structured-json", schemaId: "user-input/v1", schemaVersion: 1 };
     }
+    if (baseName.startsWith("instant-task-input-")) {
+      return { payloadFamily: "structured-json", schemaId: "user-input/v1", schemaVersion: 1 };
+    }
     for (const candidate of STRUCTURED_JSON_SCHEMAS_BY_PREFIX) {
       if (baseName.startsWith(candidate.prefix)) {
         return {

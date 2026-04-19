@@ -218,6 +218,10 @@ export function taskDescribeInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `task-describe-input-${taskKey}.json`);
 }
 
+export function instantTaskInputJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `instant-task-input-${taskKey}.json`);
+}
+
 export function gitStatusJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `git-status-${taskKey}.json`);
 }

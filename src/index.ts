@@ -13,7 +13,6 @@ import {
   bugFixPlanJsonFile,
   designReviewFile,
   designReviewJsonFile,
-  designJsonFile,
   gitlabDiffFile,
   gitlabDiffJsonFile,
   ensureScopeWorkspaceDir,
@@ -21,7 +20,6 @@ import {
   gitlabReviewJsonFile,
   latestArtifactIteration,
   nextArtifactIteration,
-  planJsonFile,
   readyToMergeFile,
   requireArtifacts,
   reviewAssessmentFile,
@@ -89,6 +87,7 @@ import { createArtifactRegistry } from "./runtime/artifact-registry.js";
 import { resolveDesignReviewInputContract } from "./runtime/design-review-input-contract.js";
 import { resolvePlanReviseInputContract } from "./runtime/plan-revise-input-contract.js";
 import { resolveLatestPlanningBundle } from "./runtime/planning-bundle.js";
+import { inspectReviewInputContract, resolveReviewInputContract } from "./runtime/review-input-contract.js";
 import { clearReadyToMergeFile } from "./runtime/ready-to-merge.js";
 import {
   describeExecutionRouting,
@@ -134,6 +133,7 @@ const COMMANDS = [
   "git-commit",
   "gitlab-diff-review",
   "gitlab-review",
+  "instant-task",
   "mr-description",
   "plan",
   "plan-revise",
@@ -263,6 +263,7 @@ function usage(): string {
   agentweaver bug-fix [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver design-review [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver doctor [<category>|<check-id>] [--json]
+  agentweaver instant-task [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>]
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [<jira-browse-url|jira-issue-key>]
   agentweaver plan-revise [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
@@ -293,7 +294,7 @@ Flags:
   --force         In interactive mode, regenerate task summary in Jira-backed flows
   --dry           Fetch Jira task, but print codex/opencode commands instead of executing them
   --verbose       Show live stdout/stderr of launched commands
-  --scope         Explicit workflow scope name for non-Jira runs
+  --scope         Explicit workflow scope name for non-Jira runs except instant-task
   --prompt        Extra prompt text appended to the base prompt
   --blocking-severities  Comma-separated severities that block merge and drive review-fix auto-selection
   --md-lang       Language for markdown output files: en (English) or ru (Russian, default)
@@ -315,6 +316,7 @@ Optional environment variables:
 
 Notes:
   - Jira-backed task flows will ask for Jira task via user-input when it is not passed as an argument. task-describe can also work from a manual task description without Jira.
+  - instant-task always uses the current branch-derived project scope and rejects explicit scope overrides or Jira arguments.
   - All flow state and artifacts are stored in the current project scope by default.
   - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.
   - ${AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV} sets the default blocking severities. Default: blocker,critical,high.
@@ -529,7 +531,7 @@ function scopeWithRestoredJiraContext(scope: ResolvedScope, state: FlowRunState 
 
 function buildInteractiveBaseConfig(flowId: string, scope: ResolvedScope): BaseConfig {
   return buildBaseConfig(flowId, {
-    ...(scope.jiraRef ? { jiraRef: scope.jiraRef } : {}),
+    ...(flowId !== "instant-task" && scope.jiraRef ? { jiraRef: scope.jiraRef } : {}),
   });
 }
 
@@ -645,6 +647,7 @@ function commandSupportsProjectScope(command: string): boolean {
     command === "git-commit" ||
     command === "gitlab-diff-review" ||
     command === "gitlab-review" ||
+    command === "instant-task" ||
     command === "task-describe" ||
     command === "implement" ||
     command === "review" ||
@@ -659,6 +662,20 @@ async function resolveScopeForCommand(
   config: BaseConfig,
   requestUserInput: UserInputRequester,
 ): Promise<ResolvedScope> {
+  if (config.command === "instant-task") {
+    if (config.scopeName?.trim()) {
+      throw new TaskRunnerError(
+        "Command 'instant-task' rejects explicit scope overrides. The current branch-derived scope is the only supported lineage identity.",
+      );
+    }
+    if (config.jiraRef?.trim()) {
+      throw new TaskRunnerError(
+        "Command 'instant-task' does not accept a Jira task argument. Start it without a positional Jira reference.",
+      );
+    }
+    return resolveProjectScope();
+  }
+
   if (config.jiraRef?.trim()) {
     return resolveProjectScope(config.scopeName, config.jiraRef);
   }
@@ -773,6 +790,37 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
     runGoTestsIteration: nextArtifactIteration(config.taskKey, "run-go-tests-result", "json"),
     runGoLinterIteration: nextArtifactIteration(config.taskKey, "run-go-linter-result", "json"),
   };
+}
+
+function reviewFlowParamsFromContract(config: Config) {
+  const contract = resolveReviewInputContract(config.taskKey);
+  return {
+    taskKey: config.taskKey,
+    planningIteration: contract.planningIteration,
+    designFile: contract.designFile,
+    designJsonFile: contract.designJsonFile,
+    planFile: contract.planFile,
+    planJsonFile: contract.planJsonFile,
+    hasJiraTaskFile: contract.hasJiraTaskFile,
+    jiraTaskFilePath: contract.jiraTaskFilePath,
+    jiraTaskFile: contract.jiraTaskFile,
+    hasTaskInputJsonFile: contract.hasTaskInputJsonFile,
+    taskInputJsonFilePath: contract.taskInputJsonFilePath,
+    taskInputJsonFile: contract.taskInputJsonFile,
+  };
+}
+
+function hasStructuredReviewInputs(taskKey: string): boolean {
+  const inspection = inspectReviewInputContract(taskKey);
+  if (inspection.status === "ready") {
+    return true;
+  }
+  if (inspection.status === "missing-planning") {
+    return false;
+  }
+  throw new TaskRunnerError(
+    `Structured review requires either Jira task context or an instant-task input artifact in scope '${taskKey}'.`,
+  );
 }
 
 function interactiveFlowDefinition(entry: FlowCatalogEntry): InteractiveFlowDefinition {
@@ -1116,6 +1164,27 @@ async function executeCommand(
     : launchProfile
       ? { launchProfile }
       : {};
+  if (config.command === "instant-task") {
+    checkPrerequisites(config, launchProfile, executionRouting);
+    await runDeclarativeFlowBySpecFile(
+      "instant-task.json",
+      config,
+      {
+        taskKey: config.taskKey,
+        designIteration: nextArtifactIteration(config.taskKey, "design"),
+        planIteration: nextArtifactIteration(config.taskKey, "plan"),
+        qaIteration: nextArtifactIteration(config.taskKey, "qa"),
+        extraPrompt: config.extraPrompt,
+        mdLang: config.mdLang,
+      },
+      flowOverrides,
+      requestUserInput,
+      setSummary,
+      launchMode,
+      runtime,
+    );
+    return !config.dryRun && existsSync(readyToMergeFile(config.taskKey));
+  }
   if (config.command === "auto-golang") {
     requireJiraConfig(config);
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
@@ -1335,6 +1404,9 @@ async function executeCommand(
         hasPlanningAnswersJsonFile: inputContract.hasPlanningAnswersJsonFile,
         planningAnswersJsonFilePath: inputContract.planningAnswersJsonFilePath,
         planningAnswersJsonFile: inputContract.planningAnswersJsonFile,
+        hasTaskInputJsonFile: inputContract.hasTaskInputJsonFile,
+        taskInputJsonFilePath: inputContract.taskInputJsonFilePath,
+        taskInputJsonFile: inputContract.taskInputJsonFile,
         extraPrompt: config.extraPrompt,
       },
       flowOverrides,
@@ -1394,6 +1466,9 @@ async function executeCommand(
         hasPlanningAnswersJsonFile: inputContract.hasPlanningAnswersJsonFile,
         planningAnswersJsonFilePath: inputContract.planningAnswersJsonFilePath,
         planningAnswersJsonFile: inputContract.planningAnswersJsonFile,
+        hasTaskInputJsonFile: inputContract.hasTaskInputJsonFile,
+        taskInputJsonFilePath: inputContract.taskInputJsonFilePath,
+        taskInputJsonFile: inputContract.taskInputJsonFile,
         extraPrompt: config.extraPrompt,
       },
       flowOverrides,
@@ -1520,17 +1595,9 @@ async function executeCommand(
 
   if (config.command === "review") {
     const iteration = nextReviewIterationForTask(config.taskKey);
-    if (config.jiraBrowseUrl && config.jiraApiUrl && config.jiraTaskFile) {
-      requireJiraConfig(config);
-      validateStructuredArtifacts(
-        [
-          { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
-          { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
-        ],
-        "Review mode requires valid structured plan artifacts from the planning phase.",
-      );
+    if (hasStructuredReviewInputs(config.taskKey)) {
       await runDeclarativeFlowBySpecFile("review/review.json", config, {
-        taskKey: config.taskKey,
+        ...reviewFlowParamsFromContract(config),
         iteration,
         extraPrompt: config.extraPrompt,
       }, flowOverrides, requestUserInput, undefined, launchMode, runtime);
@@ -1568,18 +1635,13 @@ async function executeCommand(
 
   if (config.command === "review-loop") {
     const iteration = nextReviewIterationForTask(config.taskKey);
-    if (config.jiraBrowseUrl && config.jiraApiUrl && config.jiraTaskFile) {
-      requireJiraConfig(config);
-      validateStructuredArtifacts(
-        [
-          { path: designJsonFile(config.taskKey), schemaId: "implementation-design/v1" },
-          { path: planJsonFile(config.taskKey), schemaId: "implementation-plan/v1" },
-        ],
-        "Review-loop mode requires valid structured plan artifacts from the planning phase.",
-      );
-    }
-    await runDeclarativeFlowBySpecFile("review/review-loop.json", config, {
-      taskKey: config.taskKey,
+    const reviewLoopSpec = hasStructuredReviewInputs(config.taskKey)
+      ? "review/review-loop.json"
+      : "review/review-project-loop.json";
+    await runDeclarativeFlowBySpecFile(reviewLoopSpec, config, {
+      ...(reviewLoopSpec === "review/review-loop.json"
+        ? reviewFlowParamsFromContract(config)
+        : { taskKey: config.taskKey }),
       iteration,
       extraPrompt: config.extraPrompt,
     }, flowOverrides, requestUserInput, undefined, launchMode, runtime);

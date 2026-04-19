@@ -8,6 +8,8 @@ import {
   IMPLEMENT_PROMPT_TEMPLATE,
   JIRA_DESCRIPTION_PROMPT_TEMPLATE,
   MR_DESCRIPTION_PROMPT_TEMPLATE,
+  PLAN_INSTANT_PROMPT_TEMPLATE,
+  PLAN_INSTANT_QUESTIONS_PROMPT_TEMPLATE,
   PLAN_PROMPT_TEMPLATE,
   PLAN_QUESTIONS_PROMPT_TEMPLATE,
   PLAN_REVISE_PROMPT_TEMPLATE,
@@ -30,6 +32,8 @@ export type PromptTemplateRef =
   | "implement"
   | "task-describe"
   | "mr-description"
+  | "plan-instant"
+  | "plan-instant-questions"
   | "plan-questions"
   | "plan"
   | "plan-revise"
@@ -51,6 +55,8 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   implement: IMPLEMENT_PROMPT_TEMPLATE,
   "task-describe": JIRA_DESCRIPTION_PROMPT_TEMPLATE,
   "mr-description": MR_DESCRIPTION_PROMPT_TEMPLATE,
+  "plan-instant": PLAN_INSTANT_PROMPT_TEMPLATE,
+  "plan-instant-questions": PLAN_INSTANT_QUESTIONS_PROMPT_TEMPLATE,
   "plan-questions": PLAN_QUESTIONS_PROMPT_TEMPLATE,
   plan: PLAN_PROMPT_TEMPLATE,
   "plan-revise": PLAN_REVISE_PROMPT_TEMPLATE,

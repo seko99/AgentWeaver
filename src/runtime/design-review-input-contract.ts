@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import {
   designFile,
   designJsonFile,
+  instantTaskInputJsonFile,
   jiraAttachmentsContextFile,
   jiraAttachmentsManifestFile,
   jiraTaskFile,
@@ -48,6 +49,9 @@ export type DesignReviewInputContract = {
   hasPlanningAnswersJsonFile: boolean;
   planningAnswersJsonFilePath: string | null;
   planningAnswersJsonFile: string;
+  hasTaskInputJsonFile: boolean;
+  taskInputJsonFilePath: string | null;
+  taskInputJsonFile: string;
 };
 
 function requiredPlanningArtifactPaths(taskKey: string, iteration: number): {
@@ -175,6 +179,11 @@ export function resolveDesignReviewInputContract(taskKey: string): DesignReviewI
     "user-input/v1",
     "Design-review planning answers structured artifact is invalid.",
   );
+  const taskInput = resolveOptionalValidatedStructuredFile(
+    instantTaskInputJsonFile(taskKey),
+    "user-input/v1",
+    "Design-review instant-task input structured artifact is invalid.",
+  );
 
   return {
     planningIteration,
@@ -192,6 +201,9 @@ export function resolveDesignReviewInputContract(taskKey: string): DesignReviewI
     hasPlanningAnswersJsonFile: planningAnswers.present,
     planningAnswersJsonFilePath: planningAnswers.path,
     planningAnswersJsonFile: planningAnswers.promptValue,
+    hasTaskInputJsonFile: taskInput.present,
+    taskInputJsonFilePath: taskInput.path,
+    taskInputJsonFile: taskInput.promptValue,
   };
 }
 

@@ -23,6 +23,7 @@ import {
   jiraAttachmentsManifestFile,
   jiraDescriptionFile,
   jiraDescriptionJsonFile,
+  instantTaskInputJsonFile,
   jiraTaskFile,
   mrDescriptionFile,
   mrDescriptionJsonFile,
@@ -184,6 +185,8 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return jiraDescriptionJsonFile(taskKey, iteration);
     case "jira-task-file":
       return jiraTaskFile(taskKey);
+    case "instant-task-input-json-file":
+      return instantTaskInputJsonFile(taskKey);
     case "mr-description-file":
       return mrDescriptionFile(taskKey, iteration);
     case "mr-description-json-file":

@@ -13,36 +13,12 @@
           "prompt": {
             "templateRef": "review",
             "vars": {
-              "jira_task_file": {
-                "artifact": {
-                  "kind": "jira-task-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_file": {
-                "artifact": {
-                  "kind": "design-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "design_json_file": {
-                "artifact": {
-                  "kind": "design-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_file": {
-                "artifact": {
-                  "kind": "plan-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
-              "plan_json_file": {
-                "artifact": {
-                  "kind": "plan-json-file",
-                  "taskKey": { "ref": "params.taskKey" }
-                }
-              },
+              "jira_task_file": { "ref": "params.jiraTaskFile" },
+              "task_input_json_file": { "ref": "params.taskInputJsonFile" },
+              "design_file": { "ref": "params.designFile" },
+              "design_json_file": { "ref": "params.designJsonFile" },
+              "plan_file": { "ref": "params.planFile" },
+              "plan_json_file": { "ref": "params.planJsonFile" },
               "review_file": {
                 "artifact": {
                   "kind": "review-file",

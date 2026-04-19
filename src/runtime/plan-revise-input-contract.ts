@@ -5,6 +5,7 @@ import {
   designJsonFile,
   designReviewFile,
   designReviewJsonFile,
+  instantTaskInputJsonFile,
   jiraAttachmentsContextFile,
   jiraAttachmentsManifestFile,
   jiraTaskFile,
@@ -61,6 +62,9 @@ export type PlanReviseInputContract = {
   hasPlanningAnswersJsonFile: boolean;
   planningAnswersJsonFilePath: string | null;
   planningAnswersJsonFile: string;
+  hasTaskInputJsonFile: boolean;
+  taskInputJsonFilePath: string | null;
+  taskInputJsonFile: string;
 };
 
 function resolveLatestDesignReviewIteration(taskKey: string, sourcePlanningIteration?: number): number {
@@ -112,6 +116,23 @@ function resolveOptionalPromptFile(filePath: string): OptionalPromptFile {
     path: filePath,
     promptValue: filePath,
   };
+}
+
+function resolveOptionalValidatedStructuredFile(
+  filePath: string,
+  schemaId: "user-input/v1",
+  message: string,
+): OptionalPromptFile {
+  const resolved = resolveOptionalPromptFile(filePath);
+  if (!resolved.present) {
+    return resolved;
+  }
+
+  validateStructuredArtifacts(
+    [{ path: filePath, schemaId }],
+    message,
+  );
+  return resolved;
 }
 
 function resolveOptionalQaPair(taskKey: string, iteration: number): {
@@ -201,7 +222,16 @@ export function resolvePlanReviseInputContract(taskKey: string): PlanReviseInput
   const jiraTask = resolveOptionalPromptFile(jiraTaskFile(taskKey));
   const jiraAttachmentsManifest = resolveOptionalPromptFile(jiraAttachmentsManifestFile(taskKey));
   const jiraAttachmentsContext = resolveOptionalPromptFile(jiraAttachmentsContextFile(taskKey));
-  const planningAnswers = resolveOptionalPromptFile(planningAnswersJsonFile(taskKey));
+  const planningAnswers = resolveOptionalValidatedStructuredFile(
+    planningAnswersJsonFile(taskKey),
+    "user-input/v1",
+    "Plan-revise planning answers structured artifact is invalid.",
+  );
+  const taskInput = resolveOptionalValidatedStructuredFile(
+    instantTaskInputJsonFile(taskKey),
+    "user-input/v1",
+    "Plan-revise instant-task input structured artifact is invalid.",
+  );
 
   return {
     reviewIteration,
@@ -232,5 +262,8 @@ export function resolvePlanReviseInputContract(taskKey: string): PlanReviseInput
     hasPlanningAnswersJsonFile: planningAnswers.present,
     planningAnswersJsonFilePath: planningAnswers.path,
     planningAnswersJsonFile: planningAnswers.promptValue,
+    hasTaskInputJsonFile: taskInput.present,
+    taskInputJsonFilePath: taskInput.path,
+    taskInputJsonFile: taskInput.promptValue,
   };
 }

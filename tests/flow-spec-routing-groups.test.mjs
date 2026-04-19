@@ -23,6 +23,8 @@ const targetedSpecs = [
   "implement.json",
   "auto-common.json",
   "auto-golang.json",
+  "instant-task.json",
+  "plan-instant.json",
   "review/review.json",
   "review/review-fix.json",
   "review/review-project.json",

@@ -45,6 +45,34 @@ export const PLAN_QUESTIONS_PROMPT_TEMPLATE =
   "Usually 1-5 questions are sufficient. " +
   "The JSON file must be valid and contain only JSON without markdown wrapping. ";
 
+export const PLAN_INSTANT_QUESTIONS_PROMPT_TEMPLATE =
+  "Review and analyze the manual task input in {task_input_file}. " +
+  "Use values.task_description as the primary source of truth and values.additional_instructions as additional user-provided context when present. " +
+  "Do not reshape the input into Jira-like fields or invent Jira metadata. " +
+  "Before final planning, determine if any clarifications are needed from the user. " +
+  strictSchemaInstruction("{planning_questions_json_file}", "planning-questions/v1") +
+  "Ask only questions without which the design/plan could be incorrect or too speculative. " +
+  "Do not ask obvious, decorative, or duplicate questions. " +
+  "Usually 1-5 questions are sufficient. " +
+  "The JSON file must be valid and contain only JSON without markdown wrapping. ";
+
+export const PLAN_INSTANT_PROMPT_TEMPLATE =
+  "Review and analyze the manual task input in {task_input_file}. " +
+  "Use values.task_description as the primary source of truth and values.additional_instructions as additional user-provided context when present. " +
+  "Use planning answers from {planning_answers_json_file} when they exist and treat them as structured user clarifications. " +
+  "First create structured JSON artifacts - they are the source of truth for subsequent flows. " +
+  "Create human-readable markdown files as detailed derivative representations of these JSON artifacts for the user, not as brief summaries. " +
+  "Markdown should not influence JSON structure: first determine the correct JSON types, then build markdown as a derivative representation. " +
+  "Do not collapse specifics from the task input: preserve explicit files, methods, APIs, invariants, migration steps, acceptance criteria, edge cases, and constraints from the user request. " +
+  "Develop a system design for the solution and write JSON to {design_json_file}, then markdown to {design_file}. " +
+  strictSchemaInstruction("{design_json_file}", "implementation-design/v1") +
+  "Develop a detailed implementation plan and write JSON to {plan_json_file}, then markdown to {plan_file}. " +
+  strictSchemaInstruction("{plan_json_file}", "implementation-plan/v1") +
+  "Develop a QA test plan and write JSON to {qa_json_file}, then markdown to {qa_file}. " +
+  strictSchemaInstruction("{qa_json_file}", "qa-plan/v1") +
+  "Format markdown for design and plan comprehensively, with separate sections for Summary, Current State, Target State, Affected Code, Decisions, Migration/DB Changes, Risks, Implementation Steps, Tests, Rollout. " +
+  "JSON files must be valid and contain only JSON without markdown wrapping. ";
+
 export const BUG_ANALYZE_PROMPT_TEMPLATE =
   "Review and analyze the bug in {jira_task_file}. " +
   "First create structured JSON artifacts - they are the source of truth for subsequent flows. " +
@@ -80,7 +108,11 @@ export const IMPLEMENT_PROMPT_TEMPLATE =
 
 export const REVIEW_PROMPT_TEMPLATE =
   "Conduct a code review of the current changes. " +
-  "Use only structured artifacts as source of truth: the task in {jira_task_file}, design in {design_json_file}, and plan in {plan_json_file}. " +
+  "Use only structured artifacts as source of truth. " +
+  "Required planning inputs: design markdown {design_file}, design JSON {design_json_file}, plan markdown {plan_file}, and plan JSON {plan_json_file}. " +
+  "Optional task context is provided through these variables and may contain the literal value 'not provided' when absent: Jira task JSON {jira_task_file}, instant-task input JSON {task_input_json_file}. " +
+  "When an optional variable is 'not provided', treat that source as unavailable and do not invent details from it. " +
+  "Evaluate the current code against the available task context and the structured planning artifacts. " +
   "Use exactly one severity per finding from this list: blocker, critical, high, medium, low, info. " +
   `First write the structured result to {review_json_file}. ${strictSchemaInstruction("{review_json_file}", "review-findings/v1")}` +
   "Then write the derivative markdown version to {review_file}. ";
@@ -90,7 +122,7 @@ export const DESIGN_REVIEW_PROMPT_TEMPLATE =
   "Use structured JSON artifacts as the source of truth for semantics. " +
   "Required planning inputs: design markdown {design_file}, design JSON {design_json_file}, implementation plan markdown {plan_file}, implementation plan JSON {plan_json_file}. " +
   "Review the markdown files as derivative human-readable renderings of the same planning run, but do not let markdown override the structured JSON. " +
-  "Optional supplemental context is provided through these variables and may contain the literal value 'not provided' when absent: QA markdown {qa_file}, QA JSON {qa_json_file}, Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}. " +
+  "Optional supplemental context is provided through these variables and may contain the literal value 'not provided' when absent: QA markdown {qa_file}, QA JSON {qa_json_file}, Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}, instant-task input JSON {task_input_json_file}. " +
   "When an optional variable is 'not provided', treat that source as unavailable and do not invent details from it. " +
   "Evaluate completeness, consistency, implementation readiness, risk coverage, QA coverage, and scope discipline across the available planning artifacts and optional context. " +
   "Identify blocking findings, major non-blocking findings, warnings, missing information, consistency check results, QA coverage gaps, and concise recommended actions. " +
@@ -188,7 +220,7 @@ export const PLAN_REVISE_PROMPT_TEMPLATE =
   "Required source planning inputs: design JSON {design_json_file}, design markdown {design_file}, plan JSON {plan_json_file}, plan markdown {plan_file}. " +
   "Optional source QA inputs (may be 'not provided'): QA JSON {qa_json_file}, QA markdown {qa_file}. " +
   "When QA inputs are 'not provided', synthesize a new QA plan from the revised design and plan. " +
-  "Optional supplemental context (may be 'not provided'): Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}. " +
+  "Optional supplemental context (may be 'not provided'): Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}, instant-task input JSON {task_input_json_file}. " +
   "When an optional variable is 'not provided', treat that source as unavailable and do not invent details from it. " +
   "For every blocking finding and major finding in the verdict, address it directly in the revised artifacts. " +
   "Preserve all content from the original artifacts that is not directly addressed by findings in the verdict — do not drop details, sections, or decisions that remain valid. " +

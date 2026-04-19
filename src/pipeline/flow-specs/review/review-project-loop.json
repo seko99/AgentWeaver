@@ -1,0 +1,492 @@
+{
+  "kind": "review-project-loop-flow",
+  "version": 1,
+  "description": "Iteratively runs project review → review-fix cycles up to 5 times when no structured planning context is available. Stops early when ready-to-merge is achieved. Each iteration auto-selects the configured blocking severities for fixing. After iteration 5, runs a terminal verification project review to confirm the post-fix state.",
+  "constants": {
+    "autoReviewFixExtraPrompt": "Fix only configured blocking severities."
+  },
+  "phases": [
+    {
+      "id": "entry_cleanup",
+      "steps": [
+        {
+          "id": "clear_stale_ready_to_merge",
+          "node": "clear-ready-to-merge",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "taskKey": { "ref": "params.taskKey" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "review_iteration_1",
+      "steps": [
+        {
+          "id": "run_review",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "review-project.json" },
+            "labelText": { "const": "Running project review (iteration 1)" },
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "const": 1 },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
+            "llmModel": { "ref": "params.llmModel" },
+            "llmExecutor": { "ref": "params.llmExecutor" }
+          }
+        },
+        {
+          "id": "load_review_summary",
+          "node": "structured-summary",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "review-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            }
+          }
+        },
+        {
+          "id": "notify_review_complete",
+          "node": "telegram-notify",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "message": {
+              "template": "Review iteration 1: {summary}",
+              "vars": {
+                "summary": { "ref": "steps.review_iteration_1.load_review_summary.value.summary" }
+              }
+            }
+          }
+        },
+        {
+          "id": "check_ready_to_merge",
+          "node": "file-check",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Changes are ready to merge.\nready-to-merge.md file created." },
+            "tone": { "const": "green" }
+          },
+          "stopFlowIf": {
+            "equals": [
+              { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+              { "const": true }
+            ]
+          }
+        },
+        {
+          "id": "write_auto_selection",
+          "node": "write-selection-file",
+          "when": {
+            "all": [
+              { "not": { "ref": "context.dryRun" } },
+              { "equals": [
+                { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+                { "const": false }
+              ]}
+            ]
+          },
+          "params": {
+            "outputFile": {
+              "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
+              "vars": {
+                "workspace": { "ref": "params.workspaceDir" },
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            },
+            "reviewFindingsJsonFile": {
+              "artifact": {
+                "kind": "review-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            },
+            "selectionMode": { "const": "auto-blocking-severities" },
+            "blockingSeverities": { "ref": "params.reviewBlockingSeverities" }
+          }
+        },
+        {
+          "id": "run_review_fix",
+          "node": "flow-run",
+          "when": {
+            "all": [
+              { "not": { "ref": "context.dryRun" } },
+              { "equals": [
+                { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+                { "const": false }
+              ]}
+            ]
+          },
+          "params": {
+            "fileName": { "const": "review-fix.json" },
+            "labelText": {
+              "template": "Running review-fix (iteration 1)"
+            },
+            "taskKey": { "ref": "params.taskKey" },
+            "latestIteration": { "const": 1 },
+            "reviewAssessmentJsonFile": { "const": null },
+            "reviewFixSelectionJsonFile": {
+              "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
+              "vars": {
+                "workspace": { "ref": "params.workspaceDir" },
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            },
+            "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+            "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
+            "extraPrompt": {
+              "appendPrompt": {
+                "base": { "ref": "params.extraPrompt" },
+                "suffix": { "const": "Fix only configured blocking severities." }
+              }
+            },
+            "llmModel": { "ref": "params.llmModel" },
+            "llmExecutor": { "ref": "params.llmExecutor" }
+          }
+        },
+        {
+          "id": "load_review_fix_summary",
+          "node": "structured-summary",
+          "when": {
+            "all": [
+              { "not": { "ref": "context.dryRun" } },
+              { "equals": [
+                { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+                { "const": false }
+              ]}
+            ]
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "review-fix-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            }
+          }
+        },
+        {
+          "id": "notify_review_fix_complete",
+          "node": "telegram-notify",
+          "when": {
+            "all": [
+              { "not": { "ref": "context.dryRun" } },
+              { "equals": [
+                { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+                { "const": false }
+              ]}
+            ]
+          },
+          "params": {
+            "message": {
+              "template": "Review fix iteration 1: {summary}",
+              "vars": {
+                "summary": { "ref": "steps.review_iteration_1.load_review_fix_summary.value.summary" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "repeat": {
+        "var": "iteration",
+        "from": 2,
+        "to": 5
+      },
+      "phases": [
+        {
+          "id": "review_iteration_${iteration}",
+          "steps": [
+            {
+              "id": "run_review",
+              "node": "flow-run",
+              "params": {
+                "fileName": { "const": "review-project.json" },
+                "labelText": {
+                  "template": "Running project review (iteration ${iteration})"
+                },
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "repeat.iteration" },
+                "extraPrompt": { "ref": "params.extraPrompt" },
+                "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
+                "llmModel": { "ref": "params.llmModel" },
+                "llmExecutor": { "ref": "params.llmExecutor" }
+              }
+            },
+            {
+              "id": "load_review_summary",
+              "node": "structured-summary",
+              "when": {
+                "not": { "ref": "context.dryRun" }
+              },
+              "params": {
+                "path": {
+                  "artifact": {
+                    "kind": "review-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
+              }
+            },
+            {
+              "id": "notify_review_complete",
+              "node": "telegram-notify",
+              "when": {
+                "not": { "ref": "context.dryRun" }
+              },
+              "params": {
+                "message": {
+                  "template": "Review iteration ${iteration}: {summary}",
+                  "vars": {
+                    "summary": { "ref": "steps.review_iteration_${iteration}.load_review_summary.value.summary" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
+              }
+            },
+            {
+              "id": "check_ready_to_merge",
+              "node": "file-check",
+              "when": {
+                "not": { "ref": "context.dryRun" }
+              },
+              "params": {
+                "path": {
+                  "artifact": {
+                    "kind": "ready-to-merge-file",
+                    "taskKey": { "ref": "params.taskKey" }
+                  }
+                },
+                "panelTitle": { "const": "Ready To Merge" },
+                "foundMessage": { "const": "Changes are ready to merge.\nready-to-merge.md file created." },
+                "tone": { "const": "green" }
+              },
+              "stopFlowIf": {
+                "equals": [
+                  { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                  { "const": true }
+                ]
+              }
+            },
+            {
+              "id": "write_auto_selection",
+              "node": "write-selection-file",
+              "when": {
+                "all": [
+                  { "not": { "ref": "context.dryRun" } },
+                  { "equals": [
+                    { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                    { "const": false }
+                  ]}
+                ]
+              },
+              "params": {
+                "outputFile": {
+                  "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
+                  "vars": {
+                    "workspace": { "ref": "params.workspaceDir" },
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "reviewFindingsJsonFile": {
+                  "artifact": {
+                    "kind": "review-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "selectionMode": { "const": "auto-blocking-severities" },
+                "blockingSeverities": { "ref": "params.reviewBlockingSeverities" }
+              }
+            },
+            {
+              "id": "run_review_fix",
+              "when": {
+                "all": [
+                  { "not": { "ref": "context.dryRun" } },
+                  { "equals": [
+                    { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                    { "const": false }
+                  ]}
+                ]
+              },
+              "node": "flow-run",
+              "params": {
+                "fileName": { "const": "review-fix.json" },
+                "labelText": {
+                  "template": "Running review-fix (iteration ${iteration})"
+                },
+                "taskKey": { "ref": "params.taskKey" },
+                "latestIteration": { "ref": "repeat.iteration" },
+                "reviewAssessmentJsonFile": { "const": null },
+                "reviewFixSelectionJsonFile": {
+                  "template": "{workspace}/review-fix-selection-{taskKey}-iter-{iteration}.json",
+                  "vars": {
+                    "workspace": { "ref": "params.workspaceDir" },
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                },
+                "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+                "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
+                "extraPrompt": {
+                  "appendPrompt": {
+                    "base": { "ref": "params.extraPrompt" },
+                    "suffix": { "const": "Fix only configured blocking severities." }
+                  }
+                },
+                "llmModel": { "ref": "params.llmModel" },
+                "llmExecutor": { "ref": "params.llmExecutor" }
+              }
+            },
+            {
+              "id": "load_review_fix_summary",
+              "node": "structured-summary",
+              "when": {
+                "all": [
+                  { "not": { "ref": "context.dryRun" } },
+                  { "equals": [
+                    { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                    { "const": false }
+                  ]}
+                ]
+              },
+              "params": {
+                "path": {
+                  "artifact": {
+                    "kind": "review-fix-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
+              }
+            },
+            {
+              "id": "notify_review_fix_complete",
+              "node": "telegram-notify",
+              "when": {
+                "all": [
+                  { "not": { "ref": "context.dryRun" } },
+                  { "equals": [
+                    { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                    { "const": false }
+                  ]}
+                ]
+              },
+              "params": {
+                "message": {
+                  "template": "Review fix iteration ${iteration}: {summary}",
+                  "vars": {
+                    "summary": { "ref": "steps.review_iteration_${iteration}.load_review_fix_summary.value.summary" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "terminal_verification",
+      "when": {
+        "not": { "ref": "context.dryRun" }
+      },
+      "steps": [
+        {
+          "id": "clear_ready_to_merge_before_verification",
+          "node": "clear-ready-to-merge",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "taskKey": { "ref": "params.taskKey" }
+          }
+        },
+        {
+          "id": "run_terminal_review",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "review-project.json" },
+            "labelText": { "const": "Running terminal verification project review (iteration 6)" },
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "const": 6 },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
+            "llmModel": { "ref": "params.llmModel" },
+            "llmExecutor": { "ref": "params.llmExecutor" }
+          }
+        },
+        {
+          "id": "check_terminal_ready_to_merge",
+          "node": "file-check",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Ready To Merge" },
+            "foundMessage": { "const": "Changes are ready to merge.\nready-to-merge.md file created." },
+            "tone": { "const": "green" }
+          }
+        },
+        {
+          "id": "assert_terminal_success",
+          "node": "file-check",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "ready-to-merge-file",
+                "taskKey": { "ref": "params.taskKey" }
+              }
+            },
+            "panelTitle": { "const": "Terminal Verification" },
+            "foundMessage": { "const": "Terminal verification passed." },
+            "tone": { "const": "green" }
+          },
+          "expect": [
+            {
+              "kind": "step-output",
+              "value": { "ref": "steps.terminal_verification.check_terminal_ready_to_merge.value.exists" },
+              "equals": { "const": true },
+              "message": "Terminal verification failed: ready-to-merge.md was not produced after review_iteration_6. review-project-loop must fail."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

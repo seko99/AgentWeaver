@@ -1,6 +1,7 @@
 import { printInfo } from "../../tui.js";
 import { resolveDesignReviewInputContract } from "../../runtime/design-review-input-contract.js";
 import { resolvePlanReviseInputContract } from "../../runtime/plan-revise-input-contract.js";
+import { inspectReviewInputContract } from "../../runtime/review-input-contract.js";
 import type { PublishedArtifactRecord } from "../../runtime/artifact-registry.js";
 import { runExpandedPhase } from "../declarative-flow-runner.js";
 import { loadNamedDeclarativeFlow } from "../declarative-flows.js";
@@ -87,6 +88,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           hasPlanningAnswersJsonFile: contract.hasPlanningAnswersJsonFile,
           planningAnswersJsonFilePath: contract.planningAnswersJsonFilePath,
           planningAnswersJsonFile: contract.planningAnswersJsonFile,
+          hasTaskInputJsonFile: contract.hasTaskInputJsonFile,
+          taskInputJsonFilePath: contract.taskInputJsonFilePath,
+          taskInputJsonFile: contract.taskInputJsonFile,
         }, {
           "params.designFile": contract.designFile,
           "params.designJsonFile": contract.designJsonFile,
@@ -103,6 +107,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
             : {}),
           ...(contract.planningAnswersJsonFilePath
             ? { "params.planningAnswersJsonFile": contract.planningAnswersJsonFilePath }
+            : {}),
+          ...(contract.taskInputJsonFilePath
+            ? { "params.taskInputJsonFile": contract.taskInputJsonFilePath }
             : {}),
         });
       }
@@ -144,6 +151,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           hasPlanningAnswersJsonFile: contract.hasPlanningAnswersJsonFile,
           planningAnswersJsonFilePath: contract.planningAnswersJsonFilePath,
           planningAnswersJsonFile: contract.planningAnswersJsonFile,
+          hasTaskInputJsonFile: contract.hasTaskInputJsonFile,
+          taskInputJsonFilePath: contract.taskInputJsonFilePath,
+          taskInputJsonFile: contract.taskInputJsonFile,
         }, {
           "params.reviewFile": contract.reviewFile,
           "params.reviewJsonFile": contract.reviewJsonFile,
@@ -163,7 +173,41 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
           ...(contract.planningAnswersJsonFilePath
             ? { "params.planningAnswersJsonFile": contract.planningAnswersJsonFilePath }
             : {}),
+          ...(contract.taskInputJsonFilePath
+            ? { "params.taskInputJsonFile": contract.taskInputJsonFilePath }
+            : {}),
         });
+      }
+    } else if (flow.kind === "review-flow") {
+      const taskKey = String(flowParams["taskKey"] ?? "");
+      if (taskKey) {
+        const inspection = inspectReviewInputContract(taskKey);
+        if (inspection.status === "ready") {
+          const { contract } = inspection;
+          resolvedFlowParams = withArtifactLineageRefPaths({
+            ...flowParams,
+            planningIteration: contract.planningIteration,
+            designFile: contract.designFile,
+            designJsonFile: contract.designJsonFile,
+            planFile: contract.planFile,
+            planJsonFile: contract.planJsonFile,
+            hasJiraTaskFile: contract.hasJiraTaskFile,
+            jiraTaskFilePath: contract.jiraTaskFilePath,
+            jiraTaskFile: contract.jiraTaskFile,
+            hasTaskInputJsonFile: contract.hasTaskInputJsonFile,
+            taskInputJsonFilePath: contract.taskInputJsonFilePath,
+            taskInputJsonFile: contract.taskInputJsonFile,
+          }, {
+            "params.designFile": contract.designFile,
+            "params.designJsonFile": contract.designJsonFile,
+            "params.planFile": contract.planFile,
+            "params.planJsonFile": contract.planJsonFile,
+            ...(contract.jiraTaskFilePath ? { "params.jiraTaskFile": contract.jiraTaskFilePath } : {}),
+            ...(contract.taskInputJsonFilePath
+              ? { "params.taskInputJsonFile": contract.taskInputJsonFilePath }
+              : {}),
+          });
+        }
       }
     }
 

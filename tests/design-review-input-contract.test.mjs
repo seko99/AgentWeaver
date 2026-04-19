@@ -129,6 +129,13 @@ function writePlanningAnswers(taskKey, payload = VALID_USER_INPUT) {
   return filePath;
 }
 
+function writeInstantTaskInput(taskKey, payload = VALID_USER_INPUT) {
+  const filePath = path.join(artifactsDir(taskKey), `instant-task-input-${taskKey}.json`);
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return filePath;
+}
+
 beforeEach(() => {
   originalCwd = process.cwd();
   tempDir = mkdtempSync(path.join(os.tmpdir(), "agentweaver-design-review-contract-"));
@@ -210,6 +217,25 @@ describe("resolveDesignReviewInputContract", () => {
     assert.equal(contract.planningAnswersJsonFile, planningAnswersPath);
     assert.equal(contract.hasJiraAttachmentsManifestFile, false);
     assert.equal(contract.jiraAttachmentsManifestFile, OPTIONAL_INPUT_NOT_PROVIDED);
+  });
+
+  it("includes optional instant-task input when the structured artifact is present and valid", () => {
+    const taskKey = "ag-34b@test";
+    writePlanningRun(taskKey, 1);
+    const taskInputPath = writeInstantTaskInput(taskKey, {
+      form_id: "instant-task-input",
+      submitted_at: "2026-04-19T00:00:00.000Z",
+      values: {
+        task_description: "Add instant-task support.",
+        additional_instructions: "Keep Jira flows intact.",
+      },
+    });
+
+    const contract = resolveDesignReviewInputContract(taskKey);
+
+    assert.equal(contract.hasTaskInputJsonFile, true);
+    assert.equal(contract.taskInputJsonFilePath, taskInputPath);
+    assert.equal(contract.taskInputJsonFile, taskInputPath);
   });
 
   it("keeps the design-review contract stable when artifact registry files are present", () => {

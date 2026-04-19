@@ -27,6 +27,7 @@ export const ARTIFACT_REF_KINDS = [
   "jira-description-file",
   "jira-description-json-file",
   "jira-task-file",
+  "instant-task-input-json-file",
   "mr-description-file",
   "mr-description-json-file",
   "planning-answers-json-file",
