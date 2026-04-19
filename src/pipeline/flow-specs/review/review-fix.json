@@ -1,9 +1,9 @@
 {
   "kind": "review-fix-flow",
   "version": 1,
-  "description": "Takes review findings, auto-selects blockers and criticals (or lets the developer pick manually), builds a targeted fix prompt, and applies fixes locally. Runs mandatory checks after modifications.",
+  "description": "Takes review findings, auto-selects the configured blocking severities (or lets the developer pick manually), builds a targeted fix prompt, and applies fixes locally. Runs mandatory checks after modifications.",
   "constants": {
-    "autoReviewFixExtraPrompt": "Fix only blockers and criticals"
+    "autoReviewFixExtraPrompt": "Fix only blocking severities"
   },
   "phases": [
     {
@@ -56,7 +56,8 @@
                 "iteration": { "ref": "params.latestIteration" }
               }
             },
-            "selectionMode": { "const": "auto-blockers-criticals" }
+            "selectionMode": { "const": "auto-blocking-severities" },
+            "blockingSeverities": { "ref": "params.reviewBlockingSeverities" }
           }
         },
         {

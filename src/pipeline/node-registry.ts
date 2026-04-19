@@ -25,7 +25,9 @@ import { planningBundleNode } from "./nodes/planning-bundle-node.js";
 import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.js";
 import { readFileNode } from "./nodes/read-file-node.js";
 import { reviewFindingsFormNode } from "./nodes/review-findings-form-node.js";
+import { reviewVerdictNode } from "./nodes/review-verdict-node.js";
 import { selectFilesFormNode } from "./nodes/select-files-form-node.js";
+import { structuredSummaryNode } from "./nodes/structured-summary-node.js";
 import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
 import { telegramNotifierNode } from "./nodes/telegram-notifier-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
@@ -61,7 +63,9 @@ export type NodeKind =
   | "planning-questions-form"
   | "read-file"
   | "review-findings-form"
+  | "review-verdict"
   | "select-files-form"
+  | "structured-summary"
   | "summary-file-load"
   | "telegram-notify"
   | "user-input"
@@ -113,7 +117,9 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "planning-questions-form": planningQuestionsFormNode as unknown as AnyNodeDefinition,
   "read-file": readFileNode as unknown as AnyNodeDefinition,
   "review-findings-form": reviewFindingsFormNode as unknown as AnyNodeDefinition,
+  "review-verdict": reviewVerdictNode as unknown as AnyNodeDefinition,
   "select-files-form": selectFilesFormNode as unknown as AnyNodeDefinition,
+  "structured-summary": structuredSummaryNode as unknown as AnyNodeDefinition,
   "summary-file-load": summaryFileLoadNode as unknown as AnyNodeDefinition,
   "telegram-notify": telegramNotifierNode as unknown as AnyNodeDefinition,
   "user-input": userInputNode as unknown as AnyNodeDefinition,
@@ -262,11 +268,23 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["reviewFindingsJsonFile", "formId", "title"],
   },
+  "review-verdict": {
+    kind: "review-verdict",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["taskKey"],
+  },
   "select-files-form": {
     kind: "select-files-form",
     version: 1,
     prompt: "forbidden",
     requiredParams: ["gitStatusJsonFile", "formId", "title", "outputFile"],
+  },
+  "structured-summary": {
+    kind: "structured-summary",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["path"],
   },
   "summary-file-load": { kind: "summary-file-load", version: 1, prompt: "forbidden", requiredParams: ["path"] },
   "telegram-notify": {

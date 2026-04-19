@@ -4,6 +4,10 @@ import path from "node:path";
 import { DoctorImpact, DoctorStatus } from "../types.js";
 import { CATEGORY } from "./category.js";
 import { detectJiraDeployment } from "../../jira.js";
+import {
+  AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV,
+  parseReviewSeverityCsv,
+} from "../../review-severity.js";
 
 type EnvSource = "shell" | "project-local" | "global" | "default" | "missing";
 type EnvState = "configured" | "defaulted" | "unset" | "invalid";
@@ -37,6 +41,7 @@ const MONITORED_KEYS = [
   "JIRA_BASE_URL",
   "GITLAB_TOKEN",
   "AGENTWEAVER_HOME",
+  "AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES",
   "CODEX_BIN",
   "CODEX_MODEL",
   "OPENCODE_BIN",
@@ -51,6 +56,7 @@ const KEY_NOTES: Partial<Record<(typeof MONITORED_KEYS)[number], string>> = {
   JIRA_USERNAME: "Required only for Jira Cloud basic auth.",
   GITLAB_TOKEN: "Required for GitLab-backed flows.",
   AGENTWEAVER_HOME: "Optional override for the AgentWeaver package home.",
+  AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES: "Optional default list of merge-blocking severities for review and review-fix.",
   CODEX_BIN: "Optional override for the codex executable path.",
   CODEX_MODEL: "Optional fallback model override for Codex-backed executors.",
   OPENCODE_BIN: "Optional override for the opencode executable path.",
@@ -130,6 +136,9 @@ function defaultNote(key: string): string | null {
   if (key === "JIRA_AUTH_MODE") {
     return "Defaults to auto.";
   }
+  if (key === AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV) {
+    return "Defaults to blocker,critical,high.";
+  }
   return null;
 }
 
@@ -138,6 +147,18 @@ function validateJiraAuthMode(value: string | null): boolean {
     return true;
   }
   return JIRA_AUTH_MODE_ALLOWED_VALUES.includes(value.trim().toLowerCase());
+}
+
+function validateReviewBlockingSeverities(value: string | null): boolean {
+  if (value === null) {
+    return true;
+  }
+  try {
+    parseReviewSeverityCsv(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function keyNote(key: (typeof MONITORED_KEYS)[number]): string | undefined {
@@ -229,6 +250,7 @@ function checkEnvDiagnostics() {
   const jiraUsername = process.env.JIRA_USERNAME?.trim() || null;
   const jiraAuthModeRaw = process.env.JIRA_AUTH_MODE?.trim() || null;
   const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim() || null;
+  const reviewBlockingSeveritiesRaw = process.env[AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV]?.trim() || null;
 
   for (const key of MONITORED_KEYS) {
     const currentValue = process.env[key]?.trim() || null;
@@ -244,6 +266,9 @@ function checkEnvDiagnostics() {
     }
 
     if (key === "JIRA_AUTH_MODE" && currentValue !== null && !validateJiraAuthMode(currentValue)) {
+      state = "invalid";
+    }
+    if (key === AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES_ENV && currentValue !== null && !validateReviewBlockingSeverities(currentValue)) {
       state = "invalid";
     }
 
@@ -266,6 +291,9 @@ function checkEnvDiagnostics() {
 
   if (jiraAuthModeRaw !== null && !validateJiraAuthMode(jiraAuthModeRaw)) {
     warnings.push("JIRA_AUTH_MODE must be one of: auto, basic, bearer.");
+  }
+  if (reviewBlockingSeveritiesRaw !== null && !validateReviewBlockingSeverities(reviewBlockingSeveritiesRaw)) {
+    warnings.push("AGENTWEAVER_REVIEW_BLOCKING_SEVERITIES must be a comma-separated list of: blocker, critical, high, medium, low, info.");
   }
 
   if (jiraHasCorePair && jiraBaseUrl) {

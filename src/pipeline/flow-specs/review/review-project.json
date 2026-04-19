@@ -82,6 +82,16 @@
               "message": "Project review produced invalid structured artifacts."
             }
           ]
+        },
+        {
+          "id": "review_verdict",
+          "node": "review-verdict",
+          "when": { "not": { "ref": "context.dryRun" } },
+          "params": {
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "ref": "params.iteration" },
+            "blockingSeverities": { "ref": "params.reviewBlockingSeverities" }
+          }
         }
       ]
     }

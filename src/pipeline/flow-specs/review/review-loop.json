@@ -1,9 +1,9 @@
 {
   "kind": "review-loop-flow",
   "version": 1,
-  "description": "Iteratively runs review → review-fix cycles up to 5 times. Stops early when ready-to-merge is achieved. Each iteration auto-selects blockers and critical findings for fixing. After iteration 5, runs a terminal verification review to confirm the post-fix state.",
+  "description": "Iteratively runs review → review-fix cycles up to 5 times. Stops early when ready-to-merge is achieved. Each iteration auto-selects the configured blocking severities for fixing. After iteration 5, runs a terminal verification review to confirm the post-fix state.",
   "constants": {
-    "autoReviewFixExtraPrompt": "Fix only blockers and criticals. Skip minor and warning severity."
+    "autoReviewFixExtraPrompt": "Fix only configured blocking severities."
   },
   "phases": [
     {
@@ -33,18 +33,38 @@
             "taskKey": { "ref": "params.taskKey" },
             "iteration": { "const": 1 },
             "extraPrompt": { "ref": "params.extraPrompt" },
+            "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
             "llmModel": { "ref": "params.llmModel" },
             "llmExecutor": { "ref": "params.llmExecutor" }
           }
         },
         {
+          "id": "load_review_summary",
+          "node": "structured-summary",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "review-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            }
+          }
+        },
+        {
           "id": "notify_review_complete",
           "node": "telegram-notify",
+          "when": {
+            "not": { "ref": "context.dryRun" }
+          },
           "params": {
             "message": {
-              "template": "Review for {taskKey} complete.",
+              "template": "Review iteration 1: {summary}",
               "vars": {
-                "taskKey": { "ref": "params.taskKey" }
+                "summary": { "ref": "steps.review_iteration_1.load_review_summary.value.summary" }
               }
             }
           }
@@ -101,7 +121,8 @@
                 "iteration": { "const": 1 }
               }
             },
-            "selectionMode": { "const": "auto-blockers-criticals" }
+            "selectionMode": { "const": "auto-blocking-severities" },
+            "blockingSeverities": { "ref": "params.reviewBlockingSeverities" }
           }
         },
         {
@@ -133,10 +154,11 @@
               }
             },
             "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+            "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
             "extraPrompt": {
               "appendPrompt": {
                 "base": { "ref": "params.extraPrompt" },
-                "suffix": { "const": "Fix only blockers and criticals." }
+                "suffix": { "const": "Fix only configured blocking severities." }
               }
             },
             "llmModel": { "ref": "params.llmModel" },
@@ -144,13 +166,44 @@
           }
         },
         {
+          "id": "load_review_fix_summary",
+          "node": "structured-summary",
+          "when": {
+            "all": [
+              { "not": { "ref": "context.dryRun" } },
+              { "equals": [
+                { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+                { "const": false }
+              ]}
+            ]
+          },
+          "params": {
+            "path": {
+              "artifact": {
+                "kind": "review-fix-json-file",
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "const": 1 }
+              }
+            }
+          }
+        },
+        {
           "id": "notify_review_fix_complete",
           "node": "telegram-notify",
+          "when": {
+            "all": [
+              { "not": { "ref": "context.dryRun" } },
+              { "equals": [
+                { "ref": "steps.review_iteration_1.check_ready_to_merge.value.exists" },
+                { "const": false }
+              ]}
+            ]
+          },
           "params": {
             "message": {
-              "template": "Review fix for {taskKey} complete.",
+              "template": "Review fix iteration 1: {summary}",
               "vars": {
-                "taskKey": { "ref": "params.taskKey" }
+                "summary": { "ref": "steps.review_iteration_1.load_review_fix_summary.value.summary" }
               }
             }
           }
@@ -178,18 +231,38 @@
                 "taskKey": { "ref": "params.taskKey" },
                 "iteration": { "ref": "repeat.iteration" },
                 "extraPrompt": { "ref": "params.extraPrompt" },
+                "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
                 "llmModel": { "ref": "params.llmModel" },
                 "llmExecutor": { "ref": "params.llmExecutor" }
               }
             },
             {
+              "id": "load_review_summary",
+              "node": "structured-summary",
+              "when": {
+                "not": { "ref": "context.dryRun" }
+              },
+              "params": {
+                "path": {
+                  "artifact": {
+                    "kind": "review-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
+              }
+            },
+            {
               "id": "notify_review_complete",
               "node": "telegram-notify",
+              "when": {
+                "not": { "ref": "context.dryRun" }
+              },
               "params": {
                 "message": {
-                  "template": "Review iteration ${iteration} for {taskKey} complete.",
+                  "template": "Review iteration ${iteration}: {summary}",
                   "vars": {
-                    "taskKey": { "ref": "params.taskKey" },
+                    "summary": { "ref": "steps.review_iteration_${iteration}.load_review_summary.value.summary" },
                     "iteration": { "ref": "repeat.iteration" }
                   }
                 }
@@ -247,7 +320,8 @@
                     "iteration": { "ref": "repeat.iteration" }
                   }
                 },
-                "selectionMode": { "const": "auto-blockers-criticals" }
+                "selectionMode": { "const": "auto-blocking-severities" },
+                "blockingSeverities": { "ref": "params.reviewBlockingSeverities" }
               }
             },
             {
@@ -279,17 +353,40 @@
                   }
                 },
                 "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+                "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
                 "extraPrompt": {
                   "appendPrompt": {
                     "base": { "ref": "params.extraPrompt" },
-                    "suffix": { "const": "Fix only blockers and criticals." }
+                    "suffix": { "const": "Fix only configured blocking severities." }
                   }
                 },
                 "llmModel": { "ref": "params.llmModel" },
                 "llmExecutor": { "ref": "params.llmExecutor" }
               }
             },
-{
+            {
+              "id": "load_review_fix_summary",
+              "node": "structured-summary",
+              "when": {
+                "all": [
+                  { "not": { "ref": "context.dryRun" } },
+                  { "equals": [
+                    { "ref": "steps.review_iteration_${iteration}.check_ready_to_merge.value.exists" },
+                    { "const": false }
+                  ]}
+                ]
+              },
+              "params": {
+                "path": {
+                  "artifact": {
+                    "kind": "review-fix-json-file",
+                    "taskKey": { "ref": "params.taskKey" },
+                    "iteration": { "ref": "repeat.iteration" }
+                  }
+                }
+              }
+            },
+            {
               "id": "notify_review_fix_complete",
               "node": "telegram-notify",
               "when": {
@@ -303,9 +400,9 @@
               },
               "params": {
                 "message": {
-                  "template": "Review fix iteration ${iteration} for {taskKey} complete.",
+                  "template": "Review fix iteration ${iteration}: {summary}",
                   "vars": {
-                    "taskKey": { "ref": "params.taskKey" },
+                    "summary": { "ref": "steps.review_iteration_${iteration}.load_review_fix_summary.value.summary" },
                     "iteration": { "ref": "repeat.iteration" }
                   }
                 }
@@ -337,12 +434,13 @@
           "params": {
             "fileName": { "const": "review.json" },
             "labelText": { "const": "Running terminal verification review (iteration 6)" },
-            "taskKey": { "ref": "params.taskKey" },
-            "iteration": { "const": 6 },
-            "extraPrompt": { "ref": "params.extraPrompt" },
-            "llmModel": { "ref": "params.llmModel" },
-            "llmExecutor": { "ref": "params.llmExecutor" }
-          }
+              "taskKey": { "ref": "params.taskKey" },
+              "iteration": { "const": 6 },
+              "extraPrompt": { "ref": "params.extraPrompt" },
+              "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
+              "llmModel": { "ref": "params.llmModel" },
+              "llmExecutor": { "ref": "params.llmExecutor" }
+            }
         },
         {
           "id": "check_terminal_ready_to_merge",

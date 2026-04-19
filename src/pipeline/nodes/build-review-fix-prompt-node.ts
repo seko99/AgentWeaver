@@ -41,7 +41,11 @@ export const buildReviewFixPromptNode: PipelineNodeDefinition<BuildReviewFixProm
       "Use the user selection below as source of truth for the current review-fix scope.",
       `Selection file: ${params.selectionFile}`,
       `apply_all: ${applyAll ? "true" : "false"}`,
-      applyAll ? "Fix all findings in the current iteration." : `Fix only selected findings:\n- ${selectedFindings.join("\n- ")}`,
+      applyAll
+        ? "Fix all findings in the current iteration."
+        : selectedFindings.length > 0
+          ? `Fix only selected findings:\n- ${selectedFindings.join("\n- ")}`
+          : "No findings were selected for this review-fix iteration. Do not modify code; report the no-op outcome after validation.",
     ].join("\n\n");
 
     return {

@@ -62,7 +62,7 @@ This keeps workflow design in JSON while keeping implementation details in typed
 - `src/pipeline/` — declarative flow loading, compilation, validation, runtime, and built-in flow specs
 - `src/pipeline/nodes/` — reusable runtime nodes used by flow specs
 - `src/runtime/` — shared runtime services such as command resolution and subprocess execution
-- `src/interactive-ui.ts` — full-screen interactive UI
+- `src/interactive/` — Ink-based interactive session, controller, state, and view-model logic
 - `src/markdown.ts` — markdown rendering for terminal output
 - `src/structured-artifact-schemas.json` — schemas for machine-readable artifacts
 - `tests/` — automated tests for pipeline behavior
@@ -307,13 +307,18 @@ The runtime uses artifacts as the contract between stages, including markdown ou
 
 Running without a command opens the full-screen TUI. It acts as the operator console for the harness: browsing flows, launching them in scope, following activity, and reviewing summaries.
 
+Interactive mode is Ink-only. It requires:
+
+- a real TTY for both stdin and stdout
+- installed runtime dependencies from `npm install`
+
 Current navigation:
 
 - `Up` / `Down` — move in the flow tree
 - `Left` / `Right` — collapse or expand folders
 - `Enter` — toggle folder or run selected flow
 - `Tab` / `Shift+Tab` — switch panes
-- `PgUp` / `PgDn` / `Home` / `End` — scroll focused pane
+- `PgUp` / `PgDn` — scroll focused pane
 - `h` — open help
 - `q` or `Ctrl+C` — exit
 
