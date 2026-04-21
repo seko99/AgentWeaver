@@ -79,6 +79,8 @@ const HELP_TEXT = renderMarkdownToTerminal(
 );
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_INTERVAL_MS = 200;
+const LOG_FLUSH_INTERVAL_MS = 120;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -1020,7 +1022,7 @@ export class InteractiveSessionController {
       this.spinnerTimer = setInterval(() => {
         this.state.spinnerFrame = (this.state.spinnerFrame + 1) % SPINNER_FRAMES.length;
         this.emitChange();
-      }, 120);
+      }, SPINNER_INTERVAL_MS);
       return;
     }
     if (!running && this.spinnerTimer) {
@@ -1426,7 +1428,7 @@ export class InteractiveSessionController {
     this.logFlushTimer = setTimeout(() => {
       this.logFlushTimer = null;
       this.flushPendingLogLines();
-    }, 50);
+    }, LOG_FLUSH_INTERVAL_MS);
   }
 
   private flushPendingLogLines(): void {
