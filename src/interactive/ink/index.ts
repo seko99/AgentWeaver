@@ -553,16 +553,39 @@ function createInkApp(react: ReactModule, ink: InkModule, controller: Interactiv
   const { Fragment, createElement, useEffect, useState } = react;
   const { Box, Text, useInput, useStdout } = ink;
   const Panel = createPanelComponent(react, ink);
+  const LOG_REPAINT_DEBOUNCE_MS = 100;
 
   const App = () => {
     const [, setVersion] = useState(0);
 
     useEffect(() => {
-      const unsubscribe = controller.subscribe(() => {
+      let logRepaintTimer: NodeJS.Timeout | null = null;
+
+      const flushRepaint = () => {
+        if (logRepaintTimer) {
+          clearTimeout(logRepaintTimer);
+          logRepaintTimer = null;
+        }
         setVersion((previous) => previous + 1);
+      };
+
+      const unsubscribe = controller.subscribe((event) => {
+        if (event.type === "log") {
+          if (logRepaintTimer) {
+            return;
+          }
+          logRepaintTimer = setTimeout(() => {
+            flushRepaint();
+          }, LOG_REPAINT_DEBOUNCE_MS);
+          return;
+        }
+        flushRepaint();
       });
       controller.mount();
       return () => {
+        if (logRepaintTimer) {
+          clearTimeout(logRepaintTimer);
+        }
         unsubscribe();
         controller.destroy();
       };

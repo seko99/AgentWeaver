@@ -1,7 +1,7 @@
 {
   "kind": "auto-flow",
   "version": 1,
-  "description": "End-to-end resumable pipeline for Go projects. Runs the full sequence: Jira fetch → task source normalization → plan → implement → linter loop → test loop → review loop → final linter loop → final test loop. Supports --from to restart from a specific phase and auto-status/auto-reset for state management.",
+  "description": "End-to-end resumable pipeline for Go projects. Runs the full sequence: Jira fetch → task source normalization → plan → design-review loop → implement → linter loop → test loop → review loop → final linter loop → final test loop. Supports --from to restart from a specific phase and auto-status/auto-reset for state management.",
   "constants": {
     "autoReviewFixExtraPrompt": "Fix only blockers, criticals, and important findings"
   },
@@ -58,6 +58,31 @@
             "extraPrompt": { "ref": "params.extraPrompt" },
             "mdLang": { "ref": "params.mdLang" }
           }
+        }
+      ]
+    },
+    {
+      "id": "design_review_loop",
+      "steps": [
+        {
+          "id": "run_design_review_loop",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "design-review-loop.json" },
+            "labelText": { "const": "Running design-review loop" },
+            "taskKey": { "ref": "params.taskKey" },
+            "workspaceDir": { "ref": "params.workspaceDir" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" }
+          },
+          "stopFlowIf": {
+            "equals": [
+              { "ref": "steps.design_review_loop.run_design_review_loop.value.executionState.terminationOutcome" },
+              { "const": "stopped" }
+            ]
+          },
+          "stopFlowOutcome": "stopped"
         }
       ]
     },
