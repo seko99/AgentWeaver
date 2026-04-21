@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import type { RuntimeServices } from "./executors/types.js";
 import {
+  archiveActiveAttempt,
   bugAnalyzeArtifacts,
   bugAnalyzeJsonFile,
   bugFixDesignJsonFile,
@@ -35,13 +36,16 @@ import {
 import { FlowInterruptedError, TaskRunnerError } from "./errors.js";
 import {
   createFlowRunState,
-  hasResumableFlowState,
+  classifyFlowLaunchAvailability,
   loadFlowRunState,
+  prepareFlowStateForContinue,
   prepareFlowStateForResume,
   resetFlowRunState,
   rewindFlowRunStateToPhase,
   saveFlowRunState,
   stripExecutionStatePayload,
+  type FlowLaunchAvailability,
+  type FlowLaunchMode,
   type FlowRunState,
 } from "./flow-state.js";
 import { requireJiraTaskFile } from "./jira.js";
@@ -204,9 +208,8 @@ type ParsedArgs = {
   mdLang?: "en" | "ru";
   helpPhases: boolean;
   doctorArgs?: string[];
+  launchMode?: FlowLaunchMode;
 };
-
-type FlowLaunchMode = "resume" | "restart";
 
 type ProcessFailureLike = {
   returnCode?: number;
@@ -298,6 +301,9 @@ Flags:
   --verbose       Show live stdout/stderr of launched commands
   --scope         Explicit workflow scope name for non-Jira runs except instant-task
   --prompt        Extra prompt text appended to the base prompt
+  --resume        Resume an interrupted run when valid
+  --continue      Continue a terminated iterative run when valid
+  --restart       Archive the active attempt and start a fresh run
   --blocking-severities  Comma-separated severities that block merge and drive review-fix auto-selection
   --md-lang       Language for markdown output files: en (English) or ru (Russian, default)
 
@@ -371,9 +377,19 @@ function buildFlowResumeDetails(state: FlowRunState): string {
   return lines.join("\n");
 }
 
-type FlowResumeLookup = {
-  resumeAvailable: boolean;
-  hasExistingState: boolean;
+function buildFlowContinueDetails(state: FlowRunState): string {
+  const lines = [
+    "Continuable loop boundary found.",
+    `Updated: ${state.updatedAt}`,
+  ];
+  if (state.continuation?.stopPhaseId && state.continuation?.stopStepId) {
+    lines.push(`Stopped at: ${state.continuation.stopPhaseId}:${state.continuation.stopStepId}`);
+  }
+  lines.push("Continue will preserve existing artifacts and start the next iteration from active inputs.");
+  return lines.join("\n");
+}
+
+type FlowResumeLookup = FlowLaunchAvailability & {
   details?: string;
 };
 
@@ -539,28 +555,36 @@ function buildInteractiveBaseConfig(flowId: string, scope: ResolvedScope): BaseC
 
 async function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): Promise<FlowResumeLookup> {
   const directState = loadFlowRunState(currentScope.scopeKey, flowEntry.id);
-  if (directState && hasResumableFlowState(directState)) {
+  const availability = classifyFlowLaunchAvailability(directState);
+  if (directState && availability.resume.available) {
     try {
       const effectiveScope = scopeWithRestoredJiraContext(currentScope, directState);
       const baseConfig = buildInteractiveBaseConfig(flowEntry.id, effectiveScope);
       const config = buildRuntimeConfig(baseConfig, effectiveScope);
       await validateDeclarativeFlowResumeState(flowEntry, config, directState, directState.executionRouting);
       return {
-        resumeAvailable: true,
-        hasExistingState: true,
+        ...availability,
         details: buildFlowResumeDetails(directState),
       };
     } catch (error) {
       return {
-        resumeAvailable: false,
-        hasExistingState: true,
+        ...availability,
+        resume: {
+          available: false,
+          reason: (error as Error).message,
+        },
         details: `Interrupted run found, but resume is unavailable.\n${(error as Error).message}`,
       };
     }
   }
+  if (directState && availability.continue.available) {
+    return {
+      ...availability,
+      details: buildFlowContinueDetails(directState),
+    };
+  }
   return {
-    resumeAvailable: false,
-    hasExistingState: Boolean(directState),
+    ...availability,
   };
 }
 
@@ -976,7 +1000,10 @@ async function runDeclarativeFlowByRef(
     terminationOutcome: "success",
     phases: [],
   };
-  let persistedState = launchMode === "resume" ? loadFlowRunState(config.scope.scopeKey, flowId) : null;
+  const existingStateForRestart = launchMode === "restart" ? loadFlowRunState(config.scope.scopeKey, flowId) : null;
+  let persistedState = launchMode === "resume" || launchMode === "continue"
+    ? loadFlowRunState(config.scope.scopeKey, flowId)
+    : null;
   if (persistedState && launchMode === "resume") {
     await validateDeclarativeFlowResumeState(
       {
@@ -996,7 +1023,12 @@ async function runDeclarativeFlowByRef(
       runtime,
     );
     persistedState = prepareFlowStateForResume(persistedState);
+  } else if (persistedState && launchMode === "continue") {
+    persistedState = prepareFlowStateForContinue(persistedState, flow.phases);
   } else if (launchMode === "restart") {
+    if (existingStateForRestart) {
+      archiveActiveAttempt(config.scope.scopeKey);
+    }
     resetFlowRunState(config.scope.scopeKey, flowId);
   }
   const executionState = persistedState?.executionState ?? initialExecutionState;
@@ -1147,6 +1179,76 @@ function defaultDeclarativeFlowParams(
   };
 }
 
+function countAvailableNonRestartActions(availability: FlowLaunchAvailability): number {
+  return Number(availability.resume.available) + Number(availability.continue.available);
+}
+
+async function chooseLaunchMode(
+  flowId: string,
+  scopeKey: string,
+  explicitLaunchMode: FlowLaunchMode | undefined,
+  requestUserInput: UserInputRequester,
+): Promise<FlowLaunchMode> {
+  const state = loadFlowRunState(scopeKey, flowId);
+  const availability = classifyFlowLaunchAvailability(state);
+
+  if (explicitLaunchMode) {
+    const selectedAvailability = availability[explicitLaunchMode];
+    if (!selectedAvailability.available) {
+      throw new TaskRunnerError(
+        `${explicitLaunchMode.charAt(0).toUpperCase()}${explicitLaunchMode.slice(1)} is not available for '${flowId}'. ${selectedAvailability.reason}`,
+      );
+    }
+    return explicitLaunchMode;
+  }
+
+  if (!availability.hasExistingState) {
+    return "restart";
+  }
+
+  const availableNonRestart = countAvailableNonRestartActions(availability);
+  if (availableNonRestart === 0) {
+    return "restart";
+  }
+
+  const interactive = requestUserInput !== requestUserInputInTerminal || (process.stdin.isTTY && process.stdout.isTTY);
+  if (!interactive) {
+    throw new TaskRunnerError(
+      `Multiple actions are valid for '${flowId}'. Re-run with one of: --resume, --continue, --restart.`,
+    );
+  }
+
+  const result = await requestUserInput({
+    formId: `launch-mode-${flowId}`,
+    title: "Launch Action",
+    description: `Select how to start '${flowId}'.`,
+    submitLabel: "Start",
+    fields: [
+      {
+        id: "launchMode",
+        type: "single-select",
+        label: "Action",
+        required: true,
+        default: availability.continue.available ? "continue" : availability.resume.available ? "resume" : "restart",
+        options: [
+          ...(availability.resume.available
+            ? [{ value: "resume", label: "Resume", description: availability.resume.reason }]
+            : []),
+          ...(availability.continue.available
+            ? [{ value: "continue", label: "Continue", description: availability.continue.reason }]
+            : []),
+          { value: "restart", label: "Restart", description: availability.restart.reason },
+        ],
+      },
+    ],
+  });
+  const selected = result.values.launchMode;
+  if (selected !== "resume" && selected !== "continue" && selected !== "restart") {
+    throw new TaskRunnerError(`Invalid launch action selected for '${flowId}'.`);
+  }
+  return selected;
+}
+
 const TASK_SCOPE_PARAM_REFS = new Set(["params.jiraApiUrl", "params.jiraBrowseUrl", "params.jiraTaskFile"]);
 
 function valueReferencesTaskScopeParams(value: unknown): boolean {
@@ -1201,7 +1303,7 @@ async function executeCommand(
   resolvedScope?: ResolvedScope,
   setSummary?: (markdown: string) => void,
   forceRefreshSummary = false,
-  launchMode: FlowLaunchMode = "restart",
+  explicitLaunchMode?: FlowLaunchMode,
   launchProfile?: ResolvedLaunchProfile,
   executionRouting?: ResolvedExecutionRouting,
   selectedRoutingPreset?: SelectedExecutionPreset,
@@ -1222,6 +1324,9 @@ async function executeCommand(
     : launchProfile
       ? { launchProfile }
       : {};
+  const launchMode = config.command === "auto-status" || config.command === "auto-reset"
+    ? "restart"
+    : await chooseLaunchMode(config.command, config.scope.scopeKey, explicitLaunchMode, requestUserInput);
   if (config.command === "instant-task") {
     await checkPrerequisites(config, launchProfile, executionRouting);
     const hasPersistedInstantTaskState = loadFlowRunState(config.scope.scopeKey, "instant-task") !== null;
@@ -1807,6 +1912,7 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
   let helpPhases = false;
   let jiraRef: string | undefined;
   let mdLang: "en" | "ru" | undefined;
+  let launchMode: FlowLaunchMode | undefined;
   const doctorArgs: string[] = [];
 
   for (let index = 1; index < argv.length; index += 1) {
@@ -1821,6 +1927,14 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
     }
     if (token === "--help-phases") {
       helpPhases = true;
+      continue;
+    }
+    if (token === "--resume" || token === "--continue" || token === "--restart") {
+      if (launchMode) {
+        process.stderr.write("Error: --resume, --continue, and --restart are mutually exclusive.\n");
+        process.exit(1);
+      }
+      launchMode = token.slice(2) as FlowLaunchMode;
       continue;
     }
     if (token === "--prompt") {
@@ -1900,6 +2014,7 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
     ...(autoFromPhase !== undefined ? { autoFromPhase } : {}),
     ...(mdLang !== undefined ? { mdLang } : {}),
     ...(doctorArgs.length > 0 ? { doctorArgs } : {}),
+    ...(launchMode !== undefined ? { launchMode } : {}),
   };
 }
 
@@ -2107,7 +2222,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
 
     const parsedArgs = await parseCliArgs(args);
-    const commandCompleted = await executeCommand(buildConfigFromArgs(parsedArgs));
+    const commandCompleted = await executeCommand(buildConfigFromArgs(parsedArgs), true, requestUserInputInTerminal, undefined, undefined, false, parsedArgs.launchMode);
     if (parsedArgs.command === "doctor") {
       return commandCompleted ? 0 : 1;
     }

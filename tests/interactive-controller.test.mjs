@@ -18,6 +18,17 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function readyToRunConfirmation() {
+  return {
+    hasExistingState: false,
+    requiresExplicitChoice: false,
+    resume: { available: false, reason: "No saved state found." },
+    continue: { available: false, reason: "No saved state found." },
+    restart: { available: true, reason: "Start a fresh attempt." },
+    details: "Ready to run.",
+  };
+}
+
 function createController() {
   return new controllerModule.InteractiveSessionController({
     scopeKey: "ag-86",
@@ -26,7 +37,7 @@ function createController() {
     cwd: process.cwd(),
     gitBranchName: "feature/ink-model",
     version: "0.1.15",
-    getRunConfirmation: async () => ({ resumeAvailable: false, hasExistingState: false, details: "Ready to run." }),
+    getRunConfirmation: async () => readyToRunConfirmation(),
     onRun: async () => {},
     onInterrupt: async () => {},
     onExit: () => {},
@@ -60,7 +71,7 @@ function createBusyController(overrides = {}) {
     cwd: process.cwd(),
     gitBranchName: "feature/ink-model",
     version: "0.1.15",
-    getRunConfirmation: async () => ({ resumeAvailable: false, hasExistingState: false, details: "Ready to run." }),
+    getRunConfirmation: async () => readyToRunConfirmation(),
     onRun: async () => {},
     onInterrupt: async () => {},
     onExit: () => {},
@@ -304,7 +315,7 @@ describe("interactive controller", () => {
       cwd: process.cwd(),
       gitBranchName: "feature/ink-model",
       version: "0.1.15",
-      getRunConfirmation: async () => ({ resumeAvailable: false, hasExistingState: false, details: "Ready to run." }),
+      getRunConfirmation: async () => readyToRunConfirmation(),
       onRun: async () => {},
       onInterrupt: async () => {},
       onExit: () => {
@@ -382,7 +393,7 @@ describe("interactive controller", () => {
     const controller = createBusyController({
       getRunConfirmation: async () => {
         confirmationCalls += 1;
-        return { resumeAvailable: false, hasExistingState: false, details: "Ready to run." };
+        return readyToRunConfirmation();
       },
       onRun: async () => {
         await runStarted;
@@ -425,7 +436,7 @@ describe("interactive controller", () => {
     controller.selectFlowIndex(2);
     await controller.handleKeypress("", { name: "enter" });
     view = controller.getViewModel();
-    assert.match(view.confirmText ?? "", /\[ OK \]/);
+    assert.match(view.confirmText ?? "", /\[ Restart \]/);
 
     await controller.handleKeypress("", { name: "tab" });
     view = controller.getViewModel();
@@ -433,7 +444,7 @@ describe("interactive controller", () => {
 
     await controller.handleKeypress("", { name: "tab", shift: true });
     view = controller.getViewModel();
-    assert.match(view.confirmText ?? "", /\[ OK \]/);
+    assert.match(view.confirmText ?? "", /\[ Restart \]/);
 
     await controller.handleKeypress("", { name: "escape" });
 
@@ -485,7 +496,7 @@ describe("interactive controller", () => {
     assert.equal(controller.getViewModel().logText, "first chunk\nsecond chunk");
     assert.deepEqual(events, []);
 
-    await sleep(80);
+    await sleep(160);
 
     assert.equal(events.length, 1);
     assert.equal(events[0]?.type, "log");
@@ -505,7 +516,32 @@ describe("interactive controller", () => {
     );
     assert.equal(
       inkSessionModule.sliceFromScroll(logText, 8, 5),
-      lines.slice(4, 9).join("\n"),
+      lines.slice(8, 13).join("\n"),
     );
+  });
+
+  it("shows continue as an explicit interactive action when continue and restart are both valid", async () => {
+    const controller = createBusyController({
+      getRunConfirmation: async () => ({
+        hasExistingState: true,
+        requiresExplicitChoice: true,
+        resume: { available: false, reason: "The saved run already terminated and cannot be resumed." },
+        continue: { available: true, reason: "Start the next iteration from the latest active artifacts." },
+        restart: { available: true, reason: "Archive the active attempt and start a fresh run." },
+        details: "Continuable loop boundary found.",
+      }),
+    });
+    controller.mount();
+
+    await controller.handleKeypress("", { name: "enter" });
+    let view = controller.getViewModel();
+    assert.match(view.confirmText ?? "", /\[ Continue \]/);
+    assert.match(view.confirmText ?? "", /Restart/);
+
+    await controller.handleKeypress("", { name: "right" });
+    view = controller.getViewModel();
+    assert.match(view.confirmText ?? "", /\[ Restart \]/);
+
+    controller.destroy();
   });
 });
