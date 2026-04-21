@@ -118,13 +118,23 @@ node dist/index.js --help
 
 Global install after publishing:
 
-## Плагинный SDK
+## Plugin SDK
 
-Для авторов плагинов поддерживается только один публичный импорт: `agentweaver/plugin-sdk`.
-Импорт из корня пакета `agentweaver`, а также любые внутренние пути вида `agentweaver/dist/*`, `agentweaver/src/*` и репозиторные относительные импорты не считаются поддерживаемым SDK-контрактом.
+AgentWeaver supports local project plugins for custom executors, custom nodes, and project-local declarative flows.
 
-Канонический путь локального плагина: `.agentweaver/.plugins/<plugin-id>/plugin.json`.
-Подробный контракт манифеста, entrypoint и export-схемы описан в [docs/plugin-sdk.md](docs/plugin-sdk.md).
+Plugin authors must use only the public SDK subpath: `agentweaver/plugin-sdk`.
+The package root `agentweaver`, internal paths such as `agentweaver/dist/*` and `agentweaver/src/*`, and repository-relative source imports are not part of the supported SDK contract.
+
+The canonical local plugin manifest path is `.agentweaver/.plugins/<plugin-id>/plugin.json`.
+The plugin directory name and manifest `id` must match exactly.
+
+Use the dedicated guide at [docs/plugin-sdk.md](docs/plugin-sdk.md) for:
+
+- the executor versus node architecture
+- manifest and entrypoint rules
+- runtime context APIs available to plugin code
+- project-local flow wiring under `.agentweaver/.flows/`
+- compatibility, testing, troubleshooting, and a complete end-to-end walkthrough
 
 ```bash
 npm install -g agentweaver
