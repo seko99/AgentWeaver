@@ -56,8 +56,8 @@ function collectLlmPromptSteps(node, acc = []) {
 }
 
 describe("flow spec routing groups", () => {
-  it("hides helper flows marked with catalogVisibility=hidden from the interactive catalog", () => {
-    const entries = loadInteractiveFlowCatalog(process.cwd());
+  it("hides helper flows marked with catalogVisibility=hidden from the interactive catalog", async () => {
+    const entries = await loadInteractiveFlowCatalog(process.cwd());
     const entryIds = new Set(entries.map((entry) => entry.id));
 
     assert.equal(entryIds.has("normalize-task-source"), false);
@@ -84,13 +84,14 @@ describe("flow spec routing groups", () => {
     }
   });
 
-  it("collects the same routing groups the runtime preview needs for auto-golang", () => {
-    const flowEntry = loadInteractiveFlowCatalog(process.cwd()).find((candidate) => candidate.id === "auto-golang");
+  it("collects the same routing groups the runtime preview needs for auto-golang", async () => {
+    const flowEntry = (await loadInteractiveFlowCatalog(process.cwd())).find((candidate) => candidate.id === "auto-golang");
     assert.ok(flowEntry, "auto-golang flow should exist");
 
-    const groups = flowRoutingGroups(flowEntry, process.cwd()).sort();
+    const groups = (await flowRoutingGroups(flowEntry, process.cwd())).sort();
 
     assert.deepEqual(groups, [
+      "design-review",
       "implementation",
       "local-fix-loop",
       "planning",
@@ -99,13 +100,17 @@ describe("flow spec routing groups", () => {
     ]);
   });
 
-  it("keeps every routed built-in command addressable by its built-in spec path", () => {
-    const routedEntries = loadInteractiveFlowCatalog(process.cwd()).filter(
-      (entry) =>
-        entry.source === "built-in"
-        && isBuiltInCommandFlowId(entry.id)
-        && flowRoutingGroups(entry, process.cwd()).length > 0,
-    );
+  it("keeps every routed built-in command addressable by its built-in spec path", async () => {
+    const entries = await loadInteractiveFlowCatalog(process.cwd());
+    const routedEntries = [];
+    for (const entry of entries) {
+      if (entry.source !== "built-in" || !isBuiltInCommandFlowId(entry.id)) {
+        continue;
+      }
+      if ((await flowRoutingGroups(entry, process.cwd())).length > 0) {
+        routedEntries.push(entry);
+      }
+    }
 
     assert.ok(routedEntries.length > 0, "expected routed built-in flows");
     for (const entry of routedEntries) {

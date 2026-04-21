@@ -4,8 +4,7 @@ import type { RuntimeServices } from "../executors/types.js";
 import { getOutputAdapter } from "../tui.js";
 import type { UserInputRequester } from "../user-input.js";
 import type { ResolvedExecutionRouting } from "./execution-routing-config.js";
-import { createNodeRegistry } from "./node-registry.js";
-import { createExecutorRegistry } from "./registry.js";
+import { createPipelineRegistryContext, type PipelineRegistryContext } from "./plugin-loader.js";
 import type { PipelineContext } from "./types.js";
 
 export type CreatePipelineContextInput = {
@@ -18,9 +17,11 @@ export type CreatePipelineContextInput = {
   setSummary?: (markdown: string) => void;
   requestUserInput?: UserInputRequester;
   executionRouting?: ResolvedExecutionRouting;
+  registryContext?: PipelineRegistryContext;
 };
 
-export function createPipelineContext(input: CreatePipelineContextInput): PipelineContext {
+export async function createPipelineContext(input: CreatePipelineContextInput): Promise<PipelineContext> {
+  const registryContext = input.registryContext ?? await createPipelineRegistryContext(process.cwd());
   return {
     issueKey: input.issueKey,
     jiraRef: input.jiraRef,
@@ -31,8 +32,9 @@ export function createPipelineContext(input: CreatePipelineContextInput): Pipeli
     verbose: input.verbose,
     mdLang: input.mdLang ?? null,
     runtime: input.runtime,
-    executors: createExecutorRegistry(),
-    nodes: createNodeRegistry(),
+    executors: registryContext.executors,
+    nodes: registryContext.nodes,
+    registryContext,
     ...(input.setSummary ? { setSummary: input.setSummary } : {}),
     ...(input.requestUserInput ? { requestUserInput: input.requestUserInput } : {}),
     ...(input.executionRouting ? { executionRouting: input.executionRouting } : {}),

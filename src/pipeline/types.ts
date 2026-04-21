@@ -5,6 +5,7 @@ import type { OutputAdapter } from "../tui.js";
 import type { UserInputRequester } from "../user-input.js";
 import type { ResolvedExecutionRouting } from "./execution-routing-config.js";
 import type { NodeRegistry } from "./node-registry.js";
+import type { PipelineRegistryContext } from "./plugin-loader.js";
 import type { ExecutorRegistry } from "./registry.js";
 
 export type NodeOutputManifestSpec = {
@@ -64,6 +65,7 @@ export type PipelineContext = {
   runtime: RuntimeServices;
   executors: ExecutorRegistry;
   nodes: NodeRegistry;
+  registryContext?: PipelineRegistryContext;
   setSummary?: (markdown: string) => void;
   requestUserInput?: UserInputRequester;
   executionRouting?: ResolvedExecutionRouting;

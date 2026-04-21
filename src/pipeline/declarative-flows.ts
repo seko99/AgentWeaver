@@ -1,8 +1,7 @@
 import path from "node:path";
 
 import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
-import { createNodeRegistry } from "./node-registry.js";
-import { createExecutorRegistry } from "./registry.js";
+import { createPipelineRegistryContext, type PipelineRegistryContext } from "./plugin-loader.js";
 import { compileFlowSpec } from "./spec-compiler.js";
 import { type FlowSpecSource, listBuiltInFlowSpecFiles, listProjectFlowSpecFiles, loadFlowSpecSync, projectFlowSpecsDir, resolveBuiltInFlowSpecPath } from "./spec-loader.js";
 import type { ExpandedPhaseSpec } from "./spec-types.js";
@@ -26,24 +25,33 @@ export type LoadedDeclarativeFlow = {
 
 const cache = new Map<string, LoadedDeclarativeFlow>();
 
+export type DeclarativeFlowLoadOptions = {
+  cwd?: string;
+  registryContext?: PipelineRegistryContext;
+};
+
 function toFlowSpecSource(ref: DeclarativeFlowRef): FlowSpecSource {
   return ref.source === "built-in" ? { source: "built-in", fileName: ref.fileName } : { source: "project-local", filePath: ref.filePath };
 }
 
-function cacheKey(ref: DeclarativeFlowRef): string {
-  return ref.source === "built-in" ? `built-in:${ref.fileName}` : `project-local:${path.resolve(ref.filePath)}`;
+function cacheKey(ref: DeclarativeFlowRef, registryContext: PipelineRegistryContext): string {
+  const flowKey = ref.source === "built-in" ? `built-in:${ref.fileName}` : `project-local:${path.resolve(ref.filePath)}`;
+  return `${registryContext.cacheKey}:${flowKey}`;
 }
 
-export function loadDeclarativeFlow(flow: DeclarativeFlowRef | string): LoadedDeclarativeFlow {
+export async function loadDeclarativeFlow(
+  flow: DeclarativeFlowRef | string,
+  options: DeclarativeFlowLoadOptions = {},
+): Promise<LoadedDeclarativeFlow> {
   const ref = typeof flow === "string" ? ({ source: "built-in", fileName: flow } satisfies DeclarativeFlowRef) : flow;
-  const cached = cache.get(cacheKey(ref));
+  const cwd = path.resolve(options.cwd ?? options.registryContext?.cwd ?? process.cwd());
+  const registryContext = options.registryContext ?? await createPipelineRegistryContext(cwd);
+  const cached = cache.get(cacheKey(ref, registryContext));
   if (cached) {
     return cached;
   }
   const spec = loadFlowSpecSync(toFlowSpecSource(ref));
-  const nodeRegistry = createNodeRegistry();
-  const executorRegistry = createExecutorRegistry();
-  validateFlowSpec(spec, nodeRegistry, executorRegistry, {
+  validateFlowSpec(spec, registryContext.nodes, registryContext.executors, {
     resolveFlowByName: (fileName) => resolveNamedDeclarativeFlowRef(fileName, process.cwd()),
   });
   const phases = compileFlowSpec(spec);
@@ -59,7 +67,7 @@ export function loadDeclarativeFlow(flow: DeclarativeFlowRef | string): LoadedDe
     fileName: ref.source === "built-in" ? ref.fileName : path.basename(ref.filePath),
     absolutePath: ref.source === "built-in" ? resolveBuiltInFlowSpecPath(ref.fileName) : path.resolve(ref.filePath),
   };
-  cache.set(cacheKey(ref), loaded);
+  cache.set(cacheKey(ref, registryContext), loaded);
   return loaded;
 }
 
@@ -86,15 +94,23 @@ export function resolveNamedDeclarativeFlowRef(fileName: string, cwd: string): D
   throw new Error(`Nested flow '${fileName}' was not found.`);
 }
 
-export function loadNamedDeclarativeFlow(fileName: string, cwd: string): LoadedDeclarativeFlow {
-  return loadDeclarativeFlow(resolveNamedDeclarativeFlowRef(fileName, cwd));
+export async function loadNamedDeclarativeFlow(
+  fileName: string,
+  cwd: string,
+  options: DeclarativeFlowLoadOptions = {},
+): Promise<LoadedDeclarativeFlow> {
+  return loadDeclarativeFlow(resolveNamedDeclarativeFlowRef(fileName, cwd), {
+    cwd,
+    ...(options.registryContext ? { registryContext: options.registryContext } : {}),
+  });
 }
 
-export function collectFlowRoutingGroups(
+export async function collectFlowRoutingGroups(
   flow: LoadedDeclarativeFlow,
   cwd: string,
   visited = new Set<string>(),
-): ExecutionRoutingGroup[] {
+  options: DeclarativeFlowLoadOptions = {},
+): Promise<ExecutionRoutingGroup[]> {
   if (visited.has(flow.absolutePath)) {
     return [];
   }
@@ -112,8 +128,8 @@ export function collectFlowRoutingGroups(
       if (!nestedFlowName || !("const" in nestedFlowName) || typeof nestedFlowName.const !== "string") {
         continue;
       }
-      const nestedFlow = loadNamedDeclarativeFlow(nestedFlowName.const, cwd);
-      for (const nestedGroup of collectFlowRoutingGroups(nestedFlow, cwd, visited)) {
+      const nestedFlow = await loadNamedDeclarativeFlow(nestedFlowName.const, cwd, options);
+      for (const nestedGroup of await collectFlowRoutingGroups(nestedFlow, cwd, visited, options)) {
         groups.add(nestedGroup);
       }
     }

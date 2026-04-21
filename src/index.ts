@@ -338,13 +338,13 @@ function normalizeAutoPhaseId(phaseId: string): string {
   return phaseId.trim().toLowerCase().replaceAll("-", "_");
 }
 
-function autoPhaseIds(): string[] {
-  return loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" }).phases.map((phase) => phase.id);
+async function autoPhaseIds(): Promise<string[]> {
+  return (await loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" })).phases.map((phase) => phase.id);
 }
 
-function validateAutoPhaseId(phaseId: string): string {
+async function validateAutoPhaseId(phaseId: string): Promise<string> {
   const normalized = normalizeAutoPhaseId(phaseId);
-  if (!autoPhaseIds().includes(normalized)) {
+  if (!(await autoPhaseIds()).includes(normalized)) {
     throw new TaskRunnerError(
       `Unknown auto-golang phase: ${phaseId}\nUse 'agentweaver auto-golang --help-phases' or '/help auto-golang' to list valid phases.`,
     );
@@ -467,13 +467,13 @@ function validateDeclarativePhaseResumeState(
   }
 }
 
-function validateDeclarativeFlowResumeState(
+async function validateDeclarativeFlowResumeState(
   flowEntry: FlowCatalogEntry,
   config: Config,
   state: FlowRunState,
   executionRouting?: ResolvedExecutionRouting,
   runtime: RuntimeServices = runtimeServices,
-): void {
+): Promise<void> {
   if (state.flowId === "auto-common") {
     const persistedPhaseIds = state.executionState.phases.map((p) => p.id);
     const hasLegacyPlanningGatePhases = persistedPhaseIds.some((id) =>
@@ -499,7 +499,7 @@ function validateDeclarativeFlowResumeState(
     throw new TaskRunnerError("Resume is impossible because Jira context is missing for this flow state. Use restart.");
   }
 
-  const pipelineContext = createPipelineContext({
+  const pipelineContext = await createPipelineContext({
     issueKey: config.taskKey,
     jiraRef: config.jiraRef,
     dryRun: config.dryRun,
@@ -537,14 +537,14 @@ function buildInteractiveBaseConfig(flowId: string, scope: ResolvedScope): BaseC
   });
 }
 
-function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): FlowResumeLookup {
+async function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: ResolvedScope): Promise<FlowResumeLookup> {
   const directState = loadFlowRunState(currentScope.scopeKey, flowEntry.id);
   if (directState && hasResumableFlowState(directState)) {
     try {
       const effectiveScope = scopeWithRestoredJiraContext(currentScope, directState);
       const baseConfig = buildInteractiveBaseConfig(flowEntry.id, effectiveScope);
       const config = buildRuntimeConfig(baseConfig, effectiveScope);
-      validateDeclarativeFlowResumeState(flowEntry, config, directState, directState.executionRouting);
+      await validateDeclarativeFlowResumeState(flowEntry, config, directState, directState.executionRouting);
       return {
         resumeAvailable: true,
         hasExistingState: true,
@@ -564,28 +564,28 @@ function lookupInteractiveFlowResume(flowEntry: FlowCatalogEntry, currentScope: 
   };
 }
 
-function printAutoPhasesHelp(): void {
-  const phaseLines = ["Available auto-golang phases:", "", ...autoPhaseIds()];
+async function printAutoPhasesHelp(): Promise<void> {
+  const phaseLines = ["Available auto-golang phases:", "", ...(await autoPhaseIds())];
   phaseLines.push("", "You can resume auto-golang from a phase with:", "agentweaver auto-golang --from <phase> <jira>", "or in interactive mode:", "/auto-golang --from <phase>");
   printPanel("Auto-Golang Phases", phaseLines.join("\n"), "magenta");
 }
 
-function autoCommonPhaseIds(): string[] {
-  return loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" }).phases.map((phase) => phase.id);
+async function autoCommonPhaseIds(): Promise<string[]> {
+  return (await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" })).phases.map((phase) => phase.id);
 }
 
-function printAutoCommonPhasesHelp(): void {
-  const phaseLines = ["Available auto-common phases:", "", ...autoCommonPhaseIds()];
+async function printAutoCommonPhasesHelp(): Promise<void> {
+  const phaseLines = ["Available auto-common phases:", "", ...(await autoCommonPhaseIds())];
   phaseLines.push("", "You can run auto-common with:", "agentweaver auto-common <jira>");
   printPanel("Auto-Common Phases", phaseLines.join("\n"), "magenta");
 }
 
-function autoSimplePhaseIds(): string[] {
-  return loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" }).phases.map((phase) => phase.id);
+async function autoSimplePhaseIds(): Promise<string[]> {
+  return (await loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" })).phases.map((phase) => phase.id);
 }
 
-function printAutoSimplePhasesHelp(): void {
-  const phaseLines = ["Available auto-simple phases:", "", ...autoSimplePhaseIds()];
+async function printAutoSimplePhasesHelp(): Promise<void> {
+  const phaseLines = ["Available auto-simple phases:", "", ...(await autoSimplePhaseIds())];
   phaseLines.push("", "You can run auto-simple with:", "agentweaver auto-simple <jira>");
   printPanel("Auto-Simple Phases", phaseLines.join("\n"), "magenta");
 }
@@ -620,7 +620,7 @@ function buildBaseConfig(
     reviewFixPoints: options.reviewFixPoints ?? null,
     reviewBlockingSeverities: options.reviewBlockingSeverities ?? resolveReviewBlockingSeveritiesFromEnv(),
     extraPrompt: options.extraPrompt ?? null,
-    autoFromPhase: options.autoFromPhase ? validateAutoPhaseId(options.autoFromPhase) : null,
+    autoFromPhase: options.autoFromPhase ?? null,
     mdLang: options.mdLang ?? null,
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
@@ -741,12 +741,12 @@ function flowSpecFileForPrerequisiteChecks(command: Config["command"]): string |
   return isBuiltInCommandFlowId(command) ? builtInCommandFlowFile(command) : null;
 }
 
-function commandRoutingGroupsForPrerequisiteChecks(command: Config["command"], cwd: string): ExecutionRoutingGroup[] {
+async function commandRoutingGroupsForPrerequisiteChecks(command: Config["command"], cwd: string): Promise<ExecutionRoutingGroup[]> {
   const fileName = flowSpecFileForPrerequisiteChecks(command);
   if (!fileName) {
     return [];
   }
-  return collectFlowRoutingGroups(loadDeclarativeFlow({ source: "built-in", fileName }), cwd);
+  return collectFlowRoutingGroups(await loadDeclarativeFlow({ source: "built-in", fileName }), cwd);
 }
 
 function resolveExecutorPrerequisite(executor: LlmExecutorId): void {
@@ -757,24 +757,24 @@ function resolveExecutorPrerequisite(executor: LlmExecutorId): void {
   resolveCmd("opencode", "OPENCODE_BIN");
 }
 
-function checkPrerequisites(
+async function checkPrerequisites(
   config: Config,
   launchProfile?: ResolvedLaunchProfile,
   executionRouting?: ResolvedExecutionRouting,
-): void {
+): Promise<void> {
   const routing = routingForPrerequisites(launchProfile, executionRouting);
-  const groups = commandRoutingGroupsForPrerequisiteChecks(config.command, process.cwd());
+  const groups = await commandRoutingGroupsForPrerequisiteChecks(config.command, process.cwd());
   for (const executor of executorsForRoutingGroups(routing, groups)) {
     resolveExecutorPrerequisite(executor);
   }
 }
 
-function checkAutoPrerequisites(
+async function checkAutoPrerequisites(
   config: Config,
   launchProfile?: ResolvedLaunchProfile,
   executionRouting?: ResolvedExecutionRouting,
-): void {
-  checkPrerequisites(config, launchProfile, executionRouting);
+): Promise<void> {
+  await checkPrerequisites(config, launchProfile, executionRouting);
 }
 
 function autoFlowParams(config: Config, forceRefreshSummary = false): Record<string, unknown> {
@@ -957,7 +957,7 @@ async function runDeclarativeFlowByRef(
   launchMode: FlowLaunchMode = "restart",
   runtime: RuntimeServices = runtimeServices,
 ): Promise<void> {
-  const context = createPipelineContext({
+  const context = await createPipelineContext({
     issueKey: config.taskKey,
     jiraRef: config.jiraRef,
     dryRun: config.dryRun,
@@ -968,7 +968,7 @@ async function runDeclarativeFlowByRef(
     requestUserInput,
     ...(overrides.executionRouting ? { executionRouting: overrides.executionRouting } : {}),
   });
-  const flow = loadDeclarativeFlow(flowRef);
+  const flow = await loadDeclarativeFlow(flowRef);
   const initialExecutionState: FlowExecutionState = {
     flowKind: flow.kind,
     flowVersion: flow.version,
@@ -978,7 +978,7 @@ async function runDeclarativeFlowByRef(
   };
   let persistedState = launchMode === "resume" ? loadFlowRunState(config.scope.scopeKey, flowId) : null;
   if (persistedState && launchMode === "resume") {
-    validateDeclarativeFlowResumeState(
+    await validateDeclarativeFlowResumeState(
       {
         id: flowId,
         source: flow.source,
@@ -1088,7 +1088,7 @@ async function runDeclarativeFlowBySpecFile(
     config.command,
     { source: "built-in", fileName },
     config,
-    withCanonicalReviewLoopParams(loadDeclarativeFlow({ source: "built-in", fileName }).kind, mergedFlowParams),
+    withCanonicalReviewLoopParams((await loadDeclarativeFlow({ source: "built-in", fileName })).kind, mergedFlowParams),
     overrides,
     requestUserInput,
     setSummary,
@@ -1175,7 +1175,7 @@ function flowRequiresTaskScope(entry: FlowCatalogEntry): boolean {
 
 async function summarizeBuildFailure(output: string): Promise<string> {
   return summarizeBuildFailureViaPipeline(
-    createPipelineContext({
+    await createPipelineContext({
       issueKey: "build-failure-summary",
       jiraRef: "build-failure-summary",
       dryRun: false,
@@ -1223,7 +1223,7 @@ async function executeCommand(
       ? { launchProfile }
       : {};
   if (config.command === "instant-task") {
-    checkPrerequisites(config, launchProfile, executionRouting);
+    await checkPrerequisites(config, launchProfile, executionRouting);
     const hasPersistedInstantTaskState = loadFlowRunState(config.scope.scopeKey, "instant-task") !== null;
     const repromptInstantTaskInput =
       launchMode === "restart"
@@ -1263,7 +1263,8 @@ async function executeCommand(
     let effectiveLaunchProfile = launchProfile;
     let effectiveExecutionRouting = executionRouting;
     if (config.autoFromPhase) {
-      const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
+      config.autoFromPhase = await validateAutoPhaseId(config.autoFromPhase);
+      const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
       const persistedState = loadFlowRunState(config.scope.scopeKey, "auto-golang");
       if (!persistedState) {
         throw new TaskRunnerError(
@@ -1277,7 +1278,7 @@ async function executeCommand(
       effectiveExecutionRouting ??= persistedState.executionRouting;
       printPanel("Auto-Golang Resume", `Auto-golang pipeline will continue from phase: ${config.autoFromPhase}`, "yellow");
     }
-    checkAutoPrerequisites(config, effectiveLaunchProfile, effectiveExecutionRouting);
+    await checkAutoPrerequisites(config, effectiveLaunchProfile, effectiveExecutionRouting);
 
     await runDeclarativeFlowBySpecFile(
       "auto-golang.json",
@@ -1301,7 +1302,7 @@ async function executeCommand(
   }
   if (config.command === "auto-common") {
     requireJiraConfig(config);
-    checkAutoPrerequisites(config, launchProfile, executionRouting);
+    await checkAutoPrerequisites(config, launchProfile, executionRouting);
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
     process.env.JIRA_API_URL = config.jiraApiUrl;
     process.env.JIRA_TASK_FILE = config.jiraTaskFile;
@@ -1320,7 +1321,7 @@ async function executeCommand(
   }
   if (config.command === "auto-simple") {
     requireJiraConfig(config);
-    checkAutoPrerequisites(config, launchProfile, executionRouting);
+    await checkAutoPrerequisites(config, launchProfile, executionRouting);
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
     process.env.JIRA_API_URL = config.jiraApiUrl;
     process.env.JIRA_TASK_FILE = config.jiraTaskFile;
@@ -1344,7 +1345,7 @@ async function executeCommand(
       return false;
     }
     const currentStep = findCurrentFlowExecutionStep(state) ?? state.currentStep ?? "-";
-    const phaseOrder = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" }).phases;
+    const phaseOrder = (await loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" })).phases;
     const lines = [
       `Issue: ${config.taskKey}`,
       `Status: ${state.status}`,
@@ -1387,7 +1388,7 @@ async function executeCommand(
     return false;
   }
 
-  checkPrerequisites(config, launchProfile, executionRouting);
+  await checkPrerequisites(config, launchProfile, executionRouting);
   if (config.jiraBrowseUrl && config.jiraApiUrl && config.jiraTaskFile) {
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl ?? "";
     process.env.JIRA_API_URL = config.jiraApiUrl ?? "";
@@ -1777,7 +1778,7 @@ async function executeCommand(
   throw new TaskRunnerError(`Unsupported command: ${config.command}`);
 }
 
-function parseCliArgs(argv: string[]): ParsedArgs {
+async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
   if (argv.includes("--version") || argv.includes("-v")) {
     process.stdout.write(`${packageVersion()}\n`);
     process.exit(0);
@@ -1875,15 +1876,15 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   }
 
   if (command === "auto-golang" && helpPhases) {
-    printAutoPhasesHelp();
+    await printAutoPhasesHelp();
     process.exit(0);
   }
   if (command === "auto-common" && helpPhases) {
-    printAutoCommonPhasesHelp();
+    await printAutoCommonPhasesHelp();
     process.exit(0);
   }
   if (command === "auto-simple" && helpPhases) {
-    printAutoSimplePhasesHelp();
+    await printAutoSimplePhasesHelp();
     process.exit(0);
   }
 
@@ -1919,7 +1920,7 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
 async function runInteractive(jiraRef?: string | null, forceRefresh = false, scopeName?: string | null): Promise<number> {
   let currentScope = resolveProjectScope(scopeName, jiraRef);
   const gitBranchName = detectGitBranchName();
-  const flowCatalog = loadInteractiveFlowCatalog(process.cwd());
+  const flowCatalog = await loadInteractiveFlowCatalog(process.cwd());
   let activeAbortController: AbortController | null = null;
   let activeFlowId: string | null = null;
 
@@ -1938,7 +1939,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
         if (!flowEntry) {
           throw new TaskRunnerError(`Unknown flow: ${flowId}`);
         }
-        const resumeLookup = lookupInteractiveFlowResume(flowEntry, currentScope);
+        const resumeLookup = await lookupInteractiveFlowResume(flowEntry, currentScope);
         return resumeLookup;
       },
       onRun: async (flowId, launchMode) => {
@@ -1950,7 +1951,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           if (!flowEntry) {
             throw new TaskRunnerError(`Unknown flow: ${flowId}`);
           }
-          const routingGroups = flowRoutingGroups(flowEntry, process.cwd());
+          const routingGroups = await flowRoutingGroups(flowEntry, process.cwd());
           const resumeState = launchMode === "resume" ? loadFlowRunState(currentScope.scopeKey, flowId) : null;
           if (resumeState) {
             currentScope = scopeWithRestoredJiraContext(currentScope, resumeState);
@@ -2105,7 +2106,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return await runInteractive(args[0] ?? "", forceRefresh);
     }
 
-    const parsedArgs = parseCliArgs(args);
+    const parsedArgs = await parseCliArgs(args);
     const commandCompleted = await executeCommand(buildConfigFromArgs(parsedArgs));
     if (parsedArgs.command === "doctor") {
       return commandCompleted ? 0 : 1;

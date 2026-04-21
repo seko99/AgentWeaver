@@ -96,14 +96,14 @@ describe("review-loop flow structure", () => {
   });
 
   it("should load review-loop flow", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     expect(flow).toBeDefined();
     expect(flow.phases).toBeDefined();
     expect(flow.phases.length).toBeGreaterThan(0);
   });
 
   it("should publish both review-fix artifacts from the review-fix flow", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-fix.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-fix.json" });
     const reviewFixPhase = flow.phases.find((p) => p.id === "review-fix");
     const runStep = reviewFixPhase?.steps.find((s) => s.id === "run_review_fix");
 
@@ -129,12 +129,12 @@ describe("review-loop flow structure", () => {
   });
 
   it("should have entry_cleanup phase as first phase", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     expect(flow.phases[0].id).toBe("entry_cleanup");
   });
 
   it("should have clear-ready-to-merge node in entry_cleanup phase", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const entryCleanupPhase = flow.phases.find((p) => p.id === "entry_cleanup");
     expect(entryCleanupPhase).toBeDefined();
     const clearStep = entryCleanupPhase!.steps.find((s) => s.node === "clear-ready-to-merge");
@@ -142,7 +142,7 @@ describe("review-loop flow structure", () => {
   });
 
   it("should run review-verdict inside review.json", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review.json" });
     const reviewPhase = flow.phases.find((p) => p.id === "review");
     expect(reviewPhase).toBeDefined();
     const verdictStep = reviewPhase!.steps.find((s) => s.id === "review_verdict");
@@ -152,13 +152,13 @@ describe("review-loop flow structure", () => {
   });
 
   it("should have review_iteration_1 phase", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const iteration1Phase = flow.phases.find((p) => p.id === "review_iteration_1");
     expect(iteration1Phase).toBeDefined();
   });
 
   it("should have review_iteration_2 through review_iteration_5 via repeat", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const phaseIds = flow.phases.map((p) => p.id);
     expect(phaseIds).toContain("review_iteration_2");
     expect(phaseIds).toContain("review_iteration_3");
@@ -167,13 +167,13 @@ describe("review-loop flow structure", () => {
   });
 
   it("should have terminal_verification phase", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const terminalPhase = flow.phases.find((p) => p.id === "terminal_verification");
     expect(terminalPhase).toBeDefined();
   });
 
   it("should have clear-ready-to-merge node in terminal_verification phase", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const terminalPhase = flow.phases.find((p) => p.id === "terminal_verification");
     expect(terminalPhase).toBeDefined();
     const clearStep = terminalPhase!.steps.find((s) => s.node === "clear-ready-to-merge");
@@ -181,7 +181,7 @@ describe("review-loop flow structure", () => {
   });
 
   it("should map terminal verification to baseIteration + 5", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const terminalPhase = flow.phases.find((p) => p.id === "terminal_verification");
     expect(terminalPhase).toBeDefined();
     const terminalReviewStep = terminalPhase!.steps.find(
@@ -192,7 +192,7 @@ describe("review-loop flow structure", () => {
   });
 
   it("should have file-check assertion in terminal_verification phase", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const terminalPhase = flow.phases.find((p) => p.id === "terminal_verification");
     expect(terminalPhase).toBeDefined();
     const assertStep = terminalPhase!.steps.find((s) => s.id === "assert_terminal_success");
@@ -202,7 +202,7 @@ describe("review-loop flow structure", () => {
   });
 
   it("should derive actual review and review-fix iterations from baseIteration", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const firstPhase = flow.phases.find((phase) => phase.id === "review_iteration_1");
     const repeatedPhase = flow.phases.find((phase) => phase.id === "review_iteration_2");
     expect(firstPhase).toBeDefined();
@@ -219,7 +219,7 @@ describe("review-loop flow structure", () => {
   });
 
   it("should stop early when review iteration produces ready-to-merge", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     for (const phase of flow.phases) {
       if (phase.id === "review_iteration_1") {
         const checkStep = phase.steps.find((s) => s.id === "check_ready_to_merge");
@@ -238,7 +238,7 @@ describe("review-loop flow callers", () => {
   });
 
   it("auto-simple should route through plan.json", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
     const planPhase = flow.phases.find((p) => p.id === "plan");
     expect(planPhase).toBeDefined();
     const runStep = planPhase!.steps.find((s) => s.node === "flow-run");
@@ -247,7 +247,7 @@ describe("review-loop flow callers", () => {
   });
 
   it("auto-golang should route through plan.json", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
     let foundPlanFlowRun = false;
     for (const phase of flow.phases) {
       for (const step of phase.steps) {
@@ -260,7 +260,7 @@ describe("review-loop flow callers", () => {
   });
 
   it("auto-simple should route through review-loop.json", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     expect(reviewLoopPhase).toBeDefined();
     const runStep = reviewLoopPhase!.steps.find((s) => s.node === "flow-run");
@@ -270,7 +270,7 @@ describe("review-loop flow callers", () => {
   });
 
   it("auto-golang should route through review-loop.json", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
     let foundReviewLoopFlowRun = false;
     for (const phase of flow.phases) {
       for (const step of phase.steps) {
@@ -284,21 +284,21 @@ describe("review-loop flow callers", () => {
   });
 
   it("auto-common should pass baseIteration into review-loop", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((phase) => phase.id === "review-loop");
     const runStep = reviewLoopPhase?.steps.find((step) => step.id === "run_review_loop");
     expect(runStep?.params?.baseIteration).toEqual({ ref: "params.baseIteration" });
   });
 
   it("instant-task should pass baseIteration into review-loop", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "instant-task.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "instant-task.json" });
     const reviewLoopPhase = flow.phases.find((phase) => phase.id === "review-loop");
     const runStep = reviewLoopPhase?.steps.find((step) => step.id === "run_review_loop");
     expect(runStep?.params?.baseIteration).toEqual({ ref: "params.baseIteration" });
   });
 
   it("project review-loop should use the same baseIteration arithmetic", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-project-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-project-loop.json" });
     const firstPhase = flow.phases.find((phase) => phase.id === "review_iteration_1");
     const repeatedPhase = flow.phases.find((phase) => phase.id === "review_iteration_2");
     const terminalPhase = flow.phases.find((phase) => phase.id === "terminal_verification");
@@ -312,7 +312,7 @@ describe("review-loop flow callers", () => {
 
 describe("review-loop dry-run safety", () => {
   it("clear-ready-to-merge in entry_cleanup should have dry-run guard", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const entryCleanupPhase = flow.phases.find((p) => p.id === "entry_cleanup");
     expect(entryCleanupPhase).toBeDefined();
     const clearStep = entryCleanupPhase!.steps.find((s) => s.node === "clear-ready-to-merge");
@@ -326,7 +326,7 @@ describe("review-loop dry-run safety", () => {
   });
 
   it("clear-ready-to-merge in terminal_verification should have dry-run guard", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const terminalPhase = flow.phases.find((p) => p.id === "terminal_verification");
     expect(terminalPhase).toBeDefined();
     const clearStep = terminalPhase!.steps.find((s) => s.node === "clear-ready-to-merge");
@@ -340,7 +340,7 @@ describe("review-loop dry-run safety", () => {
   });
 
   it("terminal_verification phase should be skipped during dry-run", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "review/review-loop.json" });
     const terminalPhase = flow.phases.find((p) => p.id === "terminal_verification");
     expect(terminalPhase).toBeDefined();
     expect(terminalPhase!.when).toBeDefined();
@@ -352,7 +352,7 @@ describe("review-loop dry-run safety", () => {
   });
 
   it("nested review-loop failure should suppress notify_task_complete via stopFlowIf", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     expect(reviewLoopPhase).toBeDefined();
     const runStep = reviewLoopPhase!.steps.find((s) => s.id === "run_review_loop");
@@ -365,7 +365,7 @@ describe("review-loop dry-run safety", () => {
   });
 
   it("review-loop flow-run step should set termination outcome on non-success", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     const runStep = reviewLoopPhase!.steps.find((s) => s.id === "run_review_loop");
     expect(runStep!.stopFlowIf).toBeDefined();
@@ -382,7 +382,7 @@ describe("review-loop dry-run safety", () => {
   });
 
   it("stopFlowIf condition evaluates correctly for success termination outcome", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     const runStep = reviewLoopPhase!.steps.find((s) => s.id === "run_review_loop");
     expect(runStep!.stopFlowIf).toBeDefined();
@@ -426,7 +426,7 @@ describe("review-loop dry-run safety", () => {
   });
 
   it("stopFlowIf condition evaluates correctly for stopped termination outcome", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     const runStep = reviewLoopPhase!.steps.find((s) => s.id === "run_review_loop");
     expect(runStep!.stopFlowIf).toBeDefined();

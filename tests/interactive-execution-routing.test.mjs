@@ -43,7 +43,7 @@ afterEach(() => {
 
 describe("interactive execution routing", () => {
   it("lets operators edit the fallback route for flows without routing groups", async () => {
-    const flowEntry = flowCatalogModule.loadInteractiveFlowCatalog(process.cwd()).find((entry) => entry.id === "git-commit");
+    const flowEntry = (await flowCatalogModule.loadInteractiveFlowCatalog(process.cwd())).find((entry) => entry.id === "git-commit");
     assert.ok(flowEntry, "git-commit flow should exist");
 
     const seenForms = [];
@@ -85,7 +85,7 @@ describe("interactive execution routing", () => {
   });
 
   it("lets operators edit the fallback default route before starting a routed flow", async () => {
-    const flowEntry = flowCatalogModule.loadInteractiveFlowCatalog(process.cwd()).find((entry) => entry.id === "auto-golang");
+    const flowEntry = (await flowCatalogModule.loadInteractiveFlowCatalog(process.cwd())).find((entry) => entry.id === "auto-golang");
     assert.ok(flowEntry, "auto-golang flow should exist");
 
     const seenForms = [];
@@ -146,7 +146,7 @@ describe("interactive execution routing", () => {
   });
 
   it("rebuilds model options from the selected executor in the routing editor", async () => {
-    const flowEntry = flowCatalogModule.loadInteractiveFlowCatalog(process.cwd()).find((entry) => entry.id === "auto-common");
+    const flowEntry = (await flowCatalogModule.loadInteractiveFlowCatalog(process.cwd())).find((entry) => entry.id === "auto-common");
     assert.ok(flowEntry, "auto-common flow should exist");
 
     const seenForms = [];
@@ -199,12 +199,12 @@ describe("interactive execution routing", () => {
     assert.equal(result.routing.groups.planning.executor, "codex");
   });
 
-  it("describes effective routed steps in the preview before launch", () => {
-    const flowEntry = flowCatalogModule.loadInteractiveFlowCatalog(process.cwd()).find((entry) => entry.id === "auto-common");
+  it("describes effective routed steps in the preview before launch", async () => {
+    const flowEntry = (await flowCatalogModule.loadInteractiveFlowCatalog(process.cwd())).find((entry) => entry.id === "auto-common");
     assert.ok(flowEntry, "auto-common flow should exist");
 
     const routing = routingModule.resolveExecutionRouting({ presetId: "balanced" });
-    const preview = interactiveRoutingModule.describeEffectiveRoutingPreview(flowEntry, routing, process.cwd());
+    const preview = await interactiveRoutingModule.describeEffectiveRoutingPreview(flowEntry, routing, process.cwd());
 
     assert.match(preview, /\| Default\s+\| opencode \| minimax-coding-plan\/MiniMax-M2\.7 \|/);
     assert.match(preview, /\| plan\.run_plan_flow > plan > plan\.generate_planning_questions\s+\| Planning\s+\| codex\s+\| gpt-5\.4\s+\|/);
@@ -218,7 +218,7 @@ describe("interactive execution routing", () => {
   });
 
   it("shows the effective routing table in the routing preview form", async () => {
-    const flowEntry = flowCatalogModule.loadInteractiveFlowCatalog(process.cwd()).find((entry) => entry.id === "auto-common");
+    const flowEntry = (await flowCatalogModule.loadInteractiveFlowCatalog(process.cwd())).find((entry) => entry.id === "auto-common");
     assert.ok(flowEntry, "auto-common flow should exist");
 
     const seenForms = [];

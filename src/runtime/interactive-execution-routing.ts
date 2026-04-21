@@ -3,6 +3,7 @@ import path from "node:path";
 import type { FlowCatalogEntry } from "../pipeline/flow-catalog.js";
 import { flowRoutingGroups, flowRoutingKey } from "../pipeline/flow-catalog.js";
 import { loadNamedDeclarativeFlow, type LoadedDeclarativeFlow } from "../pipeline/declarative-flows.js";
+import type { PipelineRegistryContext } from "../pipeline/plugin-loader.js";
 import {
   EXECUTION_ROUTING_GROUPS,
   type ExecutionRoutingGroup,
@@ -376,55 +377,65 @@ function collectEffectiveRoutedStepRows(
   flow: LoadedDeclarativeFlow,
   cwd: string,
   routing: ResolvedExecutionRouting,
+  registryContext?: PipelineRegistryContext,
   prefixSegments: string[] = [],
   ancestry: string[] = [],
-): EffectiveRoutedStepRow[] {
+): Promise<EffectiveRoutedStepRow[]> {
   if (ancestry.includes(flow.absolutePath)) {
-    return [];
+    return Promise.resolve([]);
   }
   const nextAncestry = [...ancestry, flow.absolutePath];
   const rows: EffectiveRoutedStepRow[] = [];
-  for (const phase of flow.phases) {
-    for (const step of phase.steps) {
-      const stepRef = `${phase.id}.${step.id}`;
-      if (step.routingGroup) {
-        const route = routing.groups[step.routingGroup];
-        rows.push({
-          step: [...prefixSegments, stepRef].join(" > "),
-          group: routingGroupLabel(step.routingGroup),
-          executor: route.executor,
-          model: route.model,
+  const run = async (): Promise<EffectiveRoutedStepRow[]> => {
+    for (const phase of flow.phases) {
+      for (const step of phase.steps) {
+        const stepRef = `${phase.id}.${step.id}`;
+        if (step.routingGroup) {
+          const route = routing.groups[step.routingGroup];
+          rows.push({
+            step: [...prefixSegments, stepRef].join(" > "),
+            group: routingGroupLabel(step.routingGroup),
+            executor: route.executor,
+            model: route.model,
+          });
+        }
+        if (step.node !== "flow-run") {
+          continue;
+        }
+        const nestedFlowName = step.params?.fileName;
+        if (!nestedFlowName || !("const" in nestedFlowName) || typeof nestedFlowName.const !== "string") {
+          continue;
+        }
+        const nestedFlow = await loadNamedDeclarativeFlow(nestedFlowName.const, cwd, {
+          ...(registryContext ? { registryContext } : {}),
         });
+        const nestedFlowLabel = path.basename(nestedFlow.fileName, path.extname(nestedFlow.fileName));
+        rows.push(
+          ...await collectEffectiveRoutedStepRows(
+            nestedFlow,
+            cwd,
+            routing,
+            registryContext,
+            [...prefixSegments, stepRef, nestedFlowLabel],
+            nextAncestry,
+          ),
+        );
       }
-      if (step.node !== "flow-run") {
-        continue;
-      }
-      const nestedFlowName = step.params?.fileName;
-      if (!nestedFlowName || !("const" in nestedFlowName) || typeof nestedFlowName.const !== "string") {
-        continue;
-      }
-      const nestedFlow = loadNamedDeclarativeFlow(nestedFlowName.const, cwd);
-      const nestedFlowLabel = path.basename(nestedFlow.fileName, path.extname(nestedFlow.fileName));
-      rows.push(
-        ...collectEffectiveRoutedStepRows(
-          nestedFlow,
-          cwd,
-          routing,
-          [...prefixSegments, stepRef, nestedFlowLabel],
-          nextAncestry,
-        ),
-      );
     }
-  }
-  return rows;
+    return rows;
+  };
+  return run();
 }
 
-export function describeEffectiveRoutingPreview(
+export async function describeEffectiveRoutingPreview(
   flowEntry: FlowCatalogEntry,
   routing: ResolvedExecutionRouting,
   cwd: string,
-): string {
-  const previewGroups = flowRoutingGroups(flowEntry, cwd);
+  registryContext?: PipelineRegistryContext,
+): Promise<string> {
+  const previewGroups = await flowRoutingGroups(flowEntry, cwd, {
+    ...(registryContext ? { registryContext } : {}),
+  });
   const summaryRows = [
     ["Default", routing.defaultRoute.executor, routing.defaultRoute.model],
     ...previewGroups.map((group) => [
@@ -438,7 +449,7 @@ export function describeEffectiveRoutingPreview(
     ...formatAsciiTable(["Scope", "Executor", "Model"], summaryRows, [18, 12, 36]),
   ];
   const routedSteps = collapseRepeatedEffectiveRoutedStepRows(
-    collectEffectiveRoutedStepRows(flowEntry.flow, cwd, routing),
+    await collectEffectiveRoutedStepRows(flowEntry.flow, cwd, routing, registryContext),
   );
   if (routedSteps.length === 0) {
     return lines.join("\n");
@@ -459,7 +470,7 @@ export async function requestInteractiveExecutionRouting(
   flowEntry: FlowCatalogEntry,
   requestUserInput: UserInputRequester,
 ): Promise<{ routing: ResolvedExecutionRouting; selectedPreset: SelectedExecutionPreset }> {
-  const previewGroups = flowRoutingGroups(flowEntry, process.cwd());
+  const previewGroups = await flowRoutingGroups(flowEntry, process.cwd());
   const flowKey = flowRoutingKey(flowEntry);
   const namedPresets = getNamedExecutionPresets();
   const flowDefault = getFlowDefaultExecutionRouting(flowKey);
@@ -517,7 +528,7 @@ export async function requestInteractiveExecutionRouting(
   let editorDraft = routingEditorDraftFromRouting(routing);
   let editorValidationMessage: string | undefined;
   for (; ;) {
-    const previewText = `Preset: ${selectedPreset.label}\n${describeEffectiveRoutingPreview(flowEntry, routing, process.cwd())}`;
+    const previewText = `Preset: ${selectedPreset.label}\n${await describeEffectiveRoutingPreview(flowEntry, routing, process.cwd())}`;
     const actionResult = await requestUserInput(routingActionForm(previewText));
     const action = String(actionResult.values.action ?? "start");
     if (action === "cancel") {

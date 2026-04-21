@@ -1,13 +1,17 @@
 import { loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
+import type { DeclarativeFlowLoadOptions } from "./declarative-flows.js";
 
 type LoadedAutoGolangFlow = LoadedDeclarativeFlow;
 
-let cachedAutoGolangFlow: LoadedAutoGolangFlow | null = null;
+const cachedAutoGolangFlows = new Map<string, LoadedAutoGolangFlow>();
 
-export function loadAutoGolangFlow(): LoadedAutoGolangFlow {
-  if (cachedAutoGolangFlow) {
-    return cachedAutoGolangFlow;
+export async function loadAutoGolangFlow(options: DeclarativeFlowLoadOptions = {}): Promise<LoadedAutoGolangFlow> {
+  const cacheKey = options.registryContext?.cacheKey ?? `cwd:${options.cwd ?? process.cwd()}`;
+  const cached = cachedAutoGolangFlows.get(cacheKey);
+  if (cached) {
+    return cached;
   }
-  cachedAutoGolangFlow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" });
-  return cachedAutoGolangFlow;
+  const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-golang.json" }, options);
+  cachedAutoGolangFlows.set(cacheKey, flow);
+  return flow;
 }

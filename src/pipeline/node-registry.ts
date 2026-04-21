@@ -32,10 +32,12 @@ import { summaryFileLoadNode } from "./nodes/summary-file-load-node.js";
 import { telegramNotifierNode } from "./nodes/telegram-notifier-node.js";
 import { userInputNode } from "./nodes/user-input-node.js";
 import { writeSelectionFileNode } from "./nodes/write-selection-file-node.js";
-import type { ExecutorId } from "./registry.js";
+import { TaskRunnerError } from "../errors.js";
+import type { NodeContractMetadata } from "./node-contract.js";
+import type { NormalizedPluginNodeRegistration, PluginOwner } from "./plugin-types.js";
 import type { PipelineNodeDefinition } from "./types.js";
 
-export type NodeKind =
+export type BuiltInNodeKind =
   | "build-failure-summary"
   | "build-review-fix-prompt"
   | "clear-ready-to-merge"
@@ -71,25 +73,55 @@ export type NodeKind =
   | "user-input"
   | "write-selection-file";
 
+export type NodeKind = string;
+
 type AnyNodeDefinition = PipelineNodeDefinition<Record<string, unknown>, unknown>;
 
 export type NodeRegistry = {
-  get: <TParams, TResult>(kind: NodeKind) => PipelineNodeDefinition<TParams, TResult>;
-  getMeta: (kind: NodeKind) => NodeContractMetadata;
-  has: (kind: string) => kind is NodeKind;
-  kinds: () => NodeKind[];
+  get: <TParams, TResult>(kind: string) => PipelineNodeDefinition<TParams, TResult>;
+  getMeta: (kind: string) => NodeContractMetadata;
+  has: (kind: string) => boolean;
+  kinds: () => string[];
 };
 
-export type NodeContractMetadata = {
-  kind: NodeKind;
-  version: number;
-  prompt: "required" | "allowed" | "forbidden";
-  requiredParams?: string[];
-  executors?: ExecutorId[];
-  nestedFlowParam?: string;
-};
+export const BUILT_IN_NODE_KINDS = [
+  "build-failure-summary",
+  "build-review-fix-prompt",
+  "clear-ready-to-merge",
+  "codex-prompt",
+  "command-check",
+  "commit-message-form",
+  "design-review-verdict",
+  "ensure-summary-json",
+  "fetch-gitlab-diff",
+  "fetch-gitlab-review",
+  "file-check",
+  "flow-run",
+  "git-commit",
+  "git-commit-form",
+  "git-status",
+  "gitlab-review-artifacts",
+  "jira-context",
+  "jira-fetch",
+  "jira-issue-check",
+  "local-script-check",
+  "llm-prompt",
+  "opencode-prompt",
+  "plan-codex",
+  "planning-bundle",
+  "planning-questions-form",
+  "read-file",
+  "review-findings-form",
+  "review-verdict",
+  "select-files-form",
+  "structured-summary",
+  "summary-file-load",
+  "telegram-notify",
+  "user-input",
+  "write-selection-file",
+] as const satisfies readonly BuiltInNodeKind[];
 
-const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
+const builtInNodes: Record<BuiltInNodeKind, AnyNodeDefinition> = {
   "build-failure-summary": buildFailureSummaryNode as unknown as AnyNodeDefinition,
   "build-review-fix-prompt": buildReviewFixPromptNode as unknown as AnyNodeDefinition,
   "clear-ready-to-merge": clearReadyToMergeNode as unknown as AnyNodeDefinition,
@@ -126,7 +158,7 @@ const builtInNodes: Record<NodeKind, AnyNodeDefinition> = {
   "write-selection-file": writeSelectionFileNode as unknown as AnyNodeDefinition,
 };
 
-const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
+const builtInNodeMetadata: Record<BuiltInNodeKind, NodeContractMetadata> = {
   "build-failure-summary": {
     kind: "build-failure-summary",
     version: 1,
@@ -308,19 +340,58 @@ const builtInNodeMetadata: Record<NodeKind, NodeContractMetadata> = {
   },
 };
 
-export function createNodeRegistry(): NodeRegistry {
+function coreOwner(id: string): PluginOwner {
   return {
-    get<TParams, TResult>(kind: NodeKind) {
-      return builtInNodes[kind] as unknown as PipelineNodeDefinition<TParams, TResult>;
+    kind: "core",
+    id: `core:${id}`,
+    manifestPath: "built-in node registry",
+  };
+}
+
+export function createNodeRegistry(
+  pluginNodes: readonly NormalizedPluginNodeRegistration[] = [],
+): NodeRegistry {
+  const definitions = new Map<string, AnyNodeDefinition>(Object.entries(builtInNodes));
+  const metadata = new Map<string, NodeContractMetadata>(Object.entries(builtInNodeMetadata));
+  const owners = new Map<string, PluginOwner>(
+    Object.keys(builtInNodes).map((id) => [id, coreOwner(id)]),
+  );
+  for (const registration of pluginNodes) {
+    const existingOwner = owners.get(registration.id);
+    if (existingOwner) {
+      throw new TaskRunnerError(
+        `Duplicate node id '${registration.id}' conflicts between ${existingOwner.id} (${existingOwner.manifestPath}) and plugin '${registration.pluginId}' (${registration.manifestPath}).`,
+      );
+    }
+    definitions.set(registration.id, registration.definition as AnyNodeDefinition);
+    metadata.set(registration.id, registration.metadata);
+    owners.set(registration.id, {
+      kind: "plugin",
+      id: registration.pluginId,
+      manifestPath: registration.manifestPath,
+      entrypointPath: registration.entrypointPath,
+    });
+  }
+  return {
+    get<TParams, TResult>(kind: string) {
+      const definition = definitions.get(kind);
+      if (!definition) {
+        throw new TaskRunnerError(`Unknown node kind '${kind}'.`);
+      }
+      return definition as unknown as PipelineNodeDefinition<TParams, TResult>;
     },
-    getMeta(kind: NodeKind) {
-      return builtInNodeMetadata[kind];
+    getMeta(kind: string) {
+      const definition = metadata.get(kind);
+      if (!definition) {
+        throw new TaskRunnerError(`Unknown node metadata '${kind}'.`);
+      }
+      return definition;
     },
-    has(kind: string): kind is NodeKind {
-      return kind in builtInNodes;
+    has(kind: string) {
+      return definitions.has(kind);
     },
     kinds() {
-      return Object.keys(builtInNodes) as NodeKind[];
+      return [...definitions.keys()];
     },
   };
 }

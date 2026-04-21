@@ -246,7 +246,9 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
       printInfo(String(labelText));
     }
 
-    const flow = loadNamedDeclarativeFlow(fileName, context.cwd);
+    const flow = await loadNamedDeclarativeFlow(fileName, context.cwd, {
+      ...(context.registryContext ? { registryContext: context.registryContext } : {}),
+    });
     const resolvedFlowParams = resolveNestedFlowParams(flow.kind, flowParams);
 
     const resumeValue = isFlowRunResumeEnvelope(context.resumeStepValue)

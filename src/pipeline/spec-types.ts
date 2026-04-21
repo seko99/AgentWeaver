@@ -1,7 +1,6 @@
 import type { JsonValue } from "../executors/types.js";
 import type { StructuredArtifactSchemaId } from "../structured-artifacts.js";
 import type { PublishedArtifactRecord } from "../runtime/artifact-registry.js";
-import type { NodeKind } from "./node-registry.js";
 import type { PromptTemplateRef } from "./prompt-registry.js";
 import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
 
@@ -138,7 +137,7 @@ export type StepAfterActionSpec = {
 
 export type DeclarativeStepSpec = {
   id: string;
-  node: NodeKind;
+  node: string;
   routingGroup?: ExecutionRoutingGroup;
   when?: ConditionSpec;
   prompt?: PromptBindingSpec;
@@ -182,7 +181,7 @@ export type ExpandedPhaseSpec = {
 
 export type ExpandedStepSpec = {
   id: string;
-  node: NodeKind;
+  node: string;
   routingGroup?: ExecutionRoutingGroup;
   when?: ConditionSpec;
   prompt?: PromptBindingSpec;
