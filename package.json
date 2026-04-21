@@ -21,12 +21,16 @@
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
-  "exports": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./plugin-sdk": "./dist/plugin-sdk.js"
+  },
   "bin": {
     "agentweaver": "dist/index.js"
   },
   "files": [
     "dist",
+    "docs",
     "README.md",
     "LICENSE",
     "run_go_tests.py",

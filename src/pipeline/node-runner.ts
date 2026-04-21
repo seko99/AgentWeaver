@@ -1,6 +1,5 @@
 import { setCurrentNode } from "../tui.js";
 import { runNodeChecks } from "./checks.js";
-import type { NodeKind } from "./node-registry.js";
 import type { PipelineContext, PipelineNodeDefinition, PipelineNodeResult } from "./types.js";
 
 export type RunNodeOptions = {
@@ -29,7 +28,7 @@ export async function runNode<TParams, TResult>(
 }
 
 export async function runNodeByKind<TResult = unknown>(
-  kind: NodeKind,
+  kind: string,
   context: PipelineContext,
   params: Record<string, unknown>,
   options: RunNodeOptions = {},

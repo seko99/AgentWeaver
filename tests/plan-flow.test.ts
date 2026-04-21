@@ -5,7 +5,7 @@ import { loadDeclarativeFlow } from "../src/pipeline/declarative-flows.js";
 
 describe("plan flow structure", () => {
   it("notifies about planning questions only when the form has at least one question", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
     const planPhase = flow.phases.find((phase) => phase.id === "plan");
     const notifyStep = planPhase?.steps.find((step) => step.id === "notify_questions_need_answering");
 
@@ -30,7 +30,7 @@ describe("plan flow structure", () => {
       expect.stringContaining("qa-AG-91@test-4.json"),
     ]);
 
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
     const planPhase = flow.phases.find((phase) => phase.id === "plan");
     const runPlanStep = planPhase?.steps.find((step) => step.id === "run_plan");
 

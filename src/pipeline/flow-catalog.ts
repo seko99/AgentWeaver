@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { TaskRunnerError } from "../errors.js";
 import { loadAutoGolangFlow } from "./auto-flow.js";
-import { collectFlowRoutingGroups, type DeclarativeFlowRef, loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
+import { collectFlowRoutingGroups, type DeclarativeFlowLoadOptions, type DeclarativeFlowRef, loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
 import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
 import { listBuiltInFlowSpecFiles, listProjectFlowSpecFiles, projectFlowSpecsDir } from "./spec-loader.js";
 
@@ -76,11 +76,13 @@ function builtInCommandIdForFile(fileName: string): (typeof BUILT_IN_COMMAND_FLO
   return null;
 }
 
-function loadBuiltInCatalogEntry(fileName: string): FlowCatalogEntry {
+async function loadBuiltInCatalogEntry(fileName: string, options: DeclarativeFlowLoadOptions): Promise<FlowCatalogEntry> {
   const commandId = builtInCommandIdForFile(fileName);
   const relativePath = fileName.replace(/\.json$/i, "").split(/[\\/]+/).filter((segment) => segment.length > 0);
   const id = commandId ?? relativePath.join("/");
-  const flow = id === "auto-golang" ? loadAutoGolangFlow() : loadDeclarativeFlow({ source: "built-in", fileName });
+  const flow = id === "auto-golang"
+    ? await loadAutoGolangFlow(options)
+    : await loadDeclarativeFlow({ source: "built-in", fileName }, options);
   return {
     id,
     source: "built-in",
@@ -91,8 +93,8 @@ function loadBuiltInCatalogEntry(fileName: string): FlowCatalogEntry {
   };
 }
 
-function loadProjectCatalogEntry(cwd: string, filePath: string): FlowCatalogEntry {
-  const flow = loadDeclarativeFlow({ source: "project-local", filePath });
+async function loadProjectCatalogEntry(cwd: string, filePath: string, options: DeclarativeFlowLoadOptions): Promise<FlowCatalogEntry> {
+  const flow = await loadDeclarativeFlow({ source: "project-local", filePath }, { ...options, cwd });
   const relativeFilePath = path.relative(projectFlowSpecsDir(cwd), path.resolve(filePath));
   const relativePathWithoutExt = relativeFilePath.replace(/\.json$/i, "");
   const relativeSegments = relativePathWithoutExt.split(path.sep).filter((segment) => segment.length > 0);
@@ -106,10 +108,13 @@ function loadProjectCatalogEntry(cwd: string, filePath: string): FlowCatalogEntr
   };
 }
 
-export function loadInteractiveFlowCatalog(cwd: string): FlowCatalogEntry[] {
-  const entries: FlowCatalogEntry[] = listBuiltInFlowSpecFiles().map((fileName) => loadBuiltInCatalogEntry(fileName));
+export async function loadInteractiveFlowCatalog(cwd: string, options: DeclarativeFlowLoadOptions = {}): Promise<FlowCatalogEntry[]> {
+  const entries: FlowCatalogEntry[] = [];
+  for (const fileName of listBuiltInFlowSpecFiles()) {
+    entries.push(await loadBuiltInCatalogEntry(fileName, { ...options, cwd }));
+  }
   for (const filePath of listProjectFlowSpecFiles(cwd)) {
-    entries.push(loadProjectCatalogEntry(cwd, filePath));
+    entries.push(await loadProjectCatalogEntry(cwd, filePath, { ...options, cwd }));
   }
 
   const visibleEntries = entries.filter((entry) => entry.flow.catalogVisibility !== "hidden");
@@ -147,6 +152,10 @@ export function flowRoutingKey(entry: FlowCatalogEntry): string {
     : `built-in:${entry.id}`;
 }
 
-export function flowRoutingGroups(entry: FlowCatalogEntry, cwd: string): ExecutionRoutingGroup[] {
-  return collectFlowRoutingGroups(entry.flow, cwd);
+export async function flowRoutingGroups(
+  entry: FlowCatalogEntry,
+  cwd: string,
+  options: DeclarativeFlowLoadOptions = {},
+): Promise<ExecutionRoutingGroup[]> {
+  return collectFlowRoutingGroups(entry.flow, cwd, new Set<string>(), options);
 }

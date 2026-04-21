@@ -203,7 +203,7 @@ describe("instant-task command and flow", () => {
     const help = await runHelp();
     assert.equal(help.status, 0, help.stderr);
 
-    const entry = flowCatalogModule.loadInteractiveFlowCatalog(process.cwd()).find((candidate) => candidate.id === "instant-task");
+    const entry = (await flowCatalogModule.loadInteractiveFlowCatalog(process.cwd())).find((candidate) => candidate.id === "instant-task");
     assert.ok(entry, "instant-task flow should exist");
     assert.equal(flowCatalogModule.builtInCommandFlowFile("instant-task"), "instant-task.json");
   });
@@ -215,7 +215,7 @@ describe("instant-task command and flow", () => {
   });
 
   it("uses the expected top-level pipeline phases", () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "instant-task.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "instant-task.json" });
     assert.deepEqual(flow.phases.map((phase) => phase.id), [
       "source",
       "normalize",
@@ -227,7 +227,7 @@ describe("instant-task command and flow", () => {
   });
 
   it("reuses the stored instant-task input artifact unless interactive restart requests editing", () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "task-source/manual-input.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "task-source/manual-input.json" });
     const sourcePhase = flow.phases.find((phase) => phase.id === "source");
     const editStep = sourcePhase?.steps.find((step) => step.id === "edit_task_source");
     const collectStep = sourcePhase?.steps.find((step) => step.id === "collect_task_source");
@@ -281,7 +281,7 @@ describe("instant-task command and flow", () => {
   });
 
   it("requires the exact rerun planning iteration artifacts before reporting plan success", () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
     const planPhase = flow.phases.find((phase) => phase.id === "plan");
     const runPlanStep = planPhase?.steps.find((step) => step.id === "run_plan");
 

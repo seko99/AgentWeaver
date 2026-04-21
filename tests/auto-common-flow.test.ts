@@ -39,7 +39,7 @@ describe("design-review-verdict-node", () => {
   });
 
   it("should load auto-common flow spec with design_review_loop phase", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     expect(flow.phases.map((p) => p.id)).toContain("design_review_loop");
     expect(flow.phases.map((p) => p.id)).toContain("plan");
     expect(flow.phases.map((p) => p.id)).toContain("implement");
@@ -47,19 +47,19 @@ describe("design-review-verdict-node", () => {
   });
 
   it("should load auto-simple flow spec", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
     const phaseIds = flow.phases.map((p) => p.id);
     expect(phaseIds).toEqual(["source", "normalize", "plan", "implement", "review-loop"]);
   });
 
   it("should not have design_review gate in auto-simple", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-simple.json" });
     const hasDesignReview = flow.phases.some((p) => p.id === "design_review");
     expect(hasDesignReview).toBe(false);
   });
 
   it("auto-common design_review_loop phase should run design-review-loop.json", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const designReviewLoopPhase = flow.phases.find((p) => p.id === "design_review_loop");
     expect(designReviewLoopPhase).toBeDefined();
     const runStep = designReviewLoopPhase!.steps.find((s) => s.node === "flow-run");
@@ -69,7 +69,7 @@ describe("design-review-verdict-node", () => {
   });
 
   it("auto-common plan phase should run plan.json", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const planPhase = flow.phases.find((p) => p.id === "plan");
     expect(planPhase).toBeDefined();
     const runStep = planPhase!.steps.find((s) => s.id === "run_plan_flow");
@@ -79,7 +79,7 @@ describe("design-review-verdict-node", () => {
   });
 
   it("auto-common design_review_loop phase should stop flow if sub-flow is stopped", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const designReviewLoopPhase = flow.phases.find((p) => p.id === "design_review_loop");
     expect(designReviewLoopPhase).toBeDefined();
     const runStep = designReviewLoopPhase!.steps.find((s) => s.id === "run_design_review_loop");
@@ -98,7 +98,7 @@ describe("design-review-verdict-node", () => {
 
 describe("auto-common flow branching", () => {
   it("should route to implement when design review is approved", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const implementPhase = flow.phases.find((p) => p.id === "implement");
     expect(implementPhase).toBeDefined();
     const hasNoWhen = implementPhase!.when === undefined;
@@ -106,20 +106,20 @@ describe("auto-common flow branching", () => {
   });
 
   it("should route to implement when design review is approved_with_warnings", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const implementPhase = flow.phases.find((p) => p.id === "implement");
     expect(implementPhase).toBeDefined();
     expect(implementPhase!.when).toBeUndefined();
   });
 
   it("should have design_review_loop phase that runs sub-flow", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const designReviewLoopPhase = flow.phases.find((p) => p.id === "design_review_loop");
     expect(designReviewLoopPhase).toBeDefined();
   });
 
   it("should have review-loop phase that runs sub-flow", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     expect(reviewLoopPhase).toBeDefined();
   });
@@ -190,7 +190,7 @@ describe("auto-common runtime branches", () => {
   });
 
   it("should route to implement phase when verdict is approved (no when condition)", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const implementPhase = flow.phases.find((p) => p.id === "implement");
     expect(implementPhase).toBeDefined();
     expect(implementPhase!.when).toBeUndefined();
@@ -217,14 +217,14 @@ it("should use iteration 1 by default when not specified in design-review-verdic
   });
 
   it("should have implement phase without when condition (always runs after gated phases)", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const implementPhase = flow.phases.find((p) => p.id === "implement");
     expect(implementPhase).toBeDefined();
     expect(implementPhase!.when).toBeUndefined();
   });
 
   it("auto-common review-loop phase should run review-loop.json", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     expect(reviewLoopPhase).toBeDefined();
     const runStep = reviewLoopPhase!.steps.find((s) => s.node === "flow-run");
@@ -234,7 +234,7 @@ it("should use iteration 1 by default when not specified in design-review-verdic
   });
 
   it("auto-common should have notify_task_complete after review-loop phase", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     expect(reviewLoopPhase).toBeDefined();
     const notifyStep = reviewLoopPhase!.steps.find((s) => s.id === "notify_task_complete");
@@ -242,7 +242,7 @@ it("should use iteration 1 by default when not specified in design-review-verdic
   });
 
   it("auto-common review-loop run_review_loop should stop flow when termination outcome is not success", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     expect(reviewLoopPhase).toBeDefined();
     const runStep = reviewLoopPhase!.steps.find((s) => s.id === "run_review_loop");
@@ -261,7 +261,7 @@ it("should use iteration 1 by default when not specified in design-review-verdic
   });
 
   it("auto-common notify_task_complete should not have stopFlowIf after the fix", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     expect(reviewLoopPhase).toBeDefined();
     const notifyStep = reviewLoopPhase!.steps.find((s) => s.id === "notify_task_complete");
@@ -270,7 +270,7 @@ it("should use iteration 1 by default when not specified in design-review-verdic
   });
 
   it("auto-common should stop before notify_task_complete when review-loop reports non-success", async () => {
-    const flow = loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" });
     const reviewLoopPhase = flow.phases.find((p) => p.id === "review-loop");
     expect(reviewLoopPhase).toBeDefined();
     const runStep = reviewLoopPhase!.steps.find((s) => s.id === "run_review_loop");
@@ -334,7 +334,7 @@ describe("flow-run nested resume", () => {
 
   it("should restore saved child execution state instead of restarting from phase 1", async () => {
     let persistedEnvelope: FlowRunResumeEnvelope | null = null;
-    const baseContext = createPipelineContext({
+    const baseContext = await createPipelineContext({
       issueKey: TASK_KEY,
       jiraRef: TASK_KEY,
       dryRun: false,

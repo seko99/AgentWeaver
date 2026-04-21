@@ -32,14 +32,14 @@ afterEach(() => {
 });
 
 describe("flow routing keys", () => {
-  it("keeps project-local flow defaults distinct across repositories with the same repo-local id", () => {
+  it("keeps project-local flow defaults distinct across repositories with the same repo-local id", async () => {
     const firstRepo = path.join(tempRoot, "repo-a");
     const secondRepo = path.join(tempRoot, "repo-b");
     writeProjectFlow(firstRepo, "review/fix.json");
     writeProjectFlow(secondRepo, "review/fix.json");
 
-    const firstEntry = flowCatalogModule.loadInteractiveFlowCatalog(firstRepo).find((entry) => entry.source === "project-local");
-    const secondEntry = flowCatalogModule.loadInteractiveFlowCatalog(secondRepo).find((entry) => entry.source === "project-local");
+    const firstEntry = (await flowCatalogModule.loadInteractiveFlowCatalog(firstRepo)).find((entry) => entry.source === "project-local");
+    const secondEntry = (await flowCatalogModule.loadInteractiveFlowCatalog(secondRepo)).find((entry) => entry.source === "project-local");
 
     assert.ok(firstEntry, "first project-local flow should exist");
     assert.ok(secondEntry, "second project-local flow should exist");

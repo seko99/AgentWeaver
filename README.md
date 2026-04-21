@@ -118,6 +118,14 @@ node dist/index.js --help
 
 Global install after publishing:
 
+## Плагинный SDK
+
+Для авторов плагинов поддерживается только один публичный импорт: `agentweaver/plugin-sdk`.
+Импорт из корня пакета `agentweaver`, а также любые внутренние пути вида `agentweaver/dist/*`, `agentweaver/src/*` и репозиторные относительные импорты не считаются поддерживаемым SDK-контрактом.
+
+Канонический путь локального плагина: `.agentweaver/.plugins/<plugin-id>/plugin.json`.
+Подробный контракт манифеста, entrypoint и export-схемы описан в [docs/plugin-sdk.md](docs/plugin-sdk.md).
+
 ```bash
 npm install -g agentweaver
 agentweaver --help
