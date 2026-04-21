@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -288,6 +288,76 @@ export function gitlabDiffReviewInputJsonFile(taskKey: string): string {
 
 export function flowStateFile(scopeKey: string, flowId: string): string {
   return scopeArtifactsFile(scopeKey, `.agentweaver-flow-state-${encodeURIComponent(flowId)}.json`);
+}
+
+export function restartArchivesDir(scopeKey: string): string {
+  return scopeArtifactsFile(scopeKey, "restart-archives");
+}
+
+function nextRestartArchiveName(scopeKey: string): string {
+  const archiveRoot = restartArchivesDir(scopeKey);
+  if (!existsSync(archiveRoot)) {
+    return "attempt-0001";
+  }
+  const attemptNumbers = readdirSync(archiveRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => /^attempt-(\d{4})$/.exec(entry.name)?.[1] ?? null)
+    .filter((value): value is string => value !== null)
+    .map((value) => Number.parseInt(value, 10));
+  const nextNumber = (attemptNumbers.length === 0 ? 0 : Math.max(...attemptNumbers)) + 1;
+  return `attempt-${String(nextNumber).padStart(4, "0")}`;
+}
+
+export function archiveActiveAttempt(scopeKey: string): string | null {
+  const workspaceDir = scopeWorkspaceDir(scopeKey);
+  if (!existsSync(workspaceDir)) {
+    return null;
+  }
+
+  const workspaceEntries = readdirSync(workspaceDir, { withFileTypes: true })
+    .filter((entry) => entry.name !== ".artifacts");
+  const artifactEntries = readdirSync(scopeArtifactsDir(scopeKey), { withFileTypes: true })
+    .filter((entry) => entry.name !== "restart-archives");
+  if (workspaceEntries.length === 0 && artifactEntries.length === 0) {
+    return null;
+  }
+
+  const archiveRoot = restartArchivesDir(scopeKey);
+  mkdirSync(archiveRoot, { recursive: true });
+  const archiveDir = path.join(archiveRoot, nextRestartArchiveName(scopeKey));
+  const workspaceArchiveDir = path.join(archiveDir, "workspace");
+  const artifactsArchiveDir = path.join(archiveDir, "artifacts");
+  mkdirSync(workspaceArchiveDir, { recursive: true });
+  mkdirSync(artifactsArchiveDir, { recursive: true });
+
+  try {
+    for (const entry of workspaceEntries) {
+      cpSync(path.join(workspaceDir, entry.name), path.join(workspaceArchiveDir, entry.name), {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
+    }
+    for (const entry of artifactEntries) {
+      cpSync(path.join(scopeArtifactsDir(scopeKey), entry.name), path.join(artifactsArchiveDir, entry.name), {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
+    }
+  } catch (error) {
+    rmSync(archiveDir, { recursive: true, force: true });
+    throw new TaskRunnerError(`Failed to archive active attempt for restart: ${(error as Error).message}`);
+  }
+
+  for (const entry of workspaceEntries) {
+    rmSync(path.join(workspaceDir, entry.name), { recursive: true, force: true });
+  }
+  for (const entry of artifactEntries) {
+    rmSync(path.join(scopeArtifactsDir(scopeKey), entry.name), { recursive: true, force: true });
+  }
+
+  return archiveDir;
 }
 
 export function planArtifacts(taskKey: string, iteration?: number): string[] {

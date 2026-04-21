@@ -11,6 +11,7 @@ let originalCwd;
 let tempDir;
 let flowStateModule;
 let routingModule;
+let artifactsModule;
 
 beforeEach(async () => {
   originalCwd = process.cwd();
@@ -21,6 +22,9 @@ beforeEach(async () => {
   );
   routingModule = await import(
     `${pathToFileURL(path.join(distRoot, "runtime/execution-routing.js")).href}?cwd=${Date.now()}`
+  );
+  artifactsModule = await import(
+    `${pathToFileURL(path.join(distRoot, "artifacts.js")).href}?cwd=${Date.now()}`
   );
 });
 
@@ -66,7 +70,7 @@ describe("flow state routing persistence", () => {
 
     const state = flowStateModule.loadFlowRunState(scopeKey, flowId);
 
-    assert.equal(state.schemaVersion, 2);
+    assert.equal(state.schemaVersion, 3);
     assert.equal(state.executionRouting.defaultRoute.executor, "codex");
     assert.equal(state.executionRouting.defaultRoute.model, "gpt-5.4");
     assert.equal(state.routingFingerprint, state.executionRouting.fingerprint);
@@ -107,7 +111,7 @@ describe("flow state routing persistence", () => {
         "utf8",
       ),
     );
-    assert.equal(saved.schemaVersion, 2);
+    assert.equal(saved.schemaVersion, 3);
     assert.equal(saved.executionRouting.fingerprint, routing.fingerprint);
     assert.equal(saved.routingFingerprint, routing.fingerprint);
     assert.equal(saved.selectedRoutingPreset.label, "Balanced");
@@ -249,5 +253,86 @@ describe("flow state routing persistence", () => {
 
     assert.equal(step.status, "pending");
     assert.equal("value" in step, false);
+  });
+
+  it("classifies terminated iterative loops as continue plus restart, but not resume", () => {
+    const state = flowStateModule.createFlowRunState(
+      "ag-78@test",
+      "review-loop",
+      {
+        flowKind: "review-loop-flow",
+        flowVersion: 1,
+        terminated: true,
+        terminationOutcome: "stopped",
+        terminationReason: "Stopped by terminal_verification:assert_terminal_success",
+        phases: [],
+      },
+      null,
+    );
+
+    const availability = flowStateModule.classifyFlowLaunchAvailability(state);
+
+    assert.equal(availability.resume.available, false);
+    assert.equal(availability.continue.available, true);
+    assert.equal(availability.restart.available, true);
+  });
+
+  it("degrades legacy terminated state to restart-only when continuation metadata is unavailable", () => {
+    const scopeKey = "ag-79@test";
+    const flowId = "review-loop";
+    const actualStateFile = path.join(
+      tempDir,
+      ".agentweaver",
+      "scopes",
+      scopeKey,
+      ".artifacts",
+      `.agentweaver-flow-state-${encodeURIComponent(flowId)}.json`,
+    );
+    mkdirSync(path.dirname(actualStateFile), { recursive: true });
+    writeFileSync(actualStateFile, `${JSON.stringify({
+      schemaVersion: 2,
+      flowId,
+      scopeKey,
+      status: "completed",
+      currentStep: null,
+      updatedAt: "2026-04-18T00:00:00.000Z",
+      executionState: {
+        flowKind: "review-loop-flow",
+        flowVersion: 1,
+        terminated: true,
+        terminationOutcome: "stopped",
+        terminationReason: "Stopped by terminal_verification:assert_terminal_success",
+        phases: [],
+      },
+    }, null, 2)}\n`, "utf8");
+
+    const state = flowStateModule.loadFlowRunState(scopeKey, flowId);
+    const availability = flowStateModule.classifyFlowLaunchAvailability(state);
+
+    assert.equal(availability.continue.available, false);
+    assert.equal(availability.restart.available, true);
+    assert.match(availability.continue.reason, /(Legacy flow state|does not expose a continuable loop boundary)/i);
+  });
+
+  it("archives the active attempt into restart-archives without deleting the archive payload", () => {
+    const scopeKey = "ag-80@test";
+    const workspaceFile = path.join(tempDir, ".agentweaver", "scopes", scopeKey, "design-ag-80@test-1.md");
+    const artifactFile = path.join(tempDir, ".agentweaver", "scopes", scopeKey, ".artifacts", "plan-ag-80@test-1.json");
+    mkdirSync(path.dirname(workspaceFile), { recursive: true });
+    mkdirSync(path.dirname(artifactFile), { recursive: true });
+    writeFileSync(workspaceFile, "# design\n", "utf8");
+    writeFileSync(artifactFile, "{}\n", "utf8");
+
+    const archiveDir = artifactsModule.archiveActiveAttempt(scopeKey);
+
+    assert.equal(typeof archiveDir, "string");
+    assert.equal(
+      readFileSync(path.join(archiveDir, "workspace", "design-ag-80@test-1.md"), "utf8"),
+      "# design\n",
+    );
+    assert.equal(
+      readFileSync(path.join(archiveDir, "artifacts", "plan-ag-80@test-1.json"), "utf8"),
+      "{}\n",
+    );
   });
 });

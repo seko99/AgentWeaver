@@ -1,7 +1,6 @@
 import type { UserInputFormDefinition, UserInputResult } from "../user-input.js";
+import type { FlowLaunchAvailability, FlowLaunchMode } from "../flow-state.js";
 import type { InteractiveFlowDefinition } from "./types.js";
-
-export type FlowLaunchMode = "resume" | "restart";
 
 export type InteractiveSessionOptions = {
   scopeKey: string;
@@ -11,9 +10,7 @@ export type InteractiveSessionOptions = {
   gitBranchName: string | null;
   version: string;
   flows: InteractiveFlowDefinition[];
-  getRunConfirmation: (flowId: string) => Promise<{
-    resumeAvailable: boolean;
-    hasExistingState: boolean;
+  getRunConfirmation: (flowId: string) => Promise<FlowLaunchAvailability & {
     details?: string | null;
   }>;
   onRun: (flowId: string, mode: FlowLaunchMode) => Promise<void>;

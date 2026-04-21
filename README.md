@@ -41,6 +41,14 @@ In practice, this means you can treat an agent workflow like an engineered syste
 - `artifact`: file produced or consumed by flows, used as the stable contract between stages
 - `flow state`: compact persisted execution metadata used for resume/restart in long-running flows such as `auto-golang`
 
+## Семантика Запуска
+
+- `resume` возобновляет только реально прерванный запуск и использует сохранённое состояние исполнения без пересборки уже выполненных шагов
+- `continue` предназначен для завершённых итерационных циклов и запускает следующую итерацию от последних валидных артефактов без удаления исторических артефактов
+- `restart` считается новым запуском: текущая активная попытка архивируется в `.agentweaver/scopes/<scope>/.artifacts/restart-archives/attempt-XXXX`, после чего создаётся новая активная попытка
+- Для неоднозначных запусков оператор должен явно выбрать действие: в интерактивном режиме через подтверждение, в неинтерактивном режиме через `--resume`, `--continue` или `--restart`
+- Контракт распространяется на `auto-common`, `auto-simple`, `auto-golang`, `instant-task`, `review-loop`, `run-go-linter-loop` и `run-go-tests-loop`
+
 ## Declarative Workflow Model
 
 The center of the system is the declarative flow spec:

@@ -154,6 +154,9 @@ function collectManifestFiles(rootDir: string): string[] {
     for (const entry of entries) {
       const fullPath = path.join(current, entry.name);
       if (entry.isDirectory()) {
+        if (entry.name === "restart-archives") {
+          continue;
+        }
         queue.push(fullPath);
         continue;
       }

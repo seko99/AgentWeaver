@@ -54,10 +54,14 @@ type ActiveFormSession = {
 type ConfirmSession = {
   kind: "run" | "interrupt" | "exit";
   flowId: string | null;
-  resumeAvailable: boolean;
-  hasExistingState: boolean;
+  availability: {
+    hasExistingState: boolean;
+    resume: boolean;
+    continue: boolean;
+    restart: boolean;
+  };
   details?: string | null;
-  selectedAction: "resume" | "restart" | "cancel" | "ok" | "stop";
+  selectedAction: "resume" | "continue" | "restart" | "cancel" | "ok" | "stop";
 };
 
 const HELP_TEXT = renderMarkdownToTerminal(
@@ -592,6 +596,8 @@ export class InteractiveSessionController {
           ? "Stop"
           : action === "resume"
             ? "Resume"
+            : action === "continue"
+              ? "Continue"
             : action === "restart"
               ? "Restart"
               : action === "ok"
@@ -878,10 +884,20 @@ export class InteractiveSessionController {
     this.confirmSession = {
       kind: "run",
       flowId: selectedItem.flow.id,
-      resumeAvailable: confirmation.resumeAvailable,
-      hasExistingState: confirmation.hasExistingState,
+      availability: {
+        hasExistingState: confirmation.hasExistingState,
+        resume: confirmation.resume.available,
+        continue: confirmation.continue.available,
+        restart: confirmation.restart.available,
+      },
       details: confirmation.details ?? null,
-      selectedAction: confirmation.resumeAvailable ? "resume" : confirmation.hasExistingState ? "restart" : "ok",
+      selectedAction: confirmation.resume.available
+        ? "resume"
+        : confirmation.continue.available
+          ? "continue"
+          : confirmation.restart.available
+            ? "restart"
+            : "ok",
     };
     this.emitChange();
   }
@@ -894,8 +910,12 @@ export class InteractiveSessionController {
     this.confirmSession = {
       kind: "interrupt",
       flowId,
-      resumeAvailable: true,
-      hasExistingState: true,
+      availability: {
+        hasExistingState: true,
+        resume: true,
+        continue: false,
+        restart: false,
+      },
       details: "The current flow will be stopped. State will be saved and can be continued via Resume.",
       selectedAction: "stop",
     };
@@ -912,8 +932,12 @@ export class InteractiveSessionController {
     this.confirmSession = {
       kind: "exit",
       flowId: null,
-      resumeAvailable: false,
-      hasExistingState: false,
+      availability: {
+        hasExistingState: false,
+        resume: false,
+        continue: false,
+        restart: false,
+      },
       details,
       selectedAction: "ok",
     };
@@ -930,11 +954,17 @@ export class InteractiveSessionController {
     if (this.confirmSession.kind === "exit") {
       return ["ok", "cancel"];
     }
-    return this.confirmSession.resumeAvailable
-      ? ["resume", "restart", "cancel"]
-      : this.confirmSession.hasExistingState
-        ? ["restart", "cancel"]
-        : ["ok", "cancel"];
+    const actions: string[] = [];
+    if (this.confirmSession.availability.resume) {
+      actions.push("resume");
+    }
+    if (this.confirmSession.availability.continue) {
+      actions.push("continue");
+    }
+    if (this.confirmSession.availability.restart) {
+      actions.push("restart");
+    }
+    return actions.length > 0 ? [...actions, "cancel"] : ["ok", "cancel"];
   }
 
   private moveConfirmSelection(delta: 1 | -1): void {
@@ -975,7 +1005,11 @@ export class InteractiveSessionController {
     }
 
     const flowId = session.flowId ?? this.state.selectedFlowId;
-    const launchMode = session.selectedAction === "resume" ? "resume" : "restart";
+    const launchMode = session.selectedAction === "resume"
+      ? "resume"
+      : session.selectedAction === "continue"
+        ? "continue"
+        : "restart";
     this.confirmSession = null;
     this.setBusy(true, flowId);
     this.clearFlowFailure(flowId);
