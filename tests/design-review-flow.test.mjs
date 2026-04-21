@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const distIndex = path.resolve(process.cwd(), "dist/index.js");
 const distRoot = path.resolve(process.cwd(), "dist");
@@ -50,6 +51,7 @@ const VALID_PLAN = {
 };
 
 let tempDir;
+let originalCwd;
 
 function scopeHash(projectRoot) {
   return crypto.createHash("sha1").update(projectRoot).digest("hex").slice(0, 8);
@@ -125,10 +127,12 @@ function collectStructuredSchemaIds(spec) {
 }
 
 beforeEach(() => {
+  originalCwd = process.cwd();
   tempDir = mkdtempSync(path.join(os.tmpdir(), "agentweaver-design-review-flow-"));
 });
 
 afterEach(() => {
+  process.chdir(originalCwd);
   rmSync(tempDir, { recursive: true, force: true });
 });
 
@@ -183,5 +187,33 @@ describe("design-review CLI flow", () => {
     assert.equal(reviewSchemaIds.includes("review-findings/v1"), true);
     assert.equal(gitlabReviewSchemaIds.includes("review-findings/v1"), true);
     assert.equal(gitlabDiffReviewSchemaIds.includes("review-findings/v1"), true);
+  });
+
+  it("preserves an explicit design-review iteration when nested flow params are resolved", async () => {
+    const issueKey = "AG-32";
+    const taskKey = scopeKeyForIssue(issueKey);
+    writePlanningRun(taskKey, 1);
+    writeMarkdownArtifact(taskKey, "design-review", 1);
+    writeJsonArtifact(taskKey, "design-review", 1, {
+      status: "needs_revision",
+      summary: "Review summary",
+      findings: [],
+      next_steps: [],
+    });
+
+    process.chdir(tempDir);
+    const { resolveNestedFlowParams } = await import(
+      `${pathToFileURL(path.join(distRoot, "pipeline/nodes/flow-run-node.js")).href}?cwd=${Date.now()}`
+    );
+
+    const resolved = resolveNestedFlowParams("design-review-flow", {
+      taskKey,
+      iteration: 2,
+    });
+
+    assert.equal(resolved.iteration, 2);
+    assert.equal(resolved.planningIteration, 1);
+    assert.match(resolved.designFile, /design-.*-1\.md$/);
+    assert.match(resolved.planFile, /plan-.*-1\.md$/);
   });
 });

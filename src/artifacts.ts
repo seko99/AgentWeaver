@@ -290,8 +290,15 @@ export function flowStateFile(scopeKey: string, flowId: string): string {
   return scopeArtifactsFile(scopeKey, `.agentweaver-flow-state-${encodeURIComponent(flowId)}.json`);
 }
 
-export function planArtifacts(taskKey: string): string[] {
-  return [designFile(taskKey), designJsonFile(taskKey), planFile(taskKey), planJsonFile(taskKey), qaFile(taskKey), qaJsonFile(taskKey)];
+export function planArtifacts(taskKey: string, iteration?: number): string[] {
+  return [
+    designFile(taskKey, iteration),
+    designJsonFile(taskKey, iteration),
+    planFile(taskKey, iteration),
+    planJsonFile(taskKey, iteration),
+    qaFile(taskKey, iteration),
+    qaJsonFile(taskKey, iteration),
+  ];
 }
 
 export function bugAnalyzeArtifacts(taskKey: string): string[] {

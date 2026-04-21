@@ -35,6 +35,7 @@ function interpolateValueSpec(value: ValueSpec, repeatVars: Record<string, JsonV
         artifactList: {
           ...value.artifactList,
           taskKey: interpolateValueSpec(value.artifactList.taskKey, repeatVars),
+          ...(value.artifactList.iteration ? { iteration: interpolateValueSpec(value.artifactList.iteration, repeatVars) } : {}),
         },
       };
     }

@@ -44,6 +44,9 @@ function validateArtifactRefSpec(spec: ArtifactRefSpec, path: string): void {
 function validateArtifactListRefSpec(spec: ArtifactListRefSpec, path: string): void {
   assert(isArtifactListRefKind(spec.kind), `Unknown artifact list kind '${spec.kind}' at ${path}.kind`);
   validateValueSpec(spec.taskKey, `${path}.taskKey`);
+  if (spec.iteration) {
+    validateValueSpec(spec.iteration, `${path}.iteration`);
+  }
 }
 
 function assert(condition: boolean, message: string): void {
@@ -323,6 +326,16 @@ function validateExpandedValueSpec(
   }
   if ("artifactList" in value) {
     validateExpandedValueSpec(value.artifactList.taskKey, phases, currentPhaseIndex, currentStepIndex, `${path}.artifactList.taskKey`, allowCurrentStepRef);
+    if (value.artifactList.iteration) {
+      validateExpandedValueSpec(
+        value.artifactList.iteration,
+        phases,
+        currentPhaseIndex,
+        currentStepIndex,
+        `${path}.artifactList.iteration`,
+        allowCurrentStepRef,
+      );
+    }
     return;
   }
   if ("template" in value) {

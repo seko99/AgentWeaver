@@ -65,6 +65,7 @@ describe("design-review-verdict-node", () => {
     const runStep = designReviewLoopPhase!.steps.find((s) => s.node === "flow-run");
     expect(runStep).toBeDefined();
     expect(runStep!.params?.fileName).toEqual({ const: "design-review-loop.json" });
+    expect(runStep!.params?.baseIteration).toEqual({ ref: "params.designReviewBaseIteration" });
   });
 
   it("auto-common plan phase should run plan.json", async () => {

@@ -258,7 +258,8 @@
             "requiredArtifacts": {
               "artifactList": {
                 "kind": "plan-artifacts",
-                "taskKey": { "ref": "params.taskKey" }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": { "ref": "params.planIteration" }
               }
             }
           },
@@ -269,7 +270,8 @@
               "paths": {
                 "artifactList": {
                   "kind": "plan-artifacts",
-                  "taskKey": { "ref": "params.taskKey" }
+                  "taskKey": { "ref": "params.taskKey" },
+                  "iteration": { "ref": "params.planIteration" }
                 }
               },
               "message": "Plan mode did not produce the required artifacts."
