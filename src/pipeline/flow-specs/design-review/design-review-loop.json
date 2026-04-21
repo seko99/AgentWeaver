@@ -23,6 +23,12 @@
                   "template": "Running design review (iteration ${iteration})"
                 },
                 "taskKey": { "ref": "params.taskKey" },
+                "iteration": {
+                  "add": [
+                    { "ref": "params.baseIteration" },
+                    { "add": [{ "ref": "repeat.iteration" }, { "const": -1 }] }
+                  ]
+                },
                 "workspaceDir": { "ref": "params.workspaceDir" },
                 "extraPrompt": { "ref": "params.extraPrompt" },
                 "llmExecutor": { "ref": "params.llmExecutor" },
@@ -33,7 +39,13 @@
               "id": "check_design_review_verdict",
               "node": "design-review-verdict",
               "params": {
-                "taskKey": { "ref": "params.taskKey" }
+                "taskKey": { "ref": "params.taskKey" },
+                "iteration": {
+                  "add": [
+                    { "ref": "params.baseIteration" },
+                    { "add": [{ "ref": "repeat.iteration" }, { "const": -1 }] }
+                  ]
+                }
               }
             },
             {

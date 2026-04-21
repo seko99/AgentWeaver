@@ -1135,6 +1135,7 @@ function defaultDeclarativeFlowParams(
     executionRouting,
     iteration,
     baseIteration: iteration,
+    designReviewBaseIteration: nextDesignReviewIterationForTask(config.taskKey),
     latestIteration,
     taskContextIteration: latestTaskContext ?? nextArtifactIteration(config.taskKey, "task-context", "json"),
     taskSummaryIteration: nextArtifactIteration(config.taskKey, "task"),

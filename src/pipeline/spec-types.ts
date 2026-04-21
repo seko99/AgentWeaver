@@ -81,6 +81,7 @@ export type ArtifactRefSpec = {
 export type ArtifactListRefSpec = {
   kind: (typeof ARTIFACT_LIST_REF_KINDS)[number];
   taskKey: ValueSpec;
+  iteration?: ValueSpec;
 };
 
 export type ConditionSpec =
