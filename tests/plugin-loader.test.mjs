@@ -401,7 +401,14 @@ export const nodes = [
       argvCalls[0]?.[2] ?? "",
       /Create the JSON file `\.agentweaver\/\.artifacts\/examples\/claude-example-proof\.json`/,
     );
-    assert.deepEqual(argvCalls[0]?.slice(3), ["--output-format", "json"]);
+    assert.deepEqual(argvCalls[0]?.slice(3), [
+      "--output-format",
+      "json",
+      "--add-dir",
+      repoDir,
+      "--permission-mode",
+      "bypassPermissions",
+    ]);
 
     const proofPath = path.join(repoDir, ".agentweaver", ".artifacts", "examples", "claude-example-proof.json");
     const proofPayloadPath = ".agentweaver/.artifacts/examples/claude-example-proof.json";
@@ -497,6 +504,10 @@ export const nodes = [
             "hello",
             "--output-format",
             "json",
+            "--add-dir",
+            repoRoot,
+            "--permission-mode",
+            "bypassPermissions",
             "--model",
             "default-model",
             "--max-turns",

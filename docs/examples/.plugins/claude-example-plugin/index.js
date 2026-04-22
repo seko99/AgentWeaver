@@ -22,6 +22,19 @@ function resolveSetting(override, env, envKey, defaultValue) {
   return nonEmptyString(defaultValue);
 }
 
+function resolveStringListSetting(override, env, envKey, defaultValue) {
+  const direct = nonEmptyString(override);
+  const envValue = nonEmptyString(env?.[envKey]);
+  const effective = direct ?? envValue ?? nonEmptyString(defaultValue);
+  if (!effective) {
+    return [];
+  }
+  return effective
+    .split(/[,\s]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 function extractTextFragments(items) {
   if (!Array.isArray(items)) {
     return null;
@@ -71,18 +84,32 @@ export const claudeExecutorDefinition = {
     defaultModel: "",
     maxTurnsEnvVar: "CLAUDE_MAX_TURNS",
     defaultMaxTurns: "",
+    permissionModeEnvVar: "CLAUDE_PERMISSION_MODE",
+    defaultPermissionMode: "bypassPermissions",
+    allowedToolsEnvVar: "CLAUDE_ALLOWED_TOOLS",
+    defaultAllowedTools: "",
+    disallowedToolsEnvVar: "CLAUDE_DISALLOWED_TOOLS",
+    defaultDisallowedTools: "",
+    addCwdAsAllowedDir: true,
   },
   async execute(context, input, config) {
     const env = input?.env ?? context.env;
     const command = input?.command ?? context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);
     const effectiveModel = resolveSetting(input?.model, env, config.modelEnvVar, config.defaultModel);
     const effectiveMaxTurns = resolveSetting(input?.maxTurns, env, config.maxTurnsEnvVar, config.defaultMaxTurns);
+    const permissionMode = resolveSetting(undefined, env, config.permissionModeEnvVar, config.defaultPermissionMode);
+    const allowedTools = resolveStringListSetting(undefined, env, config.allowedToolsEnvVar, config.defaultAllowedTools);
+    const disallowedTools = resolveStringListSetting(undefined, env, config.disallowedToolsEnvVar, config.defaultDisallowedTools);
     const argv = [
       command,
       "-p",
       String(input?.prompt ?? ""),
       "--output-format",
       "json",
+      ...(config.addCwdAsAllowedDir ? ["--add-dir", context.cwd] : []),
+      ...(permissionMode ? ["--permission-mode", permissionMode] : []),
+      ...(allowedTools.length > 0 ? ["--allowedTools", ...allowedTools] : []),
+      ...(disallowedTools.length > 0 ? ["--disallowedTools", ...disallowedTools] : []),
       ...(effectiveModel ? ["--model", effectiveModel] : []),
       ...(effectiveMaxTurns ? ["--max-turns", effectiveMaxTurns] : []),
     ];

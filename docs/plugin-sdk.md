@@ -83,7 +83,9 @@ The Claude example is intentionally an executor-only plugin. The flow uses the b
 Important runtime behavior:
 
 - the executor shells out to `claude -p <prompt> --output-format json`
+- for artifact-producing `llm-prompt` steps it also grants Claude access to the current workspace via `--add-dir <cwd>` and configured non-interactive edit permissions
 - it accepts `CLAUDE_BIN`, `CLAUDE_MODEL`, and `CLAUDE_MAX_TURNS`
+- optional runtime controls can be driven through `CLAUDE_PERMISSION_MODE`, `CLAUDE_ALLOWED_TOOLS`, and `CLAUDE_DISALLOWED_TOOLS`
 - it normalizes assistant text from `result`, `message.content[*].text`, or `content[*].text`
 - when a flow declares `requiredArtifacts`, `llm-prompt` only verifies and publishes those paths; the Claude prompt itself must create files such as `artifacts/examples/claude-example-proof.json`
 - authentication is expected to be checked with `claude auth status`
