@@ -5,6 +5,14 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonObject = { [key: string]: JsonValue };
 export type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
 
+export type ExecutorRoutingLlmDefinition = {
+  kind: "llm";
+  defaultModel: string;
+  models: string[];
+};
+
+export type ExecutorRoutingDefinition = ExecutorRoutingLlmDefinition;
+
 export type RuntimeServices = {
   resolveCmd: (commandName: string, envVarName: string) => string;
   runCommand: (

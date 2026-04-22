@@ -1,4 +1,4 @@
-import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
+import type { ExecutorDefinition, ExecutorRoutingDefinition, JsonValue } from "../executors/types.js";
 import type { PipelineNodeDefinition } from "./types.js";
 import type { NodeContractMetadata } from "./node-contract.js";
 
@@ -16,6 +16,7 @@ export type PluginManifest = {
 export type PluginExecutorRegistration = {
   id: string;
   definition: ExecutorDefinition<JsonValue, unknown, unknown>;
+  routing?: ExecutorRoutingDefinition;
 };
 
 export type PluginNodeRegistration = {
@@ -43,6 +44,7 @@ export type NormalizedPluginExecutorRegistration = {
   manifestPath: string;
   entrypointPath: string;
   definition: ExecutorDefinition<JsonValue, unknown, unknown>;
+  routing?: ExecutorRoutingDefinition;
 };
 
 export type NormalizedPluginNodeRegistration = {

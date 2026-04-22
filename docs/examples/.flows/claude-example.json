@@ -1,0 +1,37 @@
+{
+  "kind": "claude-example-flow",
+  "version": 1,
+  "description": "Project-local reference flow for the Claude example plugin.",
+  "phases": [
+    {
+      "id": "example",
+      "steps": [
+        {
+          "id": "run_claude_prompt",
+          "node": "claude-prompt",
+          "prompt": {
+            "inlineTemplate": "Write exactly two lines. On the first line, write: I generated this proof for the AgentWeaver Claude example plugin with model <your exact model name>. Replace <your exact model name> with the exact model name you are currently using. On the second line, write a short original tagline of 4 to 8 words about AgentWeaver plugin wiring."
+          },
+          "params": {
+            "proofArtifactFile": {
+              "const": ".agentweaver/.artifacts/examples/claude-example-proof.json"
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-artifacts",
+              "paths": {
+                "list": [
+                  {
+                    "const": ".agentweaver/.artifacts/examples/claude-example-proof.json"
+                  }
+                ]
+              },
+              "message": "The Claude example flow must write the fixed proof artifact."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -91,7 +91,7 @@ export function buildFlowTree(flows: InteractiveFlowDefinition[]): FlowTreeNode[
           : node,
       );
 
-  const orderedRootNames = ["custom", "default"];
+  const orderedRootNames = ["global", "custom", "default"];
   const sortedRoots = [...roots.values()].sort((left, right) => {
     const leftIndex = orderedRootNames.indexOf(left.name);
     const rightIndex = orderedRootNames.indexOf(right.name);
@@ -172,7 +172,7 @@ export function collectInitiallyExpandedFolderKeys(flowTree: FlowTreeNode[]): st
       if (node.kind !== "folder") {
         continue;
       }
-      const expandedByDefault = node.pathSegments.length === 1 && node.name === "default";
+      const expandedByDefault = node.pathSegments.length === 1 && (node.name === "default" || node.name === "global");
       if (expandedByDefault) {
         keys.push(node.key);
       }

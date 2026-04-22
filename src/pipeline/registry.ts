@@ -8,7 +8,7 @@ import { opencodeExecutor } from "../executors/opencode-executor.js";
 import { processExecutor } from "../executors/process-executor.js";
 import { telegramNotifierExecutor } from "../executors/telegram-notifier-executor.js";
 
-import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
+import type { ExecutorDefinition, ExecutorRoutingDefinition, ExecutorRoutingLlmDefinition, JsonValue } from "../executors/types.js";
 import type { NormalizedPluginExecutorRegistration, PluginOwner } from "./plugin-types.js";
 import { TaskRunnerError } from "../errors.js";
 
@@ -31,6 +31,8 @@ export type ExecutorRegistry = {
   ) => ExecutorDefinition<TConfig, TInput, TResult>;
   has: (id: string) => boolean;
   ids: () => string[];
+  getRouting: (id: string) => ExecutorRoutingDefinition | null;
+  llmExecutors: () => Array<{ id: string; routing: ExecutorRoutingLlmDefinition }>;
 };
 
 type AnyExecutorDefinition = ExecutorDefinition<JsonValue, unknown, unknown>;
@@ -59,6 +61,24 @@ const builtInExecutors: Record<BuiltInExecutorId, AnyExecutorDefinition> = {
   "telegram-notifier": telegramNotifierExecutor as unknown as AnyExecutorDefinition,
 };
 
+const builtInExecutorRouting: Partial<Record<BuiltInExecutorId, ExecutorRoutingLlmDefinition>> = {
+  codex: {
+    kind: "llm",
+    defaultModel: "gpt-5.4",
+    models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"],
+  },
+  opencode: {
+    kind: "llm",
+    defaultModel: "minimax-coding-plan/MiniMax-M2.7",
+    models: [
+      "opencode/minimax-m2.5-free",
+      "minimax-coding-plan/MiniMax-M2.7",
+      "zhipuai-coding-plan/glm-5.1",
+      "zhipuai-coding-plan/glm-4.7",
+    ],
+  },
+};
+
 function coreOwner(id: string): PluginOwner {
   return {
     kind: "core",
@@ -71,6 +91,9 @@ export function createExecutorRegistry(
   pluginExecutors: readonly NormalizedPluginExecutorRegistration[] = [],
 ): ExecutorRegistry {
   const definitions = new Map<string, AnyExecutorDefinition>(Object.entries(builtInExecutors));
+  const routing = new Map<string, ExecutorRoutingDefinition>(
+    Object.entries(builtInExecutorRouting).map(([id, definition]) => [id, definition as ExecutorRoutingDefinition]),
+  );
   const owners = new Map<string, PluginOwner>(
     Object.keys(builtInExecutors).map((id) => [id, coreOwner(id)]),
   );
@@ -82,6 +105,9 @@ export function createExecutorRegistry(
       );
     }
     definitions.set(registration.id, registration.definition as AnyExecutorDefinition);
+    if (registration.routing) {
+      routing.set(registration.id, registration.routing);
+    }
     owners.set(registration.id, {
       kind: "plugin",
       id: registration.pluginId,
@@ -102,6 +128,14 @@ export function createExecutorRegistry(
     },
     ids() {
       return [...definitions.keys()];
+    },
+    getRouting(id: string) {
+      return routing.get(id) ?? null;
+    },
+    llmExecutors() {
+      return [...routing.entries()]
+        .filter((entry): entry is [string, ExecutorRoutingLlmDefinition] => entry[1].kind === "llm")
+        .map(([id, definition]) => ({ id, routing: definition }));
     },
   };
 }

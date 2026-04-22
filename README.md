@@ -34,7 +34,7 @@ In practice, this means you can treat an agent workflow like an engineered syste
 
 ## Core Concepts
 
-- `flow spec`: declarative JSON under `src/pipeline/flow-specs/` or project-local `.agentweaver/.flows/`
+- `flow spec`: declarative JSON under `src/pipeline/flow-specs/`, global `~/.agentweaver/.flows/`, or project-local `.agentweaver/.flows/`
 - `node`: reusable runtime unit from `src/pipeline/nodes/`
 - `executor`: integration layer for Jira, Codex, OpenCode, GitLab, shell/process execution, Telegram notifications, and related actions
 - `scope`: isolated workspace key for artifacts and flow state; usually based on Jira task, otherwise derived from git context
@@ -128,21 +128,31 @@ Global install after publishing:
 
 ## Plugin SDK
 
-AgentWeaver supports local project plugins for custom executors, custom nodes, and project-local declarative flows.
+AgentWeaver supports local plugins and custom declarative flows from both global and project-local `.agentweaver` directories.
 
 Plugin authors must use only the public SDK subpath: `agentweaver/plugin-sdk`.
 The package root `agentweaver`, internal paths such as `agentweaver/dist/*` and `agentweaver/src/*`, and repository-relative source imports are not part of the supported SDK contract.
 
-The canonical local plugin manifest path is `.agentweaver/.plugins/<plugin-id>/plugin.json`.
+Supported plugin manifest locations are:
+
+- `~/.agentweaver/.plugins/<plugin-id>/plugin.json`
+- `.agentweaver/.plugins/<plugin-id>/plugin.json`
+
 The plugin directory name and manifest `id` must match exactly.
 
 Use the dedicated guide at [docs/plugin-sdk.md](docs/plugin-sdk.md) for:
 
 - the executor versus node architecture
 - manifest and entrypoint rules
+- optional routing metadata for plugin LLM executors
 - runtime context APIs available to plugin code
-- project-local flow wiring under `.agentweaver/.flows/`
+- global and project-local flow wiring under `~/.agentweaver/.flows/` and `.agentweaver/.flows/`
 - compatibility, testing, troubleshooting, and a complete end-to-end walkthrough
+
+Repository reference examples live under `docs/examples/`, for example:
+
+- `docs/examples/.plugins/claude-example-plugin/`
+- `docs/examples/.flows/claude-example.json`
 
 ```bash
 npm install -g agentweaver
@@ -209,7 +219,7 @@ OPENCODE_MODEL=minimax-coding-plan/MiniMax-M2.7
 
 The full-screen TUI is not a cosmetic wrapper. It is the operator console for the harness:
 
-- browse built-in and project-local workflows
+- browse built-in, global, and project-local workflows
 - launch flows in the current scope
 - inspect progress by phase and step
 - follow activity, prompts, summaries, and statuses
@@ -358,27 +368,31 @@ Current layout:
 Flow discovery behavior:
 
 - built-in flows are loaded from `src/pipeline/flow-specs/`
-- project-local flows are loaded from `.agentweaver/.flows/`
-- both built-in and project-local flow specs are validated at load time
-- duplicate flow ids fail fast
-- project-local flows are shown separately in the UI
+- global custom flows are loaded from `~/.agentweaver/.flows/`
+- project-local custom flows are loaded from `.agentweaver/.flows/`
+- all discovered flow specs are validated at load time
+- duplicate flow ids fail fast across built-in, global, and project-local sources
+- custom flows are shown separately in the UI as global and project-local groups
 
-## Project-Local Flows
+## Custom Flows
 
-You can add project-specific flow specs under:
+You can add custom flow specs under either:
 
 ```bash
+~/.agentweaver/.flows/**/*.json
 .agentweaver/.flows/**/*.json
 ```
 
-Project-local flows:
+Custom flows:
 
 - are discovered recursively
 - get their flow id from the relative path without `.json`
 - share the same validator and runtime as built-in flows
 - cannot conflict with an existing built-in or other discovered flow id
 
-Nested `flow-run` steps can reference built-in or project-local specs by file name, as long as the name resolves unambiguously.
+Use the global directory for reusable personal flows and plugins across repositories, and the project-local directory for repo-specific wiring.
+
+Nested `flow-run` steps can reference built-in, global, or project-local specs by file name, as long as the name resolves unambiguously.
 
 ## Development
 

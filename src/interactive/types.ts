@@ -4,7 +4,7 @@ export type InteractiveFlowDefinition = {
   id: string;
   label: string;
   description: string;
-  source: "built-in" | "project-local";
+  source: "built-in" | "global" | "project-local";
   treePath: string[];
   sourcePath?: string;
   phases: Array<{

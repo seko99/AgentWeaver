@@ -1,0 +1,8 @@
+{
+  "id": "claude-example-plugin",
+  "sdk_version": 1,
+  "entrypoint": "index.js",
+  "name": "Claude Example Plugin",
+  "version": "0.1.0",
+  "description": "Project-local Claude CLI reference plugin for AgentWeaver."
+}
