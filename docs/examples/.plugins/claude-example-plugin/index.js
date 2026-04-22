@@ -1,16 +1,7 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
-
 import { AGENTWEAVER_PLUGIN_SDK_VERSION } from "agentweaver/plugin-sdk";
 
 export const CLAUDE_EXAMPLE_PLUGIN_SDK_VERSION = AGENTWEAVER_PLUGIN_SDK_VERSION;
 export const CLAUDE_EXECUTOR_ID = "claude";
-export const CLAUDE_PROMPT_NODE_ID = "claude-prompt";
-export const CLAUDE_PROOF_ARTIFACT_FILE = ".agentweaver/.artifacts/examples/claude-example-proof.json";
-export const CLAUDE_PROOF_LOGICAL_KEY = "artifacts/examples/claude-example-proof.json";
-export const CLAUDE_PROOF_SCHEMA_ID = "helper-json/v1";
-export const CLAUDE_PROOF_SCHEMA_VERSION = 1;
-export const CLAUDE_PROOF_PAYLOAD_FAMILY = "helper-json";
 export const CLAUDE_AUTH_STATUS_ERROR = "Claude CLI authentication is required. Run 'claude auth status' and sign in before using the example flow.";
 export const CLAUDE_NORMALIZATION_ERROR =
   "Claude JSON normalization failed: no supported assistant text was found in result, message.content[*].text, or content[*].text.";
@@ -83,7 +74,7 @@ export const claudeExecutorDefinition = {
   },
   async execute(context, input, config) {
     const env = input?.env ?? context.env;
-    const command = context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);
+    const command = input?.command ?? context.runtime.resolveCmd(config.defaultCommand, config.commandEnvVar);
     const effectiveModel = resolveSetting(input?.model, env, config.modelEnvVar, config.defaultModel);
     const effectiveMaxTurns = resolveSetting(input?.maxTurns, env, config.maxTurnsEnvVar, config.defaultMaxTurns);
     const argv = [
@@ -118,56 +109,6 @@ export const claudeExecutorDefinition = {
   },
 };
 
-export const claudePromptNodeDefinition = {
-  kind: CLAUDE_PROMPT_NODE_ID,
-  version: 1,
-  async run(context, params) {
-    if (params.proofArtifactFile !== CLAUDE_PROOF_ARTIFACT_FILE) {
-      throw new Error(
-        `The Claude example flow must use the fixed proof artifact path '${CLAUDE_PROOF_ARTIFACT_FILE}'.`,
-      );
-    }
-    const executor = context.executors.get(CLAUDE_EXECUTOR_ID);
-    const routedModel = context.executionRouting?.defaultRoute?.executor === CLAUDE_EXECUTOR_ID
-      ? context.executionRouting.defaultRoute.model
-      : null;
-    const result = await executor.execute(context, {
-      prompt: params.prompt,
-      ...(nonEmptyString(params.model) ? { model: params.model } : routedModel ? { model: routedModel } : {}),
-      ...(nonEmptyString(typeof params.maxTurns === "number" ? String(params.maxTurns) : params.maxTurns)
-        ? { maxTurns: params.maxTurns }
-        : {}),
-      env: { ...context.env },
-    }, executor.defaultConfig);
-    const proofPayload = {
-      response: result.output,
-      command: result.command,
-      model: result.model,
-      executor: CLAUDE_EXECUTOR_ID,
-    };
-    const proofPath = path.resolve(context.cwd, params.proofArtifactFile);
-    mkdirSync(path.dirname(proofPath), { recursive: true });
-    writeFileSync(proofPath, `${JSON.stringify(proofPayload, null, 2)}\n`, "utf8");
-    return {
-      value: proofPayload,
-      outputs: [
-        {
-          kind: "artifact",
-          path: proofPath,
-          required: true,
-          manifest: {
-            publish: true,
-            logicalKey: CLAUDE_PROOF_LOGICAL_KEY,
-            schemaId: CLAUDE_PROOF_SCHEMA_ID,
-            schemaVersion: CLAUDE_PROOF_SCHEMA_VERSION,
-            payloadFamily: CLAUDE_PROOF_PAYLOAD_FAMILY,
-          },
-        },
-      ],
-    };
-  },
-};
-
 export const executors = [
   {
     id: CLAUDE_EXECUTOR_ID,
@@ -176,20 +117,6 @@ export const executors = [
       kind: "llm",
       defaultModel: "sonnet",
       models: ["sonnet", "opus", "haiku"],
-    },
-  },
-];
-
-export const nodes = [
-  {
-    id: CLAUDE_PROMPT_NODE_ID,
-    definition: claudePromptNodeDefinition,
-    metadata: {
-      kind: CLAUDE_PROMPT_NODE_ID,
-      version: 1,
-      prompt: "required",
-      requiredParams: ["proofArtifactFile"],
-      executors: [CLAUDE_EXECUTOR_ID],
     },
   },
 ];

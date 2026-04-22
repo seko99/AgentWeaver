@@ -8,13 +8,26 @@
       "steps": [
         {
           "id": "run_claude_prompt",
-          "node": "claude-prompt",
+          "node": "llm-prompt",
           "prompt": {
-            "inlineTemplate": "Reply with one short sentence that confirms the AgentWeaver Claude example plugin is wired correctly."
+            "inlineTemplate": "Use the current workspace. Create the JSON file `.agentweaver/.artifacts/examples/claude-example-proof.json` with exactly this shape: `{ \"status\": \"ok\", \"executor\": \"claude\", \"message\": \"<one short sentence proving the Claude example plugin executed through llm-prompt>\", \"model\": \"<the exact model name you used, or an empty string if unavailable>\" }`. Write valid JSON only to that file. After the file is written, reply with exactly `wrote .agentweaver/.artifacts/examples/claude-example-proof.json`."
           },
           "params": {
-            "proofArtifactFile": {
-              "const": ".agentweaver/.artifacts/examples/claude-example-proof.json"
+            "labelText": {
+              "const": "Run Claude via llm-prompt"
+            },
+            "executor": {
+              "const": "claude"
+            },
+            "requiredArtifacts": {
+              "list": [
+                {
+                  "const": ".agentweaver/.artifacts/examples/claude-example-proof.json"
+                }
+              ]
+            },
+            "missingArtifactsMessage": {
+              "const": "The Claude example flow requires Claude to write the fixed proof artifact."
             }
           },
           "expect": [

@@ -16,9 +16,7 @@ describe("plugin sdk docs", () => {
     assert.match(readme, /agentweaver\/src\/\*/);
     assert.match(readme, /\[docs\/plugin-sdk\.md\]\(docs\/plugin-sdk\.md\)/);
     assert.match(readme, /claude-example-plugin/);
-    assert.match(readme, /\.agentweaver\/\.flows\/examples\/claude-example\.json/);
-    assert.match(readme, /\.agentweaver\/\.artifacts\/examples\/claude-example-proof\.json/);
-    assert.match(readme, /claude auth status/);
+    assert.match(readme, /docs\/examples\/\.flows\/claude-example\.json/);
   });
 
   it("covers the key public SDK contracts in the guide", () => {
@@ -28,7 +26,7 @@ describe("plugin sdk docs", () => {
     assert.match(guide, /## Entrypoint Rules/);
     assert.match(guide, /## Executor Contract/);
     assert.match(guide, /## Node Contract/);
-    assert.match(guide, /## Wiring a Project-Local Flow/);
+    assert.match(guide, /## Wiring a Custom Flow/);
     assert.match(guide, /## Claude Example Plugin/);
     assert.match(guide, /## Compatibility and Versioning/);
     assert.match(guide, /## Testing Workflow for Plugin Authors/);
@@ -43,7 +41,7 @@ describe("plugin sdk docs", () => {
     assert.match(guide, /CLAUDE_MAX_TURNS/);
     assert.match(guide, /message\.content\[\*\]\.text/);
     assert.match(guide, /content\[\*\]\.text/);
-    assert.match(guide, /helper-json\/v1/);
+    assert.match(guide, /llm-prompt/);
     assert.match(guide, /artifacts\/examples\/claude-example-proof\.json/);
     assert.match(guide, /claude auth status/);
   });
