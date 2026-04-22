@@ -68,6 +68,8 @@ If the same flow id or plugin id is discovered from more than one source, AgentW
 
 This repository keeps reference plugin examples under `docs/examples/`.
 
+## Claude Example Plugin
+
 Current Claude example files:
 
 - plugin manifest: `docs/examples/.plugins/claude-example-plugin/plugin.json`
@@ -75,6 +77,16 @@ Current Claude example files:
 - example flow: `docs/examples/.flows/claude-example.json`
 
 `docs/examples/` is documentation material, not an auto-loaded runtime location. To run an example, copy it into `~/.agentweaver/` or `.agentweaver/`.
+
+The Claude example is intentionally an executor-only plugin. The flow uses the built-in `llm-prompt` node with `executor: "claude"`, so the example demonstrates the same integration surface used by built-in LLM executors such as Codex and OpenCode.
+
+Important runtime behavior:
+
+- the executor shells out to `claude -p <prompt> --output-format json`
+- it accepts `CLAUDE_BIN`, `CLAUDE_MODEL`, and `CLAUDE_MAX_TURNS`
+- it normalizes assistant text from `result`, `message.content[*].text`, or `content[*].text`
+- when a flow declares `requiredArtifacts`, `llm-prompt` only verifies and publishes those paths; the Claude prompt itself must create files such as `artifacts/examples/claude-example-proof.json`
+- authentication is expected to be checked with `claude auth status`
 
 ## Manifest Contract
 

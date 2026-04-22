@@ -11,6 +11,7 @@ const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), "package
 
 let tempRoot;
 let originalCwd;
+let originalHome;
 let pluginLoaderModule;
 let declarativeFlowsModule;
 let contextModule;
@@ -62,19 +63,21 @@ function installLocalAgentWeaverPackage(repoDir) {
 function copyClaudeExample(repoDir) {
   installLocalAgentWeaverPackage(repoDir);
   cpSync(
-    path.join(repoRoot, ".agentweaver", ".plugins", "claude-example-plugin"),
+    path.join(repoRoot, "docs", "examples", ".plugins", "claude-example-plugin"),
     path.join(repoDir, ".agentweaver", ".plugins", "claude-example-plugin"),
     { recursive: true },
   );
   cpSync(
-    path.join(repoRoot, ".agentweaver", ".flows", "examples", "claude-example.json"),
+    path.join(repoRoot, "docs", "examples", ".flows", "claude-example.json"),
     path.join(repoDir, ".agentweaver", ".flows", "examples", "claude-example.json"),
   );
 }
 
 beforeEach(async () => {
   originalCwd = process.cwd();
+  originalHome = process.env.HOME;
   tempRoot = mkdtempSync(path.join(os.tmpdir(), "agentweaver-plugin-loader-"));
+  process.env.HOME = tempRoot;
   pluginLoaderModule = await import(`${pathToFileURL(path.join(distRoot, "pipeline/plugin-loader.js")).href}?loader=${Date.now()}`);
   declarativeFlowsModule = await import(`${pathToFileURL(path.join(distRoot, "pipeline/declarative-flows.js")).href}?flows=${Date.now()}`);
   contextModule = await import(`${pathToFileURL(path.join(distRoot, "pipeline/context.js")).href}?context=${Date.now()}`);
@@ -83,12 +86,13 @@ beforeEach(async () => {
   declarativeFlowRunnerModule = await import(`${pathToFileURL(path.join(distRoot, "pipeline/declarative-flow-runner.js")).href}?phase=${Date.now()}`);
   artifactRegistryModule = await import(`${pathToFileURL(path.join(distRoot, "runtime/artifact-registry.js")).href}?artifact=${Date.now()}`);
   claudeExampleModule = await import(
-    `${pathToFileURL(path.join(repoRoot, ".agentweaver", ".plugins", "claude-example-plugin", "index.js")).href}?claude=${Date.now()}`
+    `${pathToFileURL(path.join(repoRoot, "docs", "examples", ".plugins", "claude-example-plugin", "index.js")).href}?claude=${Date.now()}`
   );
 });
 
 afterEach(() => {
   process.chdir(originalCwd);
+  process.env.HOME = originalHome;
   rmSync(tempRoot, { recursive: true, force: true });
 });
 
@@ -328,17 +332,7 @@ export const nodes = [
 
     const registryContext = await pluginLoaderModule.createPipelineRegistryContext(repoDir);
     assert.equal(registryContext.executors.has("claude"), true);
-    assert.equal(registryContext.nodes.has("claude-prompt"), true);
-    assert.deepEqual(registryContext.nodes.getMeta("claude-prompt").executors, ["claude"]);
-
-    const builtInContext = pluginLoaderModule.createBuiltInRegistryContext(repoDir);
-    await assert.rejects(
-      () => declarativeFlowsModule.loadDeclarativeFlow(
-        { source: "project-local", filePath: path.join(repoDir, ".agentweaver", ".flows", "examples", "claude-example.json") },
-        { cwd: repoDir, registryContext: builtInContext },
-      ),
-      /Unknown node kind 'claude-prompt'/,
-    );
+    assert.equal(registryContext.nodes.has("claude-prompt"), false);
 
     const flow = await declarativeFlowsModule.loadDeclarativeFlow(
       { source: "project-local", filePath: path.join(repoDir, ".agentweaver", ".flows", "examples", "claude-example.json") },
@@ -350,7 +344,7 @@ export const nodes = [
     assert.equal(entries.some((entry) => entry.id === "examples/claude-example"), true);
   });
 
-  it("runs the Claude example flow, writes the fixed proof artifact, and publishes helper-json metadata", async () => {
+  it("runs the Claude example flow through llm-prompt and publishes the required artifact", async () => {
     const repoDir = path.join(tempRoot, "repo-claude-run");
     mkdirSync(repoDir, { recursive: true });
     copyClaudeExample(repoDir);
@@ -375,8 +369,14 @@ export const nodes = [
         },
         async runCommand(argv) {
           argvCalls.push(argv);
+          writeJson(path.join(repoDir, ".agentweaver", ".artifacts", "examples", "claude-example-proof.json"), {
+            status: "ok",
+            executor: "claude",
+            message: "Claude executed through llm-prompt.",
+            model: "claude-3-7-sonnet",
+          });
           return JSON.stringify({
-            result: "Primary Claude result",
+            result: "wrote .agentweaver/.artifacts/examples/claude-example-proof.json",
             model: "claude-3-7-sonnet",
             message: {
               content: [{ text: "fallback that should not win" }],
@@ -399,37 +399,35 @@ export const nodes = [
     assert.deepEqual(argvCalls[0]?.slice(0, 2), ["/usr/bin/claude", "-p"]);
     assert.match(
       argvCalls[0]?.[2] ?? "",
-      /Reply with one short sentence that confirms the AgentWeaver Claude example plugin is wired correctly\./,
+      /Create the JSON file `\.agentweaver\/\.artifacts\/examples\/claude-example-proof\.json`/,
     );
     assert.deepEqual(argvCalls[0]?.slice(3), ["--output-format", "json"]);
 
     const proofPath = path.join(repoDir, ".agentweaver", ".artifacts", "examples", "claude-example-proof.json");
+    const proofPayloadPath = ".agentweaver/.artifacts/examples/claude-example-proof.json";
     const proofPayload = JSON.parse(readFileSync(proofPath, "utf8"));
     assert.deepEqual(proofPayload, {
-      response: "Primary Claude result",
-      command: "/usr/bin/claude",
-      model: "claude-3-7-sonnet",
+      status: "ok",
       executor: "claude",
+      message: "Claude executed through llm-prompt.",
+      model: "claude-3-7-sonnet",
     });
 
     const publishedArtifact = phaseResult.steps[0]?.publishedArtifacts?.[0];
     assert.ok(publishedArtifact, "expected the flow step to publish the proof artifact");
-    assert.equal(publishedArtifact.payload_path, proofPath);
+    assert.equal(publishedArtifact.payload_path, proofPayloadPath);
     assert.equal(publishedArtifact.logical_key, "artifacts/examples/claude-example-proof.json");
-    assert.equal(publishedArtifact.schema_id, "helper-json/v1");
 
-    const manifest = artifactRegistry.loadManifestByPayloadPath(proofPath);
+    const manifest = artifactRegistry.loadManifestByPayloadPath(proofPayloadPath);
     assert.ok(manifest, "expected a manifest sidecar for the proof artifact");
     assert.equal(manifest.logical_key, "artifacts/examples/claude-example-proof.json");
-    assert.equal(manifest.schema_id, "helper-json/v1");
-    assert.equal(manifest.payload_family, "helper-json");
-    assert.equal(manifest.producer.node, "claude-prompt");
+    assert.equal(manifest.producer.node, "llm-prompt");
     assert.equal(manifest.producer.executor, "claude");
   });
 
   it("keeps the Claude example plugin on the public SDK import boundary only", () => {
     const source = readFileSync(
-      path.join(repoRoot, ".agentweaver", ".plugins", "claude-example-plugin", "index.js"),
+      path.join(repoRoot, "docs", "examples", ".plugins", "claude-example-plugin", "index.js"),
       "utf8",
     );
     assert.match(source, /agentweaver\/plugin-sdk/);
