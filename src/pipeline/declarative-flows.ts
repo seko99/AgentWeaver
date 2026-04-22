@@ -3,12 +3,22 @@ import path from "node:path";
 import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
 import { createPipelineRegistryContext, type PipelineRegistryContext } from "./plugin-loader.js";
 import { compileFlowSpec } from "./spec-compiler.js";
-import { type FlowSpecSource, listBuiltInFlowSpecFiles, listProjectFlowSpecFiles, loadFlowSpecSync, projectFlowSpecsDir, resolveBuiltInFlowSpecPath } from "./spec-loader.js";
+import {
+  type FlowSpecSource,
+  globalFlowSpecsDir,
+  listBuiltInFlowSpecFiles,
+  listGlobalFlowSpecFiles,
+  listProjectFlowSpecFiles,
+  loadFlowSpecSync,
+  projectFlowSpecsDir,
+  resolveBuiltInFlowSpecPath,
+} from "./spec-loader.js";
 import type { ExpandedPhaseSpec } from "./spec-types.js";
 import { validateExpandedPhases, validateFlowSpec } from "./spec-validator.js";
 
 export type DeclarativeFlowRef =
   | { source: "built-in"; fileName: string }
+  | { source: "global"; filePath: string }
   | { source: "project-local"; filePath: string };
 
 export type LoadedDeclarativeFlow = {
@@ -31,11 +41,16 @@ export type DeclarativeFlowLoadOptions = {
 };
 
 function toFlowSpecSource(ref: DeclarativeFlowRef): FlowSpecSource {
-  return ref.source === "built-in" ? { source: "built-in", fileName: ref.fileName } : { source: "project-local", filePath: ref.filePath };
+  if (ref.source === "built-in") {
+    return { source: "built-in", fileName: ref.fileName };
+  }
+  return { source: ref.source, filePath: ref.filePath };
 }
 
 function cacheKey(ref: DeclarativeFlowRef, registryContext: PipelineRegistryContext): string {
-  const flowKey = ref.source === "built-in" ? `built-in:${ref.fileName}` : `project-local:${path.resolve(ref.filePath)}`;
+  const flowKey = ref.source === "built-in"
+    ? `built-in:${ref.fileName}`
+    : `${ref.source}:${path.resolve(ref.filePath)}`;
   return `${registryContext.cacheKey}:${flowKey}`;
 }
 
@@ -52,7 +67,7 @@ export async function loadDeclarativeFlow(
   }
   const spec = loadFlowSpecSync(toFlowSpecSource(ref));
   validateFlowSpec(spec, registryContext.nodes, registryContext.executors, {
-    resolveFlowByName: (fileName) => resolveNamedDeclarativeFlowRef(fileName, process.cwd()),
+    resolveFlowByName: (fileName) => resolveNamedDeclarativeFlowRef(fileName, cwd),
   });
   const phases = compileFlowSpec(spec);
   validateExpandedPhases(phases);
@@ -73,20 +88,30 @@ export async function loadDeclarativeFlow(
 
 export function resolveNamedDeclarativeFlowRef(fileName: string, cwd: string): DeclarativeFlowRef {
   const projectMatches = listProjectFlowSpecFiles(cwd).filter((candidate) => path.basename(candidate) === fileName);
+  const globalMatches = listGlobalFlowSpecFiles().filter((candidate) => path.basename(candidate) === fileName);
   const builtInMatches = listBuiltInFlowSpecFiles().filter((candidate) => path.basename(candidate) === fileName);
-  if (projectMatches.length > 0 && builtInMatches.length > 0) {
-    throw new Error(
-      `Ambiguous nested flow '${fileName}': both built-in and project-local specs exist in ${projectFlowSpecsDir(cwd)}.`,
-    );
+  const sourcesWithMatches = [
+    projectMatches.length > 0 ? `project-local specs in ${projectFlowSpecsDir(cwd)}` : null,
+    globalMatches.length > 0 ? `global specs in ${globalFlowSpecsDir()}` : null,
+    builtInMatches.length > 0 ? "built-in specs" : null,
+  ].filter((value): value is string => value !== null);
+  if (sourcesWithMatches.length > 1) {
+    throw new Error(`Ambiguous nested flow '${fileName}': found in ${sourcesWithMatches.join(", ")}.`);
   }
   if (projectMatches.length > 1) {
     throw new Error(`Ambiguous project-local flow '${fileName}' in ${projectFlowSpecsDir(cwd)}.`);
+  }
+  if (globalMatches.length > 1) {
+    throw new Error(`Ambiguous global flow '${fileName}' in ${globalFlowSpecsDir()}.`);
   }
   if (builtInMatches.length > 1) {
     throw new Error(`Ambiguous built-in flow '${fileName}'. Use unique nested flow file names.`);
   }
   if (projectMatches[0]) {
     return { source: "project-local", filePath: projectMatches[0] };
+  }
+  if (globalMatches[0]) {
+    return { source: "global", filePath: globalMatches[0] };
   }
   if (builtInMatches[0]) {
     return { source: "built-in", fileName: builtInMatches[0] };

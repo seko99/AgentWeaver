@@ -4,9 +4,9 @@ import { TaskRunnerError } from "../errors.js";
 import { loadAutoGolangFlow } from "./auto-flow.js";
 import { collectFlowRoutingGroups, type DeclarativeFlowLoadOptions, type DeclarativeFlowRef, loadDeclarativeFlow, type LoadedDeclarativeFlow } from "./declarative-flows.js";
 import type { ExecutionRoutingGroup } from "./execution-routing-config.js";
-import { listBuiltInFlowSpecFiles, listProjectFlowSpecFiles, projectFlowSpecsDir } from "./spec-loader.js";
+import { globalFlowSpecsDir, listBuiltInFlowSpecFiles, listGlobalFlowSpecFiles, listProjectFlowSpecFiles, projectFlowSpecsDir } from "./spec-loader.js";
 
-export type FlowCatalogSource = "built-in" | "project-local";
+export type FlowCatalogSource = "built-in" | "global" | "project-local";
 
 export type FlowCatalogEntry = {
   id: string;
@@ -108,10 +108,28 @@ async function loadProjectCatalogEntry(cwd: string, filePath: string, options: D
   };
 }
 
+async function loadGlobalCatalogEntry(filePath: string, options: DeclarativeFlowLoadOptions): Promise<FlowCatalogEntry> {
+  const flow = await loadDeclarativeFlow({ source: "global", filePath }, options);
+  const relativeFilePath = path.relative(globalFlowSpecsDir(), path.resolve(filePath));
+  const relativePathWithoutExt = relativeFilePath.replace(/\.json$/i, "");
+  const relativeSegments = relativePathWithoutExt.split(path.sep).filter((segment) => segment.length > 0);
+  return {
+    id: relativeSegments.join("/"),
+    source: "global",
+    fileName: path.basename(filePath),
+    absolutePath: path.resolve(filePath),
+    treePath: ["global", ...relativeSegments],
+    flow,
+  };
+}
+
 export async function loadInteractiveFlowCatalog(cwd: string, options: DeclarativeFlowLoadOptions = {}): Promise<FlowCatalogEntry[]> {
   const entries: FlowCatalogEntry[] = [];
   for (const fileName of listBuiltInFlowSpecFiles()) {
     entries.push(await loadBuiltInCatalogEntry(fileName, { ...options, cwd }));
+  }
+  for (const filePath of listGlobalFlowSpecFiles()) {
+    entries.push(await loadGlobalCatalogEntry(filePath, { ...options, cwd }));
   }
   for (const filePath of listProjectFlowSpecFiles(cwd)) {
     entries.push(await loadProjectCatalogEntry(cwd, filePath, { ...options, cwd }));
@@ -143,13 +161,13 @@ export function isBuiltInCommandFlowId(flowId: string): boolean {
 export function toDeclarativeFlowRef(entry: FlowCatalogEntry): DeclarativeFlowRef {
   return entry.source === "built-in"
     ? { source: "built-in", fileName: entry.fileName }
-    : { source: "project-local", filePath: entry.absolutePath };
+    : { source: entry.source, filePath: entry.absolutePath };
 }
 
 export function flowRoutingKey(entry: FlowCatalogEntry): string {
-  return entry.source === "project-local"
-    ? `project-local:${entry.absolutePath}`
-    : `built-in:${entry.id}`;
+  return entry.source === "built-in"
+    ? `built-in:${entry.id}`
+    : `${entry.source}:${entry.absolutePath}`;
 }
 
 export async function flowRoutingGroups(

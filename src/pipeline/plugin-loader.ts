@@ -1,9 +1,11 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { TaskRunnerError } from "../errors.js";
 import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
+import { agentweaverHome } from "../runtime/agentweaver-home.js";
+import { agentweaverConfigDir } from "../runtime/env-loader.js";
 import { createNodeRegistry, type NodeRegistry } from "./node-registry.js";
 import { createExecutorRegistry, type ExecutorRegistry } from "./registry.js";
 import type { PipelineNodeDefinition } from "./types.js";
@@ -26,8 +28,45 @@ export type PipelineRegistryContext = {
 
 type RawPluginModule = Record<string, unknown>;
 
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(MODULE_DIR, "../..");
+
 function projectPluginsDir(cwd: string): string {
   return path.join(cwd, ".agentweaver", ".plugins");
+}
+
+function globalPluginsDir(): string {
+  return path.join(agentweaverConfigDir(), ".plugins");
+}
+
+function sdkPackageRoot(): string {
+  return agentweaverHome(PACKAGE_ROOT);
+}
+
+function sdkAliasPath(pluginRoot: string): string {
+  return path.join(pluginRoot, "node_modules", "agentweaver");
+}
+
+function ensurePluginSdkAlias(pluginRoot: string): void {
+  const aliasPath = sdkAliasPath(pluginRoot);
+  const targetPath = sdkPackageRoot();
+  mkdirSync(path.dirname(aliasPath), { recursive: true });
+  if (!existsSync(aliasPath)) {
+    symlinkSync(targetPath, aliasPath, process.platform === "win32" ? "junction" : "dir");
+    return;
+  }
+  const existing = lstatSync(aliasPath);
+  if (!existing.isSymbolicLink()) {
+    throw new TaskRunnerError(
+      `Plugin installation '${pluginRoot}' has ${aliasPath}, but it is not a symlink. Remove it so AgentWeaver can expose agentweaver/plugin-sdk.`,
+    );
+  }
+  const resolvedTarget = path.resolve(path.dirname(aliasPath), readlinkSync(aliasPath));
+  if (resolvedTarget !== targetPath) {
+    throw new TaskRunnerError(
+      `Plugin installation '${pluginRoot}' points ${aliasPath} to ${resolvedTarget}, expected ${targetPath}. Remove it and retry.`,
+    );
+  }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -135,6 +174,7 @@ function resolveEntrypoint(pluginRoot: string, manifestPath: string, manifest: P
 
 async function loadPluginModule(manifest: PluginManifest, manifestPath: string, entrypointPath: string): Promise<RawPluginModule> {
   try {
+    ensurePluginSdkAlias(path.dirname(manifestPath));
     const namespace = await import(pathToFileURL(entrypointPath).href);
     if ("default" in namespace) {
       throw new TaskRunnerError(
@@ -316,8 +356,7 @@ function normalizePluginModule(
   };
 }
 
-export async function discoverProjectPlugins(cwd: string): Promise<LoadedPlugin[]> {
-  const pluginsRoot = projectPluginsDir(cwd);
+async function discoverPluginsFromRoot(pluginsRoot: string): Promise<LoadedPlugin[]> {
   if (!existsSync(pluginsRoot)) {
     return [];
   }
@@ -337,6 +376,27 @@ export async function discoverProjectPlugins(cwd: string): Promise<LoadedPlugin[
     plugins.push(normalizePluginModule(manifest, manifestPath, entrypointPath, namespace));
   }
   return plugins;
+}
+
+export async function discoverProjectPlugins(cwd: string): Promise<LoadedPlugin[]> {
+  return discoverPluginsFromRoot(projectPluginsDir(cwd));
+}
+
+export async function discoverGlobalPlugins(): Promise<LoadedPlugin[]> {
+  return discoverPluginsFromRoot(globalPluginsDir());
+}
+
+function validateUniquePluginIds(plugins: LoadedPlugin[]): void {
+  const byId = new Map<string, LoadedPlugin>();
+  for (const plugin of plugins) {
+    const duplicate = byId.get(plugin.manifest.id);
+    if (duplicate) {
+      throw new TaskRunnerError(
+        `Duplicate plugin id '${plugin.manifest.id}' conflicts between ${duplicate.manifestPath} and ${plugin.manifestPath}.`,
+      );
+    }
+    byId.set(plugin.manifest.id, plugin);
+  }
 }
 
 function cacheKeyForPlugins(cwd: string, plugins: LoadedPlugin[]): string {
@@ -367,7 +427,11 @@ function validatePluginNodeDependencies(
 }
 
 export async function createPipelineRegistryContext(cwd: string): Promise<PipelineRegistryContext> {
-  const plugins = await discoverProjectPlugins(cwd);
+  const plugins = [
+    ...await discoverGlobalPlugins(),
+    ...await discoverProjectPlugins(cwd),
+  ];
+  validateUniquePluginIds(plugins);
   const executorRegistry = createExecutorRegistry(plugins.flatMap((plugin) => plugin.executors));
   const nodeRegistry = createNodeRegistry(plugins.flatMap((plugin) => plugin.nodes));
   validatePluginNodeDependencies(plugins, executorRegistry);

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+const repoRoot = process.cwd();
 const distRoot = path.resolve(process.cwd(), "dist");
 const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), "package.json"), "utf8"));
 
@@ -15,6 +16,9 @@ let declarativeFlowsModule;
 let contextModule;
 let nodeRunnerModule;
 let flowCatalogModule;
+let declarativeFlowRunnerModule;
+let artifactRegistryModule;
+let claudeExampleModule;
 
 function writeJson(filePath, value) {
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -49,6 +53,25 @@ function writeProjectFlow(repoDir, relativeFilePath, nodeId) {
   });
 }
 
+function installLocalAgentWeaverPackage(repoDir) {
+  const nodeModulesDir = path.join(repoDir, "node_modules");
+  mkdirSync(nodeModulesDir, { recursive: true });
+  symlinkSync(repoRoot, path.join(nodeModulesDir, "agentweaver"), "dir");
+}
+
+function copyClaudeExample(repoDir) {
+  installLocalAgentWeaverPackage(repoDir);
+  cpSync(
+    path.join(repoRoot, ".agentweaver", ".plugins", "claude-example-plugin"),
+    path.join(repoDir, ".agentweaver", ".plugins", "claude-example-plugin"),
+    { recursive: true },
+  );
+  cpSync(
+    path.join(repoRoot, ".agentweaver", ".flows", "examples", "claude-example.json"),
+    path.join(repoDir, ".agentweaver", ".flows", "examples", "claude-example.json"),
+  );
+}
+
 beforeEach(async () => {
   originalCwd = process.cwd();
   tempRoot = mkdtempSync(path.join(os.tmpdir(), "agentweaver-plugin-loader-"));
@@ -57,6 +80,11 @@ beforeEach(async () => {
   contextModule = await import(`${pathToFileURL(path.join(distRoot, "pipeline/context.js")).href}?context=${Date.now()}`);
   nodeRunnerModule = await import(`${pathToFileURL(path.join(distRoot, "pipeline/node-runner.js")).href}?runner=${Date.now()}`);
   flowCatalogModule = await import(`${pathToFileURL(path.join(distRoot, "pipeline/flow-catalog.js")).href}?catalog=${Date.now()}`);
+  declarativeFlowRunnerModule = await import(`${pathToFileURL(path.join(distRoot, "pipeline/declarative-flow-runner.js")).href}?phase=${Date.now()}`);
+  artifactRegistryModule = await import(`${pathToFileURL(path.join(distRoot, "runtime/artifact-registry.js")).href}?artifact=${Date.now()}`);
+  claudeExampleModule = await import(
+    `${pathToFileURL(path.join(repoRoot, ".agentweaver", ".plugins", "claude-example-plugin", "index.js")).href}?claude=${Date.now()}`
+  );
 });
 
 afterEach(() => {
@@ -290,5 +318,294 @@ export const nodes = [
 
     const entries = await flowCatalogModule.loadInteractiveFlowCatalog(repoDir);
     assert.equal(entries.some((entry) => entry.id === "custom/catalog-flow"), true);
+  });
+
+  it("loads the Claude example plugin and validates the project-local example flow through the merged registry", async () => {
+    const repoDir = path.join(tempRoot, "repo-claude-example");
+    mkdirSync(repoDir, { recursive: true });
+    copyClaudeExample(repoDir);
+    process.chdir(repoDir);
+
+    const registryContext = await pluginLoaderModule.createPipelineRegistryContext(repoDir);
+    assert.equal(registryContext.executors.has("claude"), true);
+    assert.equal(registryContext.nodes.has("claude-prompt"), true);
+    assert.deepEqual(registryContext.nodes.getMeta("claude-prompt").executors, ["claude"]);
+
+    const builtInContext = pluginLoaderModule.createBuiltInRegistryContext(repoDir);
+    await assert.rejects(
+      () => declarativeFlowsModule.loadDeclarativeFlow(
+        { source: "project-local", filePath: path.join(repoDir, ".agentweaver", ".flows", "examples", "claude-example.json") },
+        { cwd: repoDir, registryContext: builtInContext },
+      ),
+      /Unknown node kind 'claude-prompt'/,
+    );
+
+    const flow = await declarativeFlowsModule.loadDeclarativeFlow(
+      { source: "project-local", filePath: path.join(repoDir, ".agentweaver", ".flows", "examples", "claude-example.json") },
+      { cwd: repoDir, registryContext },
+    );
+    assert.equal(flow.kind, "claude-example-flow");
+
+    const entries = await flowCatalogModule.loadInteractiveFlowCatalog(repoDir, { registryContext, cwd: repoDir });
+    assert.equal(entries.some((entry) => entry.id === "examples/claude-example"), true);
+  });
+
+  it("runs the Claude example flow, writes the fixed proof artifact, and publishes helper-json metadata", async () => {
+    const repoDir = path.join(tempRoot, "repo-claude-run");
+    mkdirSync(repoDir, { recursive: true });
+    copyClaudeExample(repoDir);
+    process.chdir(repoDir);
+
+    const registryContext = await pluginLoaderModule.createPipelineRegistryContext(repoDir);
+    const flow = await declarativeFlowsModule.loadDeclarativeFlow(
+      { source: "project-local", filePath: path.join(repoDir, ".agentweaver", ".flows", "examples", "claude-example.json") },
+      { cwd: repoDir, registryContext },
+    );
+    const artifactRegistry = artifactRegistryModule.createArtifactRegistry();
+    const argvCalls = [];
+    const pipelineContext = await contextModule.createPipelineContext({
+      issueKey: "CLAUDE-1",
+      jiraRef: "CLAUDE-1",
+      dryRun: false,
+      verbose: false,
+      runtime: {
+        resolveCmd(commandName) {
+          assert.equal(commandName, "claude");
+          return "/usr/bin/claude";
+        },
+        async runCommand(argv) {
+          argvCalls.push(argv);
+          return JSON.stringify({
+            result: "Primary Claude result",
+            model: "claude-3-7-sonnet",
+            message: {
+              content: [{ text: "fallback that should not win" }],
+            },
+          });
+        },
+        artifactRegistry,
+      },
+      registryContext,
+    });
+
+    const phaseResult = await declarativeFlowRunnerModule.runExpandedPhase(
+      flow.phases[0],
+      pipelineContext,
+      {},
+      flow.constants,
+      { flowKind: flow.kind, flowVersion: flow.version },
+    );
+    assert.equal(argvCalls.length, 1);
+    assert.deepEqual(argvCalls[0]?.slice(0, 2), ["/usr/bin/claude", "-p"]);
+    assert.match(
+      argvCalls[0]?.[2] ?? "",
+      /Reply with one short sentence that confirms the AgentWeaver Claude example plugin is wired correctly\./,
+    );
+    assert.deepEqual(argvCalls[0]?.slice(3), ["--output-format", "json"]);
+
+    const proofPath = path.join(repoDir, ".agentweaver", ".artifacts", "examples", "claude-example-proof.json");
+    const proofPayload = JSON.parse(readFileSync(proofPath, "utf8"));
+    assert.deepEqual(proofPayload, {
+      response: "Primary Claude result",
+      command: "/usr/bin/claude",
+      model: "claude-3-7-sonnet",
+      executor: "claude",
+    });
+
+    const publishedArtifact = phaseResult.steps[0]?.publishedArtifacts?.[0];
+    assert.ok(publishedArtifact, "expected the flow step to publish the proof artifact");
+    assert.equal(publishedArtifact.payload_path, proofPath);
+    assert.equal(publishedArtifact.logical_key, "artifacts/examples/claude-example-proof.json");
+    assert.equal(publishedArtifact.schema_id, "helper-json/v1");
+
+    const manifest = artifactRegistry.loadManifestByPayloadPath(proofPath);
+    assert.ok(manifest, "expected a manifest sidecar for the proof artifact");
+    assert.equal(manifest.logical_key, "artifacts/examples/claude-example-proof.json");
+    assert.equal(manifest.schema_id, "helper-json/v1");
+    assert.equal(manifest.payload_family, "helper-json");
+    assert.equal(manifest.producer.node, "claude-prompt");
+    assert.equal(manifest.producer.executor, "claude");
+  });
+
+  it("keeps the Claude example plugin on the public SDK import boundary only", () => {
+    const source = readFileSync(
+      path.join(repoRoot, ".agentweaver", ".plugins", "claude-example-plugin", "index.js"),
+      "utf8",
+    );
+    assert.match(source, /agentweaver\/plugin-sdk/);
+    assert.doesNotMatch(source, /agentweaver\/dist\//);
+    assert.doesNotMatch(source, /agentweaver\/src\//);
+    assert.doesNotMatch(source, /from\s+["']agentweaver["']/);
+    assert.doesNotMatch(source, /from\s+["']\.\.?\//);
+  });
+
+  it("normalizes Claude payloads, applies precedence, and fails deterministically on schema drift", async () => {
+    const executor = claudeExampleModule.claudeExecutorDefinition;
+    const runtime = {
+      resolveCmd(commandName, envVarName) {
+        assert.equal(commandName, "claude");
+        assert.equal(envVarName, "CLAUDE_BIN");
+        return "claude";
+      },
+      async runCommand() {
+        return JSON.stringify({
+          result: "Result wins",
+          model: "payload-model",
+          message: { content: [{ text: "should not win" }] },
+          content: [{ text: "should also not win" }],
+        });
+      },
+      artifactRegistry: { publish() { throw new Error("not used"); } },
+    };
+    const result = await executor.execute({
+      cwd: repoRoot,
+      env: { CLAUDE_MODEL: "env-model", CLAUDE_MAX_TURNS: "4" },
+      ui: { writeStdout() {}, writeStderr() {} },
+      dryRun: false,
+      verbose: false,
+      mdLang: null,
+      runtime,
+    }, {
+      prompt: "hello",
+      model: "direct-model",
+      maxTurns: 9,
+    }, {
+      ...executor.defaultConfig,
+      defaultModel: "default-model",
+      defaultMaxTurns: "12",
+    });
+    assert.equal(result.output, "Result wins");
+    assert.equal(result.model, "payload-model");
+    assert.deepEqual(result.rawResponse, {
+      result: "Result wins",
+      model: "payload-model",
+      message: { content: [{ text: "should not win" }] },
+      content: [{ text: "should also not win" }],
+    });
+
+    const messageFallback = await executor.execute({
+      cwd: repoRoot,
+      env: {},
+      ui: { writeStdout() {}, writeStderr() {} },
+      dryRun: false,
+      verbose: false,
+      mdLang: null,
+      runtime: {
+        ...runtime,
+        async runCommand(argv) {
+          assert.deepEqual(argv, [
+            "claude",
+            "-p",
+            "hello",
+            "--output-format",
+            "json",
+            "--model",
+            "default-model",
+            "--max-turns",
+            "12",
+          ]);
+          return JSON.stringify({
+            message: {
+              content: [{ text: "First fragment" }, { text: "   " }, { tool: "ignore" }, { text: "Second fragment" }],
+            },
+          });
+        },
+      },
+    }, {
+      prompt: "hello",
+    }, {
+      ...executor.defaultConfig,
+      defaultModel: "default-model",
+      defaultMaxTurns: "12",
+    });
+    assert.equal(messageFallback.output, "First fragment\nSecond fragment");
+    assert.equal(messageFallback.model, "default-model");
+
+    const contentFallback = await executor.execute({
+      cwd: repoRoot,
+      env: {},
+      ui: { writeStdout() {}, writeStderr() {} },
+      dryRun: false,
+      verbose: false,
+      mdLang: null,
+      runtime: {
+        ...runtime,
+        async runCommand() {
+          return JSON.stringify({
+            content: [{ type: "text", text: "Alpha" }, null, { text: "" }, { text: "Beta" }],
+          });
+        },
+      },
+    }, {
+      prompt: "hello",
+    }, {
+      ...executor.defaultConfig,
+      defaultModel: "",
+      defaultMaxTurns: "",
+    });
+    assert.equal(contentFallback.output, "Alpha\nBeta");
+    assert.equal(contentFallback.model, "");
+
+    await assert.rejects(
+      () => executor.execute({
+        cwd: repoRoot,
+        env: {},
+        ui: { writeStdout() {}, writeStderr() {} },
+        dryRun: false,
+        verbose: false,
+        mdLang: null,
+        runtime: {
+          ...runtime,
+          async runCommand() {
+            return JSON.stringify({ message: { content: [{ type: "tool_result" }] } });
+          },
+        },
+      }, {
+        prompt: "hello",
+      }, executor.defaultConfig),
+      /Claude JSON normalization failed: no supported assistant text was found/,
+    );
+  });
+
+  it("surfaces missing command resolution and unauthenticated Claude setup deterministically", async () => {
+    const executor = claudeExampleModule.claudeExecutorDefinition;
+
+    await assert.rejects(
+      () => executor.execute({
+        cwd: repoRoot,
+        env: {},
+        ui: { writeStdout() {}, writeStderr() {} },
+        dryRun: false,
+        verbose: false,
+        mdLang: null,
+        runtime: {
+          resolveCmd() {
+            throw new Error("Claude command resolution failed");
+          },
+          async runCommand() {
+            throw new Error("should not execute");
+          },
+          artifactRegistry: { publish() { throw new Error("not used"); } },
+        },
+      }, {
+        prompt: "hello",
+      }, executor.defaultConfig),
+      /Claude command resolution failed/,
+    );
+
+    const runtime = {
+      resolveCmd() {
+        return "claude";
+      },
+      async runCommand(argv) {
+        assert.deepEqual(argv, ["claude", "auth", "status"]);
+        throw new Error("exit code 1");
+      },
+      artifactRegistry: { publish() { throw new Error("not used"); } },
+    };
+    await assert.rejects(
+      () => claudeExampleModule.verifyClaudeAuth(runtime, {}, executor.defaultConfig),
+      /Claude CLI authentication is required/,
+    );
   });
 });

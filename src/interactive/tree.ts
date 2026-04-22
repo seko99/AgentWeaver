@@ -91,7 +91,7 @@ export function buildFlowTree(flows: InteractiveFlowDefinition[]): FlowTreeNode[
           : node,
       );
 
-  const orderedRootNames = ["custom", "default"];
+  const orderedRootNames = ["custom", "global", "default"];
   const sortedRoots = [...roots.values()].sort((left, right) => {
     const leftIndex = orderedRootNames.indexOf(left.name);
     const rightIndex = orderedRootNames.indexOf(right.name);

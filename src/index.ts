@@ -909,7 +909,7 @@ function interactiveFlowDefinition(entry: FlowCatalogEntry): InteractiveFlowDefi
     description: flow.description ?? "No description available for this flow.",
     source: entry.source,
     treePath: [...entry.treePath],
-    ...(entry.source === "project-local" ? { sourcePath: entry.absolutePath } : {}),
+    ...(entry.source !== "built-in" ? { sourcePath: entry.absolutePath } : {}),
     phases: flow.phases.map((phase) => ({
       id: phase.id,
       repeatVars: Object.fromEntries(

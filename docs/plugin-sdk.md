@@ -1,6 +1,6 @@
 # AgentWeaver Plugin SDK
 
-This guide is for external plugin authors who want to add custom executors, custom nodes, and project-local declarative flows without modifying AgentWeaver core.
+This guide is for external plugin authors who want to add custom executors, custom nodes, and custom declarative flows without modifying AgentWeaver core.
 
 Use only the public SDK import:
 
@@ -30,22 +30,23 @@ AgentWeaver has four pieces that matter to plugin authors:
 
 - An `executor` integrates with an external tool or runtime action. It is a typed function with `defaultConfig` and `execute`.
 - A `node` is the runtime unit referenced from declarative flow JSON. A node can use executors, read flow context, and return outputs.
-- A `flow` is declarative JSON loaded from built-in specs or from `.agentweaver/.flows/**/*.json`.
-- A `plugin manifest` tells AgentWeaver where a local plugin is installed and which ESM entrypoint to load.
+- A `flow` is declarative JSON loaded from built-in specs, global `~/.agentweaver/.flows/**/*.json`, or project-local `.agentweaver/.flows/**/*.json`.
+- A `plugin manifest` tells AgentWeaver where a global or project-local plugin is installed and which ESM entrypoint to load.
 
-The runtime merges built-in registries with project-local plugin registrations. Flow validation then runs against that merged registry. That means a project-local flow can reference plugin-provided node kinds directly, and plugin node metadata can declare dependencies on built-in or plugin-provided executor ids.
+The runtime merges built-in registries with global and project-local plugin registrations. Flow validation then runs against that merged registry. That means a custom flow can reference plugin-provided node kinds directly, and plugin node metadata can declare dependencies on built-in or plugin-provided executor ids.
 
 ## Installation Layout
 
-The canonical local plugin location is:
+Supported plugin locations are:
 
 ```text
+~/.agentweaver/.plugins/<plugin-id>/plugin.json
 .agentweaver/.plugins/<plugin-id>/plugin.json
 ```
 
 Rules enforced by the loader:
 
-- AgentWeaver discovers plugin directories from `.agentweaver/.plugins/`.
+- AgentWeaver discovers plugin directories from `~/.agentweaver/.plugins/` and `.agentweaver/.plugins/`.
 - Directories are loaded in lexicographic order.
 - Each plugin directory must contain `plugin.json`.
 - The directory name must match the manifest `id` exactly.
@@ -53,13 +54,144 @@ Rules enforced by the loader:
 - Invalid plugins are not skipped partially.
 - Duplicate built-in ids and duplicate plugin ids are rejected by registry creation.
 
-Project-local flows live under:
+Custom flows live under:
 
 ```text
+~/.agentweaver/.flows/**/*.json
 .agentweaver/.flows/**/*.json
 ```
 
 Those flows use the same validator and runtime as built-in flows.
+If the same flow id or plugin id is discovered from more than one source, AgentWeaver fails fast instead of silently overriding one source with another.
+
+## Claude Example Plugin
+
+This repository includes a complete project-local reference example under `docs/example/`.
+
+Files in the example:
+
+- plugin manifest: `docs/example/.plugins/claude-example-plugin/plugin.json`
+- plugin entrypoint: `docs/example/.plugins/claude-example-plugin/index.js`
+- example flow: `docs/example/.flows/examples/claude-example.json`
+
+The `docs/example/` directory is documentation material, not an auto-loaded runtime location. AgentWeaver discovers plugins and flows only from `~/.agentweaver/.plugins/`, `~/.agentweaver/.flows/`, `.agentweaver/.plugins/`, and `.agentweaver/.flows/`.
+
+To wire the example into a real AgentWeaver project, copy it into either the global or the project-local `.agentweaver/` directory.
+
+Project-local wiring:
+
+```bash
+mkdir -p .agentweaver/.plugins/claude-example-plugin
+mkdir -p .agentweaver/.flows/examples
+cp docs/example/.plugins/claude-example-plugin/plugin.json .agentweaver/.plugins/claude-example-plugin/plugin.json
+cp docs/example/.plugins/claude-example-plugin/index.js .agentweaver/.plugins/claude-example-plugin/index.js
+cp docs/example/.flows/examples/claude-example.json .agentweaver/.flows/examples/claude-example.json
+```
+
+Global wiring:
+
+```bash
+mkdir -p ~/.agentweaver/.plugins/claude-example-plugin
+mkdir -p ~/.agentweaver/.flows/examples
+cp docs/example/.plugins/claude-example-plugin/plugin.json ~/.agentweaver/.plugins/claude-example-plugin/plugin.json
+cp docs/example/.plugins/claude-example-plugin/index.js ~/.agentweaver/.plugins/claude-example-plugin/index.js
+cp docs/example/.flows/examples/claude-example.json ~/.agentweaver/.flows/examples/claude-example.json
+```
+
+After that, AgentWeaver will load either:
+
+- the plugin manifest from `.agentweaver/.plugins/claude-example-plugin/plugin.json`
+- the plugin module from `.agentweaver/.plugins/claude-example-plugin/index.js`
+- the example flow from `.agentweaver/.flows/examples/claude-example.json`
+
+or:
+
+- the plugin manifest from `~/.agentweaver/.plugins/claude-example-plugin/plugin.json`
+- the plugin module from `~/.agentweaver/.plugins/claude-example-plugin/index.js`
+- the example flow from `~/.agentweaver/.flows/examples/claude-example.json`
+
+This example specifically demonstrates an external plugin without any core registry changes. It imports only `agentweaver/plugin-sdk` and does not depend on `agentweaver`, `agentweaver/dist/*`, `agentweaver/src/*`, or repository-relative internal paths.
+
+The supported Claude CLI invocation contract used by the example is fixed:
+
+```text
+claude -p <prompt> --output-format json [--model <value>] [--max-turns <n>]
+```
+
+The configuration precedence is also fixed:
+
+- direct executor-run override
+- `CLAUDE_MODEL` and `CLAUDE_MAX_TURNS`
+- `defaultConfig`
+
+If the final value is empty, the corresponding flag must be omitted.
+The binary path is resolved through `runtime.resolveCmd(config.defaultCommand, config.commandEnvVar)`; in this example that env var is `CLAUDE_BIN`.
+
+Before an optional local smoke test, verify the CLI setup separately:
+
+```bash
+claude auth status
+```
+
+If that command exits non-zero, treat it as a setup prerequisite failure, not an AgentWeaver SDK defect.
+
+Claude JSON response normalization in this example is the authoritative contract:
+
+1. `result`
+2. `message.content[*].text`
+3. `content[*].text`
+
+Fallback array rules:
+
+- traversal keeps the original array order
+- only `text` values that are strings with non-empty `trim()` are preserved
+- preserved fragments are kept without semantic rewriting
+- the final string is joined with a single newline character
+- empty, whitespace-only, missing, `null`, and non-string items are ignored
+
+If no supported assistant text source exists after those rules, the example must fail with a deterministic normalization contract error.
+The `model` field comes from non-empty `payload.model`, or falls back to the effective configured model for the current run.
+The parsed payload is preserved without rewriting as `rawResponse`.
+
+Representative fixtures that the plugin should handle:
+
+```json
+{
+  "result": "Top-level result wins",
+  "model": "claude-3-7-sonnet"
+}
+```
+
+```json
+{
+  "message": {
+    "content": [
+      { "text": "First fragment" },
+      { "type": "tool_use" },
+      { "text": "Second fragment" }
+    ]
+  }
+}
+```
+
+```json
+{
+  "content": [
+    { "text": "Alpha" },
+    { "text": "Beta" }
+  ]
+}
+```
+
+The proof artifact contract in this example is also fixed:
+
+- file: `.agentweaver/.artifacts/examples/claude-example-proof.json`
+- logical key: `artifacts/examples/claude-example-proof.json`
+- schema: `helper-json/v1`
+- writer: `claude-prompt`
+
+`claude-prompt` writes the JSON object itself with exactly the fields `response`, `command`, `model`, and `executor`, then publishes it through node outputs with manifest metadata.
+That matters: the proof file must not depend on a second node, a manual step, or a separate core serialization feature.
 
 ## Manifest Contract
 
@@ -368,9 +500,9 @@ export const nodes = [
 ];
 ```
 
-## Wiring a Project-Local Flow
+## Wiring a Custom Flow
 
-Project-local flows are discovered from `.agentweaver/.flows/**/*.json`.
+A custom flow can be discovered from `~/.agentweaver/.flows/**/*.json` or `.agentweaver/.flows/**/*.json`.
 
 A flow can reference your plugin-provided node id directly:
 
@@ -398,10 +530,16 @@ A flow can reference your plugin-provided node id directly:
 }
 ```
 
-Save that file as:
+Save that file as either:
 
 ```text
 .agentweaver/.flows/sample-flow.json
+```
+
+or:
+
+```text
+~/.agentweaver/.flows/sample-flow.json
 ```
 
 Once the plugin loads successfully, the flow validator treats `sample-node` like any built-in node kind.
@@ -412,8 +550,9 @@ If a node supports nested flow references through a metadata field such as `nest
 
 Resolution rules:
 
-- project-local and built-in flow file names must not collide for the same nested flow reference
+- project-local, global, and built-in flow file names must not collide for the same nested flow reference
 - multiple project-local files with the same base file name are ambiguous
+- multiple global files with the same base file name are ambiguous
 - multiple built-in files with the same base file name are ambiguous
 - an unknown file name fails validation
 
@@ -421,12 +560,20 @@ Keep nested flow file names unique when you rely on file-name-based resolution.
 
 ## End-to-End Walkthrough
 
-This walkthrough is the acceptance path for the public docs. It creates a throwaway local plugin and runs a project-local flow using only the documented contract.
+This walkthrough is the acceptance path for the public docs. It creates a throwaway local plugin and runs a custom flow using only the documented contract.
 
 ### 1. Create the plugin directory
 
+Use either project-local or global installation. Project-local example:
+
 ```bash
 mkdir -p .agentweaver/.plugins/sample-plugin
+```
+
+Global example:
+
+```bash
+mkdir -p ~/.agentweaver/.plugins/sample-plugin
 ```
 
 ### 2. Write `plugin.json`
@@ -442,27 +589,37 @@ mkdir -p .agentweaver/.plugins/sample-plugin
 }
 ```
 
-Write it to:
+Write it to one of:
 
 ```text
 .agentweaver/.plugins/sample-plugin/plugin.json
+~/.agentweaver/.plugins/sample-plugin/plugin.json
 ```
 
 ### 3. Write the plugin entrypoint
 
-Write the complete `index.js` example from the previous section to:
+Write the complete `index.js` example from the previous section to one of:
 
 ```text
 .agentweaver/.plugins/sample-plugin/index.js
+~/.agentweaver/.plugins/sample-plugin/index.js
 ```
 
-### 4. Create the project-local flow
+### 4. Create the custom flow
+
+Project-local:
 
 ```bash
 mkdir -p .agentweaver/.flows
 ```
 
-Create `.agentweaver/.flows/sample-flow.json` with the flow JSON from the previous section.
+Global:
+
+```bash
+mkdir -p ~/.agentweaver/.flows
+```
+
+Create `sample-flow.json` in the matching flow directory with the flow JSON from the previous section.
 
 ### 5. Build AgentWeaver
 
@@ -475,18 +632,18 @@ npm run build
 
 ### 6. Run the flow
 
-Project-local flows are discovered in the interactive catalog:
+Custom flows are discovered in the interactive catalog:
 
 ```bash
 node dist/index.js
 node dist/index.js --help
 ```
 
-The project-local flow should appear under the custom flow catalog with the id `sample-flow`. Select it from interactive mode and run it there.
+The flow should appear under either the `global` or `custom` catalog root with the id `sample-flow`. Select it from interactive mode and run it there.
 
 ### 7. Expected result
 
-The registry should load the plugin, validate `sample-node`, and allow the project-local flow to execute without reading AgentWeaver internals.
+The registry should load the plugin, validate `sample-node`, and allow the custom flow to execute without reading AgentWeaver internals.
 
 If execution fails, use the troubleshooting section below before inspecting any core source files.
 
@@ -508,15 +665,15 @@ Recommended upgrade workflow after updating AgentWeaver:
 4. Run at least one local custom flow that exercises your plugin nodes.
 5. Re-check packaging or deployment steps if you publish your plugin from a separate repository.
 
-If the SDK major changes, review your plugin entrypoint, executor definitions, node metadata, and project-local flow assumptions before trusting the plugin in production use.
+If the SDK major changes, review your plugin entrypoint, executor definitions, node metadata, and custom flow assumptions before trusting the plugin in production use.
 
 ## Testing Workflow for Plugin Authors
 
 A practical minimum workflow:
 
 1. Build AgentWeaver with `npm run build`.
-2. Keep your plugin under `.agentweaver/.plugins/<plugin-id>/`.
-3. Keep one or more smoke-test flows under `.agentweaver/.flows/`.
+2. Keep your plugin under `~/.agentweaver/.plugins/<plugin-id>/` or `.agentweaver/.plugins/<plugin-id>/`.
+3. Keep one or more smoke-test flows under `~/.agentweaver/.flows/` or `.agentweaver/.flows/`.
 4. Run a custom flow that touches every plugin node and executor dependency.
 5. Re-run the flow after every AgentWeaver upgrade.
 
@@ -632,17 +789,17 @@ Symptom: flow validation fails with an unknown or ambiguous nested flow name.
 Fix:
 
 - ensure the referenced file exists
-- avoid duplicate base file names across project-local and built-in flows
-- keep project-local nested flow file names unique
+- avoid duplicate base file names across global, project-local, and built-in flows
+- keep global and project-local nested flow file names unique
 
 ## Supported Boundary Summary
 
 Treat these as stable public assumptions for plugin authoring:
 
 - import only from `agentweaver/plugin-sdk`
-- install local plugins under `.agentweaver/.plugins/<plugin-id>/plugin.json`
+- install local plugins under `~/.agentweaver/.plugins/<plugin-id>/plugin.json` or `.agentweaver/.plugins/<plugin-id>/plugin.json`
 - export named `executors` and/or `nodes` arrays from an ESM `.js` or `.mjs` entrypoint
-- reference plugin node ids from `.agentweaver/.flows/**/*.json`
+- reference plugin node ids from `~/.agentweaver/.flows/**/*.json` or `.agentweaver/.flows/**/*.json`
 - keep plugin ids, node ids, executor ids, and nested flow file names unambiguous
 
 Everything else should be treated as internal implementation detail unless it is exposed through the public SDK subpath in a future release.
