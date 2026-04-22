@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { DoctorStatus } from "../types.js";
 import { CATEGORY } from "./category.js";
-import { ALLOWED_MODELS_BY_EXECUTOR, LlmExecutorId } from "../../pipeline/launch-profile-config.js";
+import { allowedModelsForExecutor, LlmExecutorId } from "../../pipeline/launch-profile-config.js";
 import { findCmdPath, isExecutable } from "../../runtime/command-resolution.js";
 
 interface ExecutorDetails {
@@ -103,7 +103,7 @@ function checkExecutor(executorId: LlmExecutorId): ExecutorCheckResult {
     return createResult(executorId, DoctorStatus.Fail, `${executorId} --version check failed`, `${executorId} --version did not produce expected output`, `path: ${resolution.path}, source: ${resolution.source}`, resolution, null);
   }
 
-  const allowedModels = ALLOWED_MODELS_BY_EXECUTOR[executorId];
+  const allowedModels = allowedModelsForExecutor(executorId);
   const modelWarnings: string[] = [];
 
   for (const model of allowedModels) {

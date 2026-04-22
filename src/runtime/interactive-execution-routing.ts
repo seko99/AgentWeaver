@@ -3,7 +3,7 @@ import path from "node:path";
 import type { FlowCatalogEntry } from "../pipeline/flow-catalog.js";
 import { flowRoutingGroups, flowRoutingKey } from "../pipeline/flow-catalog.js";
 import { loadNamedDeclarativeFlow, type LoadedDeclarativeFlow } from "../pipeline/declarative-flows.js";
-import type { PipelineRegistryContext } from "../pipeline/plugin-loader.js";
+import { createPipelineRegistryContext, type PipelineRegistryContext } from "../pipeline/plugin-loader.js";
 import {
   EXECUTION_ROUTING_GROUPS,
   type ExecutionRoutingGroup,
@@ -103,20 +103,14 @@ function executionPresetSelectionForm(
   };
 }
 
-function executorFieldOptions(): Array<{ value: string; label: string }> {
-  return [
-    { value: "codex", label: "codex" },
-    { value: "opencode", label: "opencode" },
-  ];
-}
-
 function selectedExecutorFromValues(
   values: UserInputFormValues,
   fieldId: string,
   fallbackExecutor: LlmExecutorId,
+  registryContext: PipelineRegistryContext,
 ): LlmExecutorId {
-  const candidate = values[fieldId];
-  return candidate === "codex" || candidate === "opencode" ? candidate : fallbackExecutor;
+  const candidate = typeof values[fieldId] === "string" ? values[fieldId] : "";
+  return registryContext.executors.getRouting(candidate)?.kind === "llm" ? candidate : fallbackExecutor;
 }
 
 function routingEditorDraftFromRouting(routing: ResolvedExecutionRouting): EditableExecutionRoutingDraft {
@@ -140,8 +134,13 @@ function routingEditorDraftFromRouting(routing: ResolvedExecutionRouting): Edita
 function advancedRoutingEditorForm(
   activeGroups: readonly ExecutionRoutingGroup[],
   draft: EditableExecutionRoutingDraft,
+  registryContext: PipelineRegistryContext,
   validationMessage?: string,
 ): UserInputFormDefinition {
+  const executorOptions = registryContext.executors.llmExecutors().map((entry) => ({
+    value: entry.id,
+    label: entry.id,
+  }));
   const fields: UserInputFieldDefinition[] = [
     {
       id: "default_route_executor",
@@ -149,7 +148,7 @@ function advancedRoutingEditorForm(
       label: "Default route executor",
       required: true,
       default: draft.defaultRoute.executor,
-      options: executorFieldOptions(),
+      options: executorOptions,
     },
     {
       id: "default_route_model",
@@ -158,10 +157,11 @@ function advancedRoutingEditorForm(
       help: "Available models follow the selected default executor.",
       required: true,
       default: draft.defaultRoute.model,
-      options: modelOptionsForExecutor(draft.defaultRoute.executor),
+      options: modelOptionsForExecutor(draft.defaultRoute.executor, registryContext.executors),
       optionsFromValues: (values) =>
         modelOptionsForExecutor(
-          selectedExecutorFromValues(values, "default_route_executor", draft.defaultRoute.executor),
+          selectedExecutorFromValues(values, "default_route_executor", draft.defaultRoute.executor, registryContext),
+          registryContext.executors,
         ),
     },
     ...activeGroups.flatMap<UserInputFieldDefinition>((group) => {
@@ -173,7 +173,7 @@ function advancedRoutingEditorForm(
           label: `${routingGroupLabel(group)} executor`,
           required: true,
           default: route.executor,
-          options: executorFieldOptions(),
+          options: executorOptions,
         },
         {
           id: `${group}_model`,
@@ -182,10 +182,11 @@ function advancedRoutingEditorForm(
           help: `Available models follow the selected ${routingGroupLabel(group)} executor.`,
           required: true,
           default: route.model,
-          options: modelOptionsForExecutor(route.executor),
+          options: modelOptionsForExecutor(route.executor, registryContext.executors),
           optionsFromValues: (values) =>
             modelOptionsForExecutor(
-              selectedExecutorFromValues(values, `${group}_executor`, route.executor),
+              selectedExecutorFromValues(values, `${group}_executor`, route.executor, registryContext),
+              registryContext.executors,
             ),
         },
       ];
@@ -270,11 +271,15 @@ function presetNameForm(): UserInputFormDefinition {
   };
 }
 
-function normalizeEditableRoute(label: string, route: EditableRouteDraft): {
+function normalizeEditableRoute(
+  label: string,
+  route: EditableRouteDraft,
+  executors?: PipelineRegistryContext["executors"],
+): {
   route: EditableRouteDraft;
   validationErrors: string[];
 } {
-  if (isAllowedModelForExecutor(route.executor, route.model)) {
+  if (isAllowedModelForExecutor(route.executor, route.model, executors)) {
     return {
       route: { ...route },
       validationErrors: [],
@@ -283,7 +288,7 @@ function normalizeEditableRoute(label: string, route: EditableRouteDraft): {
   return {
     route: {
       executor: route.executor,
-      model: defaultModelForExecutor(route.executor),
+      model: defaultModelForExecutor(route.executor, executors),
     },
     validationErrors: [
       `${label} model '${route.model}' is not allowed for executor '${route.executor}'. Select a ${route.executor} model.`,
@@ -291,17 +296,20 @@ function normalizeEditableRoute(label: string, route: EditableRouteDraft): {
   };
 }
 
-function normalizeEditableRoutingDraft(draft: EditableExecutionRoutingDraft): {
+function normalizeEditableRoutingDraft(
+  draft: EditableExecutionRoutingDraft,
+  executors?: PipelineRegistryContext["executors"],
+): {
   draft: EditableExecutionRoutingDraft;
   currentRunOverrides: Partial<Record<ExecutionRoutingGroup, EditableRouteDraft>>;
   validationErrors: string[];
 } {
-  const defaultRoute = normalizeEditableRoute("Default route", draft.defaultRoute);
+  const defaultRoute = normalizeEditableRoute("Default route", draft.defaultRoute, executors);
   const groups = {} as Record<ExecutionRoutingGroup, EditableRouteDraft>;
   const currentRunOverrides = {} as Partial<Record<ExecutionRoutingGroup, EditableRouteDraft>>;
   const validationErrors = [...defaultRoute.validationErrors];
   for (const group of EXECUTION_ROUTING_GROUPS) {
-    const normalizedRoute = normalizeEditableRoute(routingGroupLabel(group), draft.groups[group]);
+    const normalizedRoute = normalizeEditableRoute(routingGroupLabel(group), draft.groups[group], executors);
     groups[group] = normalizedRoute.route;
     if (
       normalizedRoute.route.executor !== defaultRoute.route.executor
@@ -470,7 +478,8 @@ export async function requestInteractiveExecutionRouting(
   flowEntry: FlowCatalogEntry,
   requestUserInput: UserInputRequester,
 ): Promise<{ routing: ResolvedExecutionRouting; selectedPreset: SelectedExecutionPreset }> {
-  const previewGroups = await flowRoutingGroups(flowEntry, process.cwd());
+  const registryContext = await createPipelineRegistryContext(process.cwd());
+  const previewGroups = await flowRoutingGroups(flowEntry, process.cwd(), { registryContext });
   const flowKey = flowRoutingKey(flowEntry);
   const namedPresets = getNamedExecutionPresets();
   const flowDefault = getFlowDefaultExecutionRouting(flowKey);
@@ -492,13 +501,13 @@ export async function requestInteractiveExecutionRouting(
       throw new TaskRunnerError("Flow default routing is unavailable.");
     }
     selectedPreset = { kind: "flow-default", label: "Flow default" };
-    routing = resolveStoredExecutionRoutingSnapshot(flowDefault.routing);
+    routing = resolveStoredExecutionRoutingSnapshot(flowDefault.routing, registryContext.executors);
   } else if (selectedPresetValue === "last-used") {
     if (!lastUsed) {
       throw new TaskRunnerError("Last-used routing is unavailable.");
     }
     selectedPreset = { kind: "last-used", label: "Last used" };
-    routing = resolveStoredExecutionRoutingSnapshot(lastUsed.routing);
+    routing = resolveStoredExecutionRoutingSnapshot(lastUsed.routing, registryContext.executors);
   } else if (selectedPresetValue.startsWith("named:")) {
     const presetName = selectedPresetValue.slice("named:".length);
     const namedPreset = namedPresets[presetName];
@@ -506,7 +515,7 @@ export async function requestInteractiveExecutionRouting(
       throw new TaskRunnerError(`Named preset '${presetName}' is unavailable.`);
     }
     selectedPreset = { kind: "named", presetId: presetName, label: `Named preset: ${presetName}` };
-    routing = resolveStoredExecutionRoutingSnapshot(namedPreset.routing);
+    routing = resolveStoredExecutionRoutingSnapshot(namedPreset.routing, registryContext.executors);
   } else if (selectedPresetValue.startsWith("built-in:")) {
     const presetId = selectedPresetValue.slice("built-in:".length) as keyof typeof BUILT_IN_EXECUTION_PRESETS;
     const preset = BUILT_IN_EXECUTION_PRESETS[presetId];
@@ -514,10 +523,11 @@ export async function requestInteractiveExecutionRouting(
       throw new TaskRunnerError(`Unknown execution preset '${presetId}'.`);
     }
     selectedPreset = { kind: "built-in", presetId, label: preset.label };
-    routing = resolveExecutionRouting({ presetId });
+    routing = resolveExecutionRouting({ presetId, executors: registryContext.executors });
   } else {
     selectedPreset = { kind: "custom", label: "Custom" };
     routing = resolveExecutionRouting({
+      executors: registryContext.executors,
       defaultRoute: {
         executor: DEFAULT_LAUNCH_PROFILE.executor,
         model: DEFAULT_LAUNCH_PROFILE.model,
@@ -528,7 +538,12 @@ export async function requestInteractiveExecutionRouting(
   let editorDraft = routingEditorDraftFromRouting(routing);
   let editorValidationMessage: string | undefined;
   for (; ;) {
-    const previewText = `Preset: ${selectedPreset.label}\n${await describeEffectiveRoutingPreview(flowEntry, routing, process.cwd())}`;
+    const previewText = `Preset: ${selectedPreset.label}\n${await describeEffectiveRoutingPreview(
+      flowEntry,
+      routing,
+      process.cwd(),
+      registryContext,
+    )}`;
     const actionResult = await requestUserInput(routingActionForm(previewText));
     const action = String(actionResult.values.action ?? "start");
     if (action === "cancel") {
@@ -540,7 +555,7 @@ export async function requestInteractiveExecutionRouting(
     }
 
     const routingFormResult = await requestUserInput(
-      advancedRoutingEditorForm(previewGroups, editorDraft, editorValidationMessage),
+      advancedRoutingEditorForm(previewGroups, editorDraft, registryContext, editorValidationMessage),
     );
     const requestedDefaultRoute: EditableRouteDraft = {
       executor: String(
@@ -569,7 +584,7 @@ export async function requestInteractiveExecutionRouting(
         }),
       ) as Record<ExecutionRoutingGroup, EditableRouteDraft>,
     };
-    const normalizedDraft = normalizeEditableRoutingDraft(requestedDraft);
+    const normalizedDraft = normalizeEditableRoutingDraft(requestedDraft, registryContext.executors);
     editorDraft = normalizedDraft.draft;
     if (normalizedDraft.validationErrors.length > 0) {
       editorValidationMessage = normalizedDraft.validationErrors.join("\n");
@@ -577,6 +592,7 @@ export async function requestInteractiveExecutionRouting(
     }
     try {
       routing = resolveExecutionRouting({
+        executors: registryContext.executors,
         defaultRoute: {
           executor: normalizedDraft.draft.defaultRoute.executor,
           model: normalizedDraft.draft.defaultRoute.model,

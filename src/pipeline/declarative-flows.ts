@@ -41,10 +41,9 @@ export type DeclarativeFlowLoadOptions = {
 };
 
 function toFlowSpecSource(ref: DeclarativeFlowRef): FlowSpecSource {
-  if (ref.source === "built-in") {
-    return { source: "built-in", fileName: ref.fileName };
-  }
-  return { source: ref.source, filePath: ref.filePath };
+  return ref.source === "built-in"
+    ? { source: "built-in", fileName: ref.fileName }
+    : { source: ref.source, filePath: ref.filePath };
 }
 
 function cacheKey(ref: DeclarativeFlowRef, registryContext: PipelineRegistryContext): string {
@@ -90,13 +89,15 @@ export function resolveNamedDeclarativeFlowRef(fileName: string, cwd: string): D
   const projectMatches = listProjectFlowSpecFiles(cwd).filter((candidate) => path.basename(candidate) === fileName);
   const globalMatches = listGlobalFlowSpecFiles().filter((candidate) => path.basename(candidate) === fileName);
   const builtInMatches = listBuiltInFlowSpecFiles().filter((candidate) => path.basename(candidate) === fileName);
-  const sourcesWithMatches = [
-    projectMatches.length > 0 ? `project-local specs in ${projectFlowSpecsDir(cwd)}` : null,
-    globalMatches.length > 0 ? `global specs in ${globalFlowSpecsDir()}` : null,
-    builtInMatches.length > 0 ? "built-in specs" : null,
-  ].filter((value): value is string => value !== null);
-  if (sourcesWithMatches.length > 1) {
-    throw new Error(`Ambiguous nested flow '${fileName}': found in ${sourcesWithMatches.join(", ")}.`);
+  const matches = [
+    ...builtInMatches.map((candidate) => ({ source: "built-in" as const, candidate })),
+    ...globalMatches.map((candidate) => ({ source: "global" as const, candidate })),
+    ...projectMatches.map((candidate) => ({ source: "project-local" as const, candidate })),
+  ];
+  if (matches.length > 1) {
+    throw new Error(
+      `Ambiguous nested flow '${fileName}': matches exist in built-in flows, ${globalFlowSpecsDir()}, or ${projectFlowSpecsDir(cwd)}. Use unique nested flow file names.`,
+    );
   }
   if (projectMatches.length > 1) {
     throw new Error(`Ambiguous project-local flow '${fileName}' in ${projectFlowSpecsDir(cwd)}.`);

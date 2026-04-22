@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { TaskRunnerError } from "../errors.js";
 import {
-  ALLOWED_MODELS_BY_EXECUTOR,
+  allowedModelsForExecutor,
   DEFAULT_LAUNCH_PROFILE,
   defaultModelForExecutor,
   isAllowedModelForExecutor,
@@ -11,6 +11,7 @@ import {
   type LlmExecutorId,
   type ResolvedLaunchProfile,
 } from "../pipeline/launch-profile-config.js";
+import type { ExecutorRegistry } from "../pipeline/registry.js";
 import {
   BUILT_IN_EXECUTION_PRESET_IDS,
   EXECUTION_ROUTING_GROUPS,
@@ -88,12 +89,14 @@ export function executionRoutingFingerprint(routing: Omit<ResolvedExecutionRouti
   return createHash("sha256").update(stableRoutingPayload({ ...routing, fingerprint: "" })).digest("hex");
 }
 
-export function validateExecutionRoute(executor: string, model: string): void {
-  const allowedModels = ALLOWED_MODELS_BY_EXECUTOR[executor as keyof typeof ALLOWED_MODELS_BY_EXECUTOR];
-  if (!allowedModels) {
+export function validateExecutionRoute(executor: string, model: string, executors?: ExecutorRegistry): void {
+  if (!executors && !isAllowedModelForExecutor(executor, model)) {
     throw new TaskRunnerError(`Unsupported llm executor '${executor}'.`);
   }
-  if (!allowedModels.includes(model)) {
+  if (executors && !executors.getRouting(executor)) {
+    throw new TaskRunnerError(`Unsupported llm executor '${executor}'.`);
+  }
+  if (!isAllowedModelForExecutor(executor, model, executors)) {
     throw new TaskRunnerError(`Model '${model}' is not allowed for executor '${executor}'.`);
   }
 }
@@ -108,6 +111,7 @@ export function toExecutionRouteSelection(route: Pick<ResolvedLaunchProfile, "ex
 export function resolveExecutionRoute(
   selection: ExecutionRouteSelection,
   fallback: Pick<ResolvedLaunchProfile, "executor" | "model">,
+  executors?: ExecutorRegistry,
 ): ResolvedLaunchProfile {
   const launchProfile = resolveLaunchProfile(
     {
@@ -115,8 +119,9 @@ export function resolveExecutionRoute(
       model: selection.model,
     } satisfies LaunchProfileSelection,
     fallback,
+    executors,
   );
-  validateExecutionRoute(launchProfile.executor, launchProfile.model);
+  validateExecutionRoute(launchProfile.executor, launchProfile.model, executors);
   return launchProfile;
 }
 
@@ -126,18 +131,19 @@ export function resolveExecutionRouting(options: {
   presetOverrides?: ExecutionRoutingOverrides;
   currentRunOverrides?: ExecutionRoutingOverrides;
   fallbackDefaultRoute?: Pick<ResolvedLaunchProfile, "executor" | "model">;
+  executors?: ExecutorRegistry;
 }): ResolvedExecutionRouting {
   const fallbackDefaultRoute = options.fallbackDefaultRoute ?? DEFAULT_LAUNCH_PROFILE;
   const preset = options.presetId ? BUILT_IN_EXECUTION_PRESETS[options.presetId] : null;
   const defaultRouteSelection = options.defaultRoute ?? preset?.defaultRoute ?? toExecutionRouteSelection(fallbackDefaultRoute);
-  const defaultRoute = resolveExecutionRoute(defaultRouteSelection, fallbackDefaultRoute);
+  const defaultRoute = resolveExecutionRoute(defaultRouteSelection, fallbackDefaultRoute, options.executors);
   const groups = Object.fromEntries(
     EXECUTION_ROUTING_GROUPS.map((group) => {
       const override = options.currentRunOverrides?.[group]
         ?? options.presetOverrides?.[group]
         ?? preset?.groupOverrides?.[group]
         ?? { executor: "default", model: "default" };
-      return [group, resolveExecutionRoute(override, defaultRoute)];
+      return [group, resolveExecutionRoute(override, defaultRoute, options.executors)];
     }),
   ) as Record<ExecutionRoutingGroup, ResolvedLaunchProfile>;
   const fingerprint = executionRoutingFingerprint({
@@ -198,6 +204,7 @@ export function executorsForRoutingGroups(
 
 export function normalizeEditableExecutionRouting(
   routes: Record<ExecutionRoutingGroup, { executor: LlmExecutorId; model: string }>,
+  executors?: ExecutorRegistry,
 ): {
   routes: Record<ExecutionRoutingGroup, { executor: LlmExecutorId; model: string }>;
   validationErrors: string[];
@@ -206,13 +213,13 @@ export function normalizeEditableExecutionRouting(
   const validationErrors: string[] = [];
   for (const group of EXECUTION_ROUTING_GROUPS) {
     const route = routes[group];
-    if (isAllowedModelForExecutor(route.executor, route.model)) {
+    if (isAllowedModelForExecutor(route.executor, route.model, executors)) {
       normalizedRoutes[group] = { ...route };
       continue;
     }
     normalizedRoutes[group] = {
       executor: route.executor,
-      model: defaultModelForExecutor(route.executor),
+      model: defaultModelForExecutor(route.executor, executors),
     };
     validationErrors.push(
       `${routingGroupLabel(group)} model '${route.model}' is not allowed for executor '${route.executor}'. Select a ${route.executor} model.`,
@@ -251,10 +258,17 @@ export function defaultExecutionRouting(): ResolvedExecutionRouting {
   });
 }
 
-export function resolveStoredExecutionRoutingSnapshot(routing: ResolvedExecutionRouting): ResolvedExecutionRouting {
-  validateExecutionRoute(routing.defaultRoute.executor, routing.defaultRoute.model);
+export function resolveStoredExecutionRoutingSnapshot(
+  routing: ResolvedExecutionRouting,
+  executors?: ExecutorRegistry,
+): ResolvedExecutionRouting {
+  if (executors) {
+    validateExecutionRoute(routing.defaultRoute.executor, routing.defaultRoute.model, executors);
+  }
   for (const group of EXECUTION_ROUTING_GROUPS) {
-    validateExecutionRoute(routing.groups[group].executor, routing.groups[group].model);
+    if (executors) {
+      validateExecutionRoute(routing.groups[group].executor, routing.groups[group].model, executors);
+    }
   }
   const fingerprint = executionRoutingFingerprint({
     defaultRoute: routing.defaultRoute,
@@ -291,9 +305,9 @@ export function singleLaunchProfileExecutionRouting(launchProfile: ResolvedLaunc
   });
 }
 
-export function modelOptionsForExecutor(executor: "codex" | "opencode"): Array<{ value: string; label: string }> {
-  const defaultModel = defaultModelForExecutor(executor);
-  return ALLOWED_MODELS_BY_EXECUTOR[executor].map((model) => ({
+export function modelOptionsForExecutor(executor: LlmExecutorId, executors?: ExecutorRegistry): Array<{ value: string; label: string }> {
+  const defaultModel = defaultModelForExecutor(executor, executors);
+  return allowedModelsForExecutor(executor, executors).map((model) => ({
     value: model,
     label: model === defaultModel ? `${model} [default]` : model,
   }));

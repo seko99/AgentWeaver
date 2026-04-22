@@ -144,20 +144,15 @@ Use the dedicated guide at [docs/plugin-sdk.md](docs/plugin-sdk.md) for:
 
 - the executor versus node architecture
 - manifest and entrypoint rules
+- optional routing metadata for plugin LLM executors
 - runtime context APIs available to plugin code
 - global and project-local flow wiring under `~/.agentweaver/.flows/` and `.agentweaver/.flows/`
 - compatibility, testing, troubleshooting, and a complete end-to-end walkthrough
 
-This repository also includes a Claude CLI reference example under `docs/example/`.
+Repository reference examples live under `docs/examples/`, for example:
 
-- plugin: `docs/example/.plugins/claude-example-plugin/`
-- flow: `docs/example/.flows/examples/claude-example.json`
-- proof-writing node: `claude-prompt`
-- fixed proof artifact: `.agentweaver/.artifacts/examples/claude-example-proof.json`
-
-The example intentionally keeps the teaching id `claude`, but real third-party plugins should prefer a namespaced id such as `<org>-claude` to avoid collisions.
-The supported CLI contract in the example is `claude -p <prompt> --output-format json` with optional `--model` and `--max-turns`.
-The binary path is resolved through `CLAUDE_BIN`, the model and max-turns through `CLAUDE_MODEL` and `CLAUDE_MAX_TURNS`, and authentication should be checked with `claude auth status` before a local smoke run.
+- `docs/examples/.plugins/claude-example-plugin/`
+- `docs/examples/.flows/claude-example.json`
 
 ```bash
 npm install -g agentweaver
@@ -224,7 +219,7 @@ OPENCODE_MODEL=minimax-coding-plan/MiniMax-M2.7
 
 The full-screen TUI is not a cosmetic wrapper. It is the operator console for the harness:
 
-- browse built-in and project-local workflows
+- browse built-in, global, and project-local workflows
 - launch flows in the current scope
 - inspect progress by phase and step
 - follow activity, prompts, summaries, and statuses

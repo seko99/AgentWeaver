@@ -532,12 +532,8 @@ export class InteractiveSessionController {
       return "Flow structure is not available.";
     }
     if (selectedItem.kind === "folder") {
-      const sourceKey = selectedItem.pathSegments[0];
-      const kindLabel = sourceKey === "custom"
-        ? "project-local"
-        : sourceKey === "global"
-          ? "global"
-          : "built-in";
+      const rootName = selectedItem.pathSegments[0];
+      const kindLabel = rootName === "custom" ? "project-local" : rootName === "global" ? "global" : "built-in";
       return [
         `Flow folder '${selectedItem.pathSegments.join("/")}'.`,
         "",
@@ -550,7 +546,7 @@ export class InteractiveSessionController {
     const description = flow.description?.trim() || "No description available for this flow.";
     const details = [
       `Path: ${flow.treePath.join("/")}`,
-      `Source: ${flow.source}`,
+      `Source: ${flow.source === "project-local" ? "project-local" : flow.source === "global" ? "global" : "built-in"}`,
       flow.source !== "built-in" && flow.sourcePath ? `File: ${flow.sourcePath}` : "",
     ]
       .filter((line) => line.length > 0)

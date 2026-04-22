@@ -1,6 +1,9 @@
-export const LLM_EXECUTOR_IDS = ["codex", "opencode"] as const;
+import type { ExecutorRegistry } from "./registry.js";
+import { createExecutorRegistry } from "./registry.js";
 
-export type LlmExecutorId = (typeof LLM_EXECUTOR_IDS)[number];
+const BUILT_IN_EXECUTOR_REGISTRY = createExecutorRegistry();
+
+export type LlmExecutorId = string;
 
 export type LaunchProfileSelection = {
   executor: LlmExecutorId | "default";
@@ -15,44 +18,57 @@ export type ResolvedLaunchProfile = {
   fingerprint: string;
 };
 
-export const ALLOWED_MODELS_BY_EXECUTOR: Record<LlmExecutorId, readonly string[]> = {
-  codex: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"],
-  opencode: ["opencode/minimax-m2.5-free", "minimax-coding-plan/MiniMax-M2.7", "zhipuai-coding-plan/glm-5.1", "zhipuai-coding-plan/glm-4.7"],
-};
-
 export const DEFAULT_EXECUTOR: LlmExecutorId = "opencode";
-
-export const DEFAULT_MODEL_BY_EXECUTOR: Record<LlmExecutorId, string> = {
-  codex: "gpt-5.4",
-  opencode: "minimax-coding-plan/MiniMax-M2.7",
-};
 
 export const DEFAULT_LAUNCH_PROFILE: Readonly<Pick<ResolvedLaunchProfile, "executor" | "model">> = {
   executor: DEFAULT_EXECUTOR,
-  model: DEFAULT_MODEL_BY_EXECUTOR[DEFAULT_EXECUTOR],
+  model: "minimax-coding-plan/MiniMax-M2.7",
 };
 
-export function defaultModelForExecutor(executor: LlmExecutorId): string {
-  return DEFAULT_MODEL_BY_EXECUTOR[executor];
+function registryOrBuiltIn(executors?: ExecutorRegistry): ExecutorRegistry {
+  return executors ?? BUILT_IN_EXECUTOR_REGISTRY;
 }
 
-export function isLlmExecutorId(value: string): value is LlmExecutorId {
-  return (LLM_EXECUTOR_IDS as readonly string[]).includes(value);
+export function llmExecutorIds(executors?: ExecutorRegistry): LlmExecutorId[] {
+  return registryOrBuiltIn(executors).llmExecutors().map((entry) => entry.id);
 }
 
-export function isAllowedModelForExecutor(executor: LlmExecutorId, model: string): boolean {
-  return ALLOWED_MODELS_BY_EXECUTOR[executor].includes(model);
+export function defaultModelForExecutor(executor: LlmExecutorId, executors?: ExecutorRegistry): string {
+  const routing = registryOrBuiltIn(executors).getRouting(executor);
+  if (!routing || routing.kind !== "llm") {
+    throw new Error(`Unsupported llm executor '${executor}'.`);
+  }
+  return routing.defaultModel;
+}
+
+export function isLlmExecutorId(value: string, executors?: ExecutorRegistry): value is LlmExecutorId {
+  const routing = registryOrBuiltIn(executors).getRouting(value);
+  return routing?.kind === "llm";
+}
+
+export function isAllowedModelForExecutor(executor: LlmExecutorId, model: string, executors?: ExecutorRegistry): boolean {
+  const routing = registryOrBuiltIn(executors).getRouting(executor);
+  return routing?.kind === "llm" ? routing.models.includes(model) : false;
+}
+
+export function allowedModelsForExecutor(executor: LlmExecutorId, executors?: ExecutorRegistry): string[] {
+  const routing = registryOrBuiltIn(executors).getRouting(executor);
+  if (!routing || routing.kind !== "llm") {
+    throw new Error(`Unsupported llm executor '${executor}'.`);
+  }
+  return [...routing.models];
 }
 
 export function resolveLaunchProfile(
   selection: LaunchProfileSelection,
   fallback: Pick<ResolvedLaunchProfile, "executor" | "model"> = DEFAULT_LAUNCH_PROFILE,
+  executors?: ExecutorRegistry,
 ): ResolvedLaunchProfile {
   const executor = selection.executor === "default" ? fallback.executor : selection.executor;
   const model = selection.model === "default"
     ? selection.executor === "default"
       ? fallback.model
-      : defaultModelForExecutor(executor)
+      : defaultModelForExecutor(executor, executors)
     : selection.model;
   return {
     executor,

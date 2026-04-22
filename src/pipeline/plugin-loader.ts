@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { TaskRunnerError } from "../errors.js";
-import type { ExecutorDefinition, JsonValue } from "../executors/types.js";
+import type { ExecutorDefinition, ExecutorRoutingDefinition, JsonValue } from "../executors/types.js";
 import { agentweaverHome } from "../runtime/agentweaver-home.js";
 import { agentweaverConfigDir } from "../runtime/env-loader.js";
 import { createNodeRegistry, type NodeRegistry } from "./node-registry.js";
@@ -79,6 +79,37 @@ function isPositiveInteger(value: unknown): value is number {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((candidate) => typeof candidate === "string" && candidate.trim().length > 0);
+}
+
+function normalizeExecutorRouting(
+  value: unknown,
+  pluginId: string,
+  pathLabel: string,
+): ExecutorRoutingDefinition {
+  if (!isPlainObject(value)) {
+    throw new TaskRunnerError(`Plugin '${pluginId}' executor routing at ${pathLabel} must be an object.`);
+  }
+  if (value["kind"] !== "llm") {
+    throw new TaskRunnerError(`Plugin '${pluginId}' executor routing at ${pathLabel} must use kind 'llm'.`);
+  }
+  const defaultModel = typeof value["defaultModel"] === "string" ? value["defaultModel"].trim() : "";
+  const models = value["models"];
+  if (!defaultModel) {
+    throw new TaskRunnerError(`Plugin '${pluginId}' executor routing at ${pathLabel} must define a non-empty defaultModel.`);
+  }
+  if (!isStringArray(models)) {
+    throw new TaskRunnerError(`Plugin '${pluginId}' executor routing at ${pathLabel} must define a non-empty string[] models.`);
+  }
+  if (!models.includes(defaultModel)) {
+    throw new TaskRunnerError(
+      `Plugin '${pluginId}' executor routing at ${pathLabel} must include defaultModel '${defaultModel}' in models.`,
+    );
+  }
+  return {
+    kind: "llm",
+    defaultModel,
+    models: [...models],
+  };
 }
 
 function assertJsonSerializable(value: JsonValue, pluginId: string, pathLabel: string): void {
@@ -235,6 +266,9 @@ function normalizeExecutorRegistration(
     manifestPath,
     entrypointPath,
     definition: definition as ExecutorDefinition<JsonValue, unknown, unknown>,
+    ...(candidate["routing"] !== undefined
+      ? { routing: normalizeExecutorRouting(candidate["routing"], manifest.id, `${pathLabel}.routing`) }
+      : {}),
   };
 }
 

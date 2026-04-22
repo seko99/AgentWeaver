@@ -70,6 +70,8 @@ import {
   toDeclarativeFlowRef,
   type FlowCatalogEntry,
 } from "./pipeline/flow-catalog.js";
+import type { PipelineRegistryContext } from "./pipeline/plugin-loader.js";
+import { createPipelineRegistryContext } from "./pipeline/plugin-loader.js";
 import {
   EXECUTION_ROUTING_GROUPS,
   type ExecutionRoutingGroup,
@@ -773,12 +775,29 @@ async function commandRoutingGroupsForPrerequisiteChecks(command: Config["comman
   return collectFlowRoutingGroups(await loadDeclarativeFlow({ source: "built-in", fileName }), cwd);
 }
 
-function resolveExecutorPrerequisite(executor: LlmExecutorId): void {
+function resolveExecutorPrerequisite(executor: LlmExecutorId, registryContext: PipelineRegistryContext): void {
   if (executor === "codex") {
     resolveCmd("codex", "CODEX_BIN");
     return;
   }
-  resolveCmd("opencode", "OPENCODE_BIN");
+  if (executor === "opencode") {
+    resolveCmd("opencode", "OPENCODE_BIN");
+    return;
+  }
+  const definition = registryContext.executors.get<import("./executors/types.js").JsonValue, unknown, unknown>(executor);
+  const config = definition.defaultConfig;
+  if (
+    config
+    && typeof config === "object"
+    && !Array.isArray(config)
+    && typeof (config as Record<string, unknown>).defaultCommand === "string"
+    && typeof (config as Record<string, unknown>).commandEnvVar === "string"
+  ) {
+    resolveCmd(
+      (config as Record<string, unknown>).defaultCommand as string,
+      (config as Record<string, unknown>).commandEnvVar as string,
+    );
+  }
 }
 
 async function checkPrerequisites(
@@ -786,10 +805,11 @@ async function checkPrerequisites(
   launchProfile?: ResolvedLaunchProfile,
   executionRouting?: ResolvedExecutionRouting,
 ): Promise<void> {
+  const registryContext = await createPipelineRegistryContext(process.cwd());
   const routing = routingForPrerequisites(launchProfile, executionRouting);
   const groups = await commandRoutingGroupsForPrerequisiteChecks(config.command, process.cwd());
   for (const executor of executorsForRoutingGroups(routing, groups)) {
-    resolveExecutorPrerequisite(executor);
+    resolveExecutorPrerequisite(executor, registryContext);
   }
 }
 

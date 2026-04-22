@@ -64,134 +64,17 @@ Custom flows live under:
 Those flows use the same validator and runtime as built-in flows.
 If the same flow id or plugin id is discovered from more than one source, AgentWeaver fails fast instead of silently overriding one source with another.
 
-## Claude Example Plugin
+## Repository Examples
 
-This repository includes a complete project-local reference example under `docs/example/`.
+This repository keeps reference plugin examples under `docs/examples/`.
 
-Files in the example:
+Current Claude example files:
 
-- plugin manifest: `docs/example/.plugins/claude-example-plugin/plugin.json`
-- plugin entrypoint: `docs/example/.plugins/claude-example-plugin/index.js`
-- example flow: `docs/example/.flows/examples/claude-example.json`
+- plugin manifest: `docs/examples/.plugins/claude-example-plugin/plugin.json`
+- plugin entrypoint: `docs/examples/.plugins/claude-example-plugin/index.js`
+- example flow: `docs/examples/.flows/claude-example.json`
 
-The `docs/example/` directory is documentation material, not an auto-loaded runtime location. AgentWeaver discovers plugins and flows only from `~/.agentweaver/.plugins/`, `~/.agentweaver/.flows/`, `.agentweaver/.plugins/`, and `.agentweaver/.flows/`.
-
-To wire the example into a real AgentWeaver project, copy it into either the global or the project-local `.agentweaver/` directory.
-
-Project-local wiring:
-
-```bash
-mkdir -p .agentweaver/.plugins/claude-example-plugin
-mkdir -p .agentweaver/.flows/examples
-cp docs/example/.plugins/claude-example-plugin/plugin.json .agentweaver/.plugins/claude-example-plugin/plugin.json
-cp docs/example/.plugins/claude-example-plugin/index.js .agentweaver/.plugins/claude-example-plugin/index.js
-cp docs/example/.flows/examples/claude-example.json .agentweaver/.flows/examples/claude-example.json
-```
-
-Global wiring:
-
-```bash
-mkdir -p ~/.agentweaver/.plugins/claude-example-plugin
-mkdir -p ~/.agentweaver/.flows/examples
-cp docs/example/.plugins/claude-example-plugin/plugin.json ~/.agentweaver/.plugins/claude-example-plugin/plugin.json
-cp docs/example/.plugins/claude-example-plugin/index.js ~/.agentweaver/.plugins/claude-example-plugin/index.js
-cp docs/example/.flows/examples/claude-example.json ~/.agentweaver/.flows/examples/claude-example.json
-```
-
-After that, AgentWeaver will load either:
-
-- the plugin manifest from `.agentweaver/.plugins/claude-example-plugin/plugin.json`
-- the plugin module from `.agentweaver/.plugins/claude-example-plugin/index.js`
-- the example flow from `.agentweaver/.flows/examples/claude-example.json`
-
-or:
-
-- the plugin manifest from `~/.agentweaver/.plugins/claude-example-plugin/plugin.json`
-- the plugin module from `~/.agentweaver/.plugins/claude-example-plugin/index.js`
-- the example flow from `~/.agentweaver/.flows/examples/claude-example.json`
-
-This example specifically demonstrates an external plugin without any core registry changes. It imports only `agentweaver/plugin-sdk` and does not depend on `agentweaver`, `agentweaver/dist/*`, `agentweaver/src/*`, or repository-relative internal paths.
-
-The supported Claude CLI invocation contract used by the example is fixed:
-
-```text
-claude -p <prompt> --output-format json [--model <value>] [--max-turns <n>]
-```
-
-The configuration precedence is also fixed:
-
-- direct executor-run override
-- `CLAUDE_MODEL` and `CLAUDE_MAX_TURNS`
-- `defaultConfig`
-
-If the final value is empty, the corresponding flag must be omitted.
-The binary path is resolved through `runtime.resolveCmd(config.defaultCommand, config.commandEnvVar)`; in this example that env var is `CLAUDE_BIN`.
-
-Before an optional local smoke test, verify the CLI setup separately:
-
-```bash
-claude auth status
-```
-
-If that command exits non-zero, treat it as a setup prerequisite failure, not an AgentWeaver SDK defect.
-
-Claude JSON response normalization in this example is the authoritative contract:
-
-1. `result`
-2. `message.content[*].text`
-3. `content[*].text`
-
-Fallback array rules:
-
-- traversal keeps the original array order
-- only `text` values that are strings with non-empty `trim()` are preserved
-- preserved fragments are kept without semantic rewriting
-- the final string is joined with a single newline character
-- empty, whitespace-only, missing, `null`, and non-string items are ignored
-
-If no supported assistant text source exists after those rules, the example must fail with a deterministic normalization contract error.
-The `model` field comes from non-empty `payload.model`, or falls back to the effective configured model for the current run.
-The parsed payload is preserved without rewriting as `rawResponse`.
-
-Representative fixtures that the plugin should handle:
-
-```json
-{
-  "result": "Top-level result wins",
-  "model": "claude-3-7-sonnet"
-}
-```
-
-```json
-{
-  "message": {
-    "content": [
-      { "text": "First fragment" },
-      { "type": "tool_use" },
-      { "text": "Second fragment" }
-    ]
-  }
-}
-```
-
-```json
-{
-  "content": [
-    { "text": "Alpha" },
-    { "text": "Beta" }
-  ]
-}
-```
-
-The proof artifact contract in this example is also fixed:
-
-- file: `.agentweaver/.artifacts/examples/claude-example-proof.json`
-- logical key: `artifacts/examples/claude-example-proof.json`
-- schema: `helper-json/v1`
-- writer: `claude-prompt`
-
-`claude-prompt` writes the JSON object itself with exactly the fields `response`, `command`, `model`, and `executor`, then publishes it through node outputs with manifest metadata.
-That matters: the proof file must not depend on a second node, a manual step, or a separate core serialization feature.
+`docs/examples/` is documentation material, not an auto-loaded runtime location. To run an example, copy it into `~/.agentweaver/` or `.agentweaver/`.
 
 ## Manifest Contract
 
@@ -313,6 +196,35 @@ Rules enforced by the loader:
 - `definition.version` must be a positive integer
 - `definition.defaultConfig` must be JSON-serializable
 - `definition.execute` must be a function
+
+### Optional Routing Metadata
+
+If your executor is intended to appear in the execution-routing modal and be used by `llm-prompt`, you may also export `routing`.
+
+Example:
+
+```ts
+export const executors: PluginExecutorRegistration[] = [
+  {
+    id: "claude",
+    definition: claudeExecutorDefinition,
+    routing: {
+      kind: "llm",
+      defaultModel: "sonnet",
+      models: ["sonnet", "opus", "haiku"],
+    },
+  },
+];
+```
+
+Rules:
+
+- `routing.kind` must currently be `llm`
+- `routing.defaultModel` must be a non-empty string
+- `routing.models` must be a non-empty string array
+- `routing.defaultModel` must also appear inside `routing.models`
+
+Executors without `routing` still work normally when referenced directly by plugin nodes, but they will not appear in the routing modal and cannot be selected through execution routing.
 
 ### Executor Runtime Context
 
@@ -665,7 +577,7 @@ Recommended upgrade workflow after updating AgentWeaver:
 4. Run at least one local custom flow that exercises your plugin nodes.
 5. Re-check packaging or deployment steps if you publish your plugin from a separate repository.
 
-If the SDK major changes, review your plugin entrypoint, executor definitions, node metadata, and custom flow assumptions before trusting the plugin in production use.
+If the SDK major changes, review your plugin entrypoint, executor definitions, node metadata, routing metadata, and custom flow assumptions before trusting the plugin in production use.
 
 ## Testing Workflow for Plugin Authors
 
