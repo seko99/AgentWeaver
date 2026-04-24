@@ -64,8 +64,8 @@ const builtInExecutors: Record<BuiltInExecutorId, AnyExecutorDefinition> = {
 const builtInExecutorRouting: Partial<Record<BuiltInExecutorId, ExecutorRoutingLlmDefinition>> = {
   codex: {
     kind: "llm",
-    defaultModel: "gpt-5.4",
-    models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"],
+    defaultModel: "gpt-5.5",
+    models: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"],
   },
   opencode: {
     kind: "llm",
