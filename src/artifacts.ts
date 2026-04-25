@@ -238,6 +238,42 @@ export function gitDiffFile(taskKey: string): string {
   return taskWorkspaceFile(taskKey, `git-diff-${taskKey}.txt`);
 }
 
+export function repoInventoryFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `repo-inventory-${taskKey}.md`);
+}
+
+export function repoInventoryJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `repo-inventory-${taskKey}.json`);
+}
+
+export function practiceCandidatesFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `practice-candidates-${taskKey}.md`);
+}
+
+export function practiceCandidatesJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `practice-candidates-${taskKey}.json`);
+}
+
+export function playbookQuestionsJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `playbook-questions-${taskKey}.json`);
+}
+
+export function playbookAnswersJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `playbook-answers-${taskKey}.json`);
+}
+
+export function playbookDraftFile(taskKey: string): string {
+  return taskWorkspaceFile(taskKey, `playbook-draft-${taskKey}.md`);
+}
+
+export function playbookDraftJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `playbook-draft-${taskKey}.json`);
+}
+
+export function playbookWriteResultJsonFile(taskKey: string): string {
+  return taskArtifactsFile(taskKey, `playbook-write-result-${taskKey}.json`);
+}
+
 export function gitCommitMessageJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `git-commit-message-${taskKey}.json`);
 }

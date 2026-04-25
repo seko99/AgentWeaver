@@ -27,14 +27,23 @@ import {
   jiraTaskFile,
   mrDescriptionFile,
   mrDescriptionJsonFile,
+  playbookAnswersJsonFile,
+  playbookDraftFile,
+  playbookDraftJsonFile,
+  playbookQuestionsJsonFile,
+  playbookWriteResultJsonFile,
   planningAnswersJsonFile,
   planningQuestionsJsonFile,
   planArtifacts,
   planFile,
   planJsonFile,
+  practiceCandidatesFile,
+  practiceCandidatesJsonFile,
   qaFile,
   qaJsonFile,
   readyToMergeFile,
+  repoInventoryFile,
+  repoInventoryJsonFile,
   reviewAssessmentFile,
   reviewAssessmentJsonFile,
   reviewFile,
@@ -197,16 +206,34 @@ function resolveArtifact(spec: ArtifactRefSpec, context: ResolverContext): strin
       return planningAnswersJsonFile(taskKey);
     case "planning-questions-json-file":
       return planningQuestionsJsonFile(taskKey);
+    case "playbook-answers-json-file":
+      return playbookAnswersJsonFile(taskKey);
+    case "playbook-draft-file":
+      return playbookDraftFile(taskKey);
+    case "playbook-draft-json-file":
+      return playbookDraftJsonFile(taskKey);
+    case "playbook-questions-json-file":
+      return playbookQuestionsJsonFile(taskKey);
+    case "playbook-write-result-json-file":
+      return playbookWriteResultJsonFile(taskKey);
     case "plan-file":
       return planFile(taskKey, iteration);
     case "plan-json-file":
       return planJsonFile(taskKey, iteration);
+    case "practice-candidates-file":
+      return practiceCandidatesFile(taskKey);
+    case "practice-candidates-json-file":
+      return practiceCandidatesJsonFile(taskKey);
     case "qa-file":
       return qaFile(taskKey, iteration);
     case "qa-json-file":
       return qaJsonFile(taskKey, iteration);
     case "ready-to-merge-file":
       return readyToMergeFile(taskKey);
+    case "repo-inventory-file":
+      return repoInventoryFile(taskKey);
+    case "repo-inventory-json-file":
+      return repoInventoryJsonFile(taskKey);
     case "review-file":
       if (iteration === undefined) {
         throw new TaskRunnerError("review-file requires iteration");

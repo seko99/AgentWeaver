@@ -145,6 +145,7 @@ const COMMANDS = [
   "mr-description",
   "plan",
   "plan-revise",
+  "playbook-init",
   "task-describe",
   "implement",
   "review",
@@ -180,6 +181,7 @@ type BaseConfig = {
   dryRun: boolean;
   verbose: boolean;
   doctorArgs?: string[];
+  acceptPlaybookDraft?: boolean;
 
 };
 
@@ -211,6 +213,7 @@ type ParsedArgs = {
   helpPhases: boolean;
   doctorArgs?: string[];
   launchMode?: FlowLaunchMode;
+  acceptPlaybookDraft?: boolean;
 };
 
 type ProcessFailureLike = {
@@ -274,6 +277,7 @@ function usage(): string {
   agentweaver mr-description [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
   agentweaver plan [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [<jira-browse-url|jira-issue-key>]
   agentweaver plan-revise [--dry] [--verbose] [--prompt <text>] <jira-browse-url|jira-issue-key>
+  agentweaver playbook-init [--dry] [--verbose] [--prompt <text>] [--accept-playbook-draft] [--scope <name>]
   agentweaver task-describe [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver implement [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver review [--dry] [--verbose] [--prompt <text>] [--scope <name>] [--blocking-severities <list>] [<jira-browse-url|jira-issue-key>]
@@ -308,6 +312,7 @@ Flags:
   --restart       Archive the active attempt and start a fresh run
   --blocking-severities  Comma-separated severities that block merge and drive review-fix auto-selection
   --md-lang       Language for markdown output files: en (English) or ru (Russian, default)
+  --accept-playbook-draft  Non-interactively accept the generated playbook draft for playbook-init
 
 Required environment variables:
   JIRA_API_KEY    Jira API token used for Jira-backed flows (Bearer by default, or Basic with Jira Cloud)
@@ -637,6 +642,7 @@ function buildBaseConfig(
     dryRun?: boolean;
     verbose?: boolean;
     doctorArgs?: string[];
+    acceptPlaybookDraft?: boolean;
   } = {},
 ): BaseConfig {
   return {
@@ -651,6 +657,7 @@ function buildBaseConfig(
     dryRun: options.dryRun ?? false,
     verbose: options.verbose ?? false,
     ...(options.doctorArgs !== undefined ? { doctorArgs: options.doctorArgs } : {}),
+    ...(options.acceptPlaybookDraft !== undefined ? { acceptPlaybookDraft: options.acceptPlaybookDraft } : {}),
   };
 }
 
@@ -676,6 +683,7 @@ function commandSupportsProjectScope(command: string): boolean {
     command === "gitlab-diff-review" ||
     command === "gitlab-review" ||
     command === "instant-task" ||
+    command === "playbook-init" ||
     command === "task-describe" ||
     command === "implement" ||
     command === "review" ||
@@ -1558,6 +1566,15 @@ async function executeCommand(
     return false;
   }
 
+  if (config.command === "playbook-init") {
+    await runDeclarativeFlowBySpecFile("playbook-init.json", config, {
+      taskKey: config.taskKey,
+      extraPrompt: config.extraPrompt,
+      acceptPlaybookDraft: config.acceptPlaybookDraft === true,
+    }, flowOverrides, requestUserInput, setSummary, launchMode, runtime);
+    return false;
+  }
+
   if (config.command === "bug-analyze") {
     requireJiraConfig(config);
     if (config.verbose) {
@@ -1933,6 +1950,7 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
   let jiraRef: string | undefined;
   let mdLang: "en" | "ru" | undefined;
   let launchMode: FlowLaunchMode | undefined;
+  let acceptPlaybookDraft = false;
   const doctorArgs: string[] = [];
 
   for (let index = 1; index < argv.length; index += 1) {
@@ -1947,6 +1965,10 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
     }
     if (token === "--help-phases") {
       helpPhases = true;
+      continue;
+    }
+    if (token === "--accept-playbook-draft") {
+      acceptPlaybookDraft = true;
       continue;
     }
     if (token === "--resume" || token === "--continue" || token === "--restart") {
@@ -2035,6 +2057,7 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
     ...(mdLang !== undefined ? { mdLang } : {}),
     ...(doctorArgs.length > 0 ? { doctorArgs } : {}),
     ...(launchMode !== undefined ? { launchMode } : {}),
+    ...(acceptPlaybookDraft ? { acceptPlaybookDraft } : {}),
   };
 }
 
@@ -2049,6 +2072,7 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
     dryRun: args.dry,
     verbose: args.verbose,
     ...(args.doctorArgs !== undefined ? { doctorArgs: args.doctorArgs } : {}),
+    ...(args.acceptPlaybookDraft !== undefined ? { acceptPlaybookDraft: args.acceptPlaybookDraft } : {}),
   });
 }
 

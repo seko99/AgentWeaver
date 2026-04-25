@@ -44,6 +44,35 @@ export const PLAN_QUESTIONS_PROMPT_TEMPLATE =
   "Usually 1-5 questions are sufficient. " +
   "The JSON file must be valid and contain only JSON without markdown wrapping. ";
 
+export const PLAYBOOK_PRACTICE_CANDIDATES_PROMPT_TEMPLATE =
+  "Use repo-inventory.json from {repo_inventory_json_file} as the deterministic source of repository facts. " +
+  "This step intentionally covers convention_scan semantics for v1 by deriving practice candidates from inventory evidence instead of creating a separate convention_scan artifact. " +
+  "Do not infer repository facts that are not supported by the inventory. " +
+  "Write evidence-backed practice candidates to {practice_candidates_json_file}, then write derivative Russian markdown to {practice_candidates_file}. " +
+  strictSchemaInstruction("{practice_candidates_json_file}", "practice-candidates/v1") +
+  "Every candidate must include id, title, proposed_rule_text, confidence, evidence_paths, rationale, and questions_needed. " +
+  "Every evidence_paths entry must be a concrete path from repo-inventory.json. " +
+  "Use only confidence values low, medium, and high. " +
+  "Weak or ambiguous evidence must remain a low or medium confidence candidate and must include questions_needed before it can become mandatory. " +
+  "Markdown must be Russian and derivative of the JSON artifact. JSON files must contain only JSON without markdown wrapping. ";
+
+export const PLAYBOOK_QUESTIONS_PROMPT_TEMPLATE =
+  "Use repo-inventory.json from {repo_inventory_json_file} and practice-candidates.json from {practice_candidates_json_file} as source of truth. " +
+  "Generate targeted clarification questions to {playbook_questions_json_file}. " +
+  strictSchemaInstruction("{playbook_questions_json_file}", "playbook-questions/v1") +
+  "Questions must be tied to weak evidence, conflicting evidence, or candidate questions_needed entries. " +
+  "Reject generic project-preference questions. Every question must reference candidate_ids or evidence_paths and include rationale. " +
+  "If there are no targeted questions, write an empty questions array with a non-empty summary. JSON files must contain only JSON without markdown wrapping. ";
+
+export const PLAYBOOK_DRAFT_PROMPT_TEMPLATE =
+  "Use only structured JSON artifacts as source of truth: repo-inventory.json {repo_inventory_json_file}, practice-candidates.json {practice_candidates_json_file}, playbook-questions.json {playbook_questions_json_file}, and playbook-answers.json {playbook_answers_json_file}. " +
+  "Generate playbook-draft.json at {playbook_draft_json_file}, then derivative Russian markdown at {playbook_draft_file}. " +
+  strictSchemaInstruction("{playbook_draft_json_file}", "playbook-draft/v1") +
+  "The draft must separate accepted_rules from candidate_rules and unresolved_questions. " +
+  "Do not promote weak or unresolved candidates to accepted_rules without supporting user answers. Preserve evidence paths. " +
+  "Set proposed_files to .agentweaver/playbook/playbook.json and .agentweaver/playbook/playbook.md. " +
+  "Markdown must be Russian and derivative of the JSON artifact. JSON files must contain only JSON without markdown wrapping. ";
+
 export const TASK_CONTEXT_FROM_JIRA_PROMPT_TEMPLATE =
   "Normalize the Jira task context into a connector-agnostic task context. " +
   "Use Jira issue JSON {jira_task_file} as the primary source of truth. " +
