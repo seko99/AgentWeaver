@@ -17,7 +17,15 @@ export const STRUCTURED_ARTIFACT_SCHEMA_IDS = [
   "jira-description/v1",
   "mr-description/v1",
   "planning-questions/v1",
+  "playbook-answers/v1",
+  "playbook-draft/v1",
+  "playbook-final/v1",
+  "playbook-questions/v1",
+  "playbook-write-result/v1",
+  "practice-candidates/v1",
+  "project-guidance/v1",
   "qa-plan/v1",
+  "repo-inventory/v1",
   "review-assessment/v1",
   "review-findings/v1",
   "review-fix-report/v1",
@@ -51,6 +59,7 @@ export type StructuredArtifactSchemaNode =
     }
   | {
       type: "boolean" | "number" | "null";
+      minimum?: number;
       anyOf?: never;
     }
   | {

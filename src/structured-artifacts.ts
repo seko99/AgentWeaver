@@ -95,7 +95,13 @@ function validateNode(value: unknown, schema: StructuredArtifactSchemaNode, curr
     case "json":
       return validateJsonValue(value, currentPath);
     case "number":
-      return typeof value === "number" && !Number.isNaN(value) ? [] : [`${currentPath} must be a number`];
+      if (typeof value !== "number" || Number.isNaN(value)) {
+        return [`${currentPath} must be a number`];
+      }
+      if (schema.minimum !== undefined && value < schema.minimum) {
+        return [`${currentPath} must be at least ${schema.minimum}`];
+      }
+      return [];
     case "null":
       return value === null ? [] : [`${currentPath} must be null`];
     case "array": {

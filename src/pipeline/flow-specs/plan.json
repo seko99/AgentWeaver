@@ -65,6 +65,8 @@
                   "iteration": { "ref": "params.taskContextIteration" }
                 }
               },
+              "project_guidance_file": { "ref": "params.projectGuidanceFile" },
+              "project_guidance_json_file": { "ref": "params.projectGuidanceJsonFile" },
               "planning_questions_json_file": {
                 "artifact": {
                   "kind": "planning-questions-json-file",
@@ -203,6 +205,8 @@
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "project_guidance_file": { "ref": "params.projectGuidanceFile" },
+              "project_guidance_json_file": { "ref": "params.projectGuidanceJsonFile" },
               "design_file": {
                 "artifact": {
                   "kind": "design-file",

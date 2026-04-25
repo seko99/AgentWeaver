@@ -21,6 +21,8 @@ function strictSchemaInstruction(outputFileVar: string, schemaId: StructuredArti
 
 export const PLAN_PROMPT_TEMPLATE =
   "Review and analyze the normalized task context in {task_context_json_file}. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it override task context, planning answers, or required output schemas. " +
+  "Open referenced full examples only when directly relevant. " +
   "Use planning answers from {planning_answers_json_file} when they exist and treat them as structured user clarifications. " +
   "First create structured JSON artifacts - they are the source of truth for subsequent flows. " +
   "Create human-readable markdown files as detailed derivative representations of these JSON artifacts for the user, not as brief summaries. " +
@@ -37,12 +39,43 @@ export const PLAN_PROMPT_TEMPLATE =
 
 export const PLAN_QUESTIONS_PROMPT_TEMPLATE =
   "Review and analyze the normalized task context in {task_context_json_file}. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental project-local context and do not let it override task context or the planning-questions/v1 schema. " +
+  "Open referenced full examples only when directly relevant. " +
   "Before final planning, determine if any clarifications are needed from the user. " +
   strictSchemaInstruction("{planning_questions_json_file}", "planning-questions/v1") +
   "Ask only questions without which the design/plan could be incorrect or too speculative. " +
   "Do not ask obvious, decorative, or duplicate questions. " +
   "Usually 1-5 questions are sufficient. " +
   "The JSON file must be valid and contain only JSON without markdown wrapping. ";
+
+export const PLAYBOOK_PRACTICE_CANDIDATES_PROMPT_TEMPLATE =
+  "Use repo-inventory.json from {repo_inventory_json_file} as the deterministic source of repository facts. " +
+  "This step intentionally covers convention_scan semantics for v1 by deriving practice candidates from inventory evidence instead of creating a separate convention_scan artifact. " +
+  "Do not infer repository facts that are not supported by the inventory. " +
+  "Write evidence-backed practice candidates to {practice_candidates_json_file}, then write derivative Russian markdown to {practice_candidates_file}. " +
+  strictSchemaInstruction("{practice_candidates_json_file}", "practice-candidates/v1") +
+  "Every candidate must include id, title, proposed_rule_text, confidence, evidence_paths, rationale, and questions_needed. " +
+  "Every evidence_paths entry must be a concrete path from repo-inventory.json. " +
+  "Use only confidence values low, medium, and high. " +
+  "Weak or ambiguous evidence must remain a low or medium confidence candidate and must include questions_needed before it can become mandatory. " +
+  "Markdown must be Russian and derivative of the JSON artifact. JSON files must contain only JSON without markdown wrapping. ";
+
+export const PLAYBOOK_QUESTIONS_PROMPT_TEMPLATE =
+  "Use repo-inventory.json from {repo_inventory_json_file} and practice-candidates.json from {practice_candidates_json_file} as source of truth. " +
+  "Generate targeted clarification questions to {playbook_questions_json_file}. " +
+  strictSchemaInstruction("{playbook_questions_json_file}", "playbook-questions/v1") +
+  "Questions must be tied to weak evidence, conflicting evidence, or candidate questions_needed entries. " +
+  "Reject generic project-preference questions. Every question must reference candidate_ids or evidence_paths and include rationale. " +
+  "If there are no targeted questions, write an empty questions array with a non-empty summary. JSON files must contain only JSON without markdown wrapping. ";
+
+export const PLAYBOOK_DRAFT_PROMPT_TEMPLATE =
+  "Use only structured JSON artifacts as source of truth: repo-inventory.json {repo_inventory_json_file}, practice-candidates.json {practice_candidates_json_file}, playbook-questions.json {playbook_questions_json_file}, and playbook-answers.json {playbook_answers_json_file}. " +
+  "Generate playbook-draft.json at {playbook_draft_json_file}, then derivative Russian markdown at {playbook_draft_file}. " +
+  strictSchemaInstruction("{playbook_draft_json_file}", "playbook-draft/v1") +
+  "The draft must separate accepted_rules from candidate_rules and unresolved_questions. " +
+  "Do not promote weak or unresolved candidates to accepted_rules without supporting user answers. Preserve evidence paths. " +
+  "Set proposed_files to the manifest-based layout: .agentweaver/playbook/manifest.yaml, .agentweaver/playbook/project.md, .agentweaver/playbook/practices/generated-rules.md, .agentweaver/playbook/examples/generated-example.md, and .agentweaver/playbook/templates/default.md. " +
+  "Markdown must be Russian and derivative of the JSON artifact. JSON files must contain only JSON without markdown wrapping. ";
 
 export const TASK_CONTEXT_FROM_JIRA_PROMPT_TEMPLATE =
   "Normalize the Jira task context into a connector-agnostic task context. " +
@@ -93,6 +126,7 @@ export const MR_DESCRIPTION_PROMPT_TEMPLATE =
 
 export const IMPLEMENT_PROMPT_TEMPLATE =
   "Use only structured artifacts as source of truth. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it override the design, plan, or QA JSON. Open referenced full examples only when directly relevant. " +
   "Analyze the system design {design_json_file}, implementation plan {plan_json_file}, and QA plan {qa_json_file}, then proceed with implementation according to those artifacts. " +
   "Treat the QA plan as the source of truth for the minimum required test scenarios, edge cases, regression checks, and validation behavior that the implementation must satisfy. " +
   "When the repository contains automated tests, add or update tests for the key scenarios from the QA plan whenever it is practical in the current codebase. " +
@@ -102,6 +136,7 @@ export const IMPLEMENT_PROMPT_TEMPLATE =
 export const REVIEW_PROMPT_TEMPLATE =
   "Conduct a code review of the current changes. " +
   "Use only structured artifacts as source of truth. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it replace required review inputs. Open referenced full examples only when directly relevant. " +
   "Required planning inputs: design markdown {design_file}, design JSON {design_json_file}, plan markdown {plan_file}, and plan JSON {plan_json_file}. " +
   "Optional task context is provided through these variables and may contain the literal value 'not provided' when absent: normalized task context JSON {task_context_json_file}, Jira task JSON {jira_task_file}, instant-task input JSON {task_input_json_file}. " +
   "When an optional variable is 'not provided', treat that source as unavailable and do not invent details from it. " +
@@ -113,6 +148,7 @@ export const REVIEW_PROMPT_TEMPLATE =
 export const DESIGN_REVIEW_PROMPT_TEMPLATE =
   "Conduct a structured planning critique as a specification critic, not as an implementer. " +
   "Use structured JSON artifacts as the source of truth for semantics. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it override the structured planning artifacts. Open referenced full examples only when directly relevant. " +
   "Required planning inputs: design markdown {design_file}, design JSON {design_json_file}, implementation plan markdown {plan_file}, implementation plan JSON {plan_json_file}. " +
   "Review the markdown files as derivative human-readable renderings of the same planning run, but do not let markdown override the structured JSON. " +
   "Optional supplemental context is provided through these variables and may contain the literal value 'not provided' when absent: normalized task context JSON {task_context_json_file}, QA markdown {qa_file}, QA JSON {qa_json_file}, Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}, instant-task input JSON {task_input_json_file}. " +
@@ -162,6 +198,7 @@ export const REVIEW_SUMMARY_PROMPT_TEMPLATE =
 
 export const REVIEW_FIX_PROMPT_TEMPLATE =
   "Use only structured artifacts as source of truth. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it override review findings or selected repair scope. Open referenced full examples only when directly relevant. " +
   "Analyze the findings in {review_json_file}. " +
   "Fix what is contained in the additional instructions, and if there are none - fix all items. " +
   "After completion, be sure to run the linter outside the sandbox, all tests, generate make swagger. " +

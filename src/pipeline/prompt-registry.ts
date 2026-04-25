@@ -10,6 +10,9 @@ import {
   MR_DESCRIPTION_PROMPT_TEMPLATE,
   PLAN_PROMPT_TEMPLATE,
   PLAN_QUESTIONS_PROMPT_TEMPLATE,
+  PLAYBOOK_DRAFT_PROMPT_TEMPLATE,
+  PLAYBOOK_PRACTICE_CANDIDATES_PROMPT_TEMPLATE,
+  PLAYBOOK_QUESTIONS_PROMPT_TEMPLATE,
   PLAN_REVISE_PROMPT_TEMPLATE,
   REVIEW_FIX_PROMPT_TEMPLATE,
   REVIEW_PROJECT_PROMPT_TEMPLATE,
@@ -33,6 +36,9 @@ export type PromptTemplateRef =
   | "task-describe"
   | "mr-description"
   | "plan-questions"
+  | "playbook-draft"
+  | "playbook-practice-candidates"
+  | "playbook-questions"
   | "plan"
   | "plan-revise"
   | "review"
@@ -56,6 +62,9 @@ const promptTemplates: Record<PromptTemplateRef, string> = {
   "task-describe": JIRA_DESCRIPTION_PROMPT_TEMPLATE,
   "mr-description": MR_DESCRIPTION_PROMPT_TEMPLATE,
   "plan-questions": PLAN_QUESTIONS_PROMPT_TEMPLATE,
+  "playbook-draft": PLAYBOOK_DRAFT_PROMPT_TEMPLATE,
+  "playbook-practice-candidates": PLAYBOOK_PRACTICE_CANDIDATES_PROMPT_TEMPLATE,
+  "playbook-questions": PLAYBOOK_QUESTIONS_PROMPT_TEMPLATE,
   plan: PLAN_PROMPT_TEMPLATE,
   "plan-revise": PLAN_REVISE_PROMPT_TEMPLATE,
   review: REVIEW_PROMPT_TEMPLATE,

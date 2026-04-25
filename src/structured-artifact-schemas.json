@@ -1,4 +1,94 @@
 {
+  "project-guidance/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "status": { "type": "string", "enum": ["available", "missing_playbook", "empty_selection", "invalid_playbook"] },
+      "phase": { "type": "string", "enum": ["plan", "design-review", "implement", "review", "repair/review-fix"] },
+      "source_playbook": {
+        "type": "object",
+        "properties": {
+          "root_dir": { "type": "string", "nonEmpty": true },
+          "manifest_path": { "type": "string", "nonEmpty": true },
+          "exists": { "type": "boolean" },
+          "valid": { "type": "boolean" },
+          "error": { "type": "string", "nonEmpty": true }
+        },
+        "required": ["root_dir", "manifest_path", "exists", "valid"]
+      },
+      "task_signals": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "nonEmpty": true },
+          "source_type": { "type": "string", "nonEmpty": true },
+          "keywords": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+          "file_globs": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+          "referenced_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+          "languages": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+          "frameworks": { "type": "array", "items": { "type": "string", "nonEmpty": true } }
+        },
+        "required": ["title", "source_type", "keywords", "file_globs", "referenced_paths", "languages", "frameworks"]
+      },
+      "selected_practices": { "type": "array", "items": { "type": "object", "properties": {
+        "id": { "type": "string", "nonEmpty": true },
+        "title": { "type": "string", "nonEmpty": true },
+        "kind": { "type": "string", "enum": ["practice"] },
+        "source_path": { "type": "string", "nonEmpty": true },
+        "selection_reasons": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 1 },
+        "relevance_score": { "type": "number" },
+        "priority": { "type": "number" },
+        "severity": { "type": "string", "enum": ["must", "should", "info"] },
+        "reference_only": { "type": "boolean" },
+        "reference": { "type": "object", "properties": {
+          "source_path": { "type": "string", "nonEmpty": true },
+          "reason": { "type": "string", "nonEmpty": true }
+        }, "required": ["source_path", "reason"] },
+        "inline_content": { "type": "string", "nonEmpty": true }
+      }, "required": ["id", "title", "kind", "source_path", "selection_reasons", "relevance_score", "priority", "severity", "reference_only", "reference"] } },
+      "selected_examples": { "type": "array", "items": { "type": "object", "properties": {
+        "id": { "type": "string", "nonEmpty": true },
+        "title": { "type": "string", "nonEmpty": true },
+        "kind": { "type": "string", "enum": ["example"] },
+        "source_path": { "type": "string", "nonEmpty": true },
+        "selection_reasons": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 1 },
+        "relevance_score": { "type": "number" },
+        "priority": { "type": "number" },
+        "severity": { "type": "string", "enum": ["must", "should", "info"] },
+        "reference_only": { "type": "boolean" },
+        "reference": { "type": "object", "properties": {
+          "source_path": { "type": "string", "nonEmpty": true },
+          "reason": { "type": "string", "nonEmpty": true }
+        }, "required": ["source_path", "reason"] },
+        "inline_content": { "type": "string", "nonEmpty": true }
+      }, "required": ["id", "title", "kind", "source_path", "selection_reasons", "relevance_score", "priority", "severity", "reference_only", "reference"] } },
+      "always_include": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "phase_sections": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "budget": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "number", "minimum": 0 },
+          "used": { "type": "number", "minimum": 0 },
+          "remaining": { "type": "number", "minimum": 0 },
+          "inline_threshold": { "type": "number", "minimum": 0 },
+          "unit": { "type": "string", "enum": ["approx_tokens"] },
+          "estimator": { "type": "string", "enum": ["chars_div_4"] }
+        },
+        "required": ["limit", "used", "remaining", "inline_threshold", "unit", "estimator"]
+      },
+      "skipped_items": { "type": "array", "items": { "type": "object", "properties": {
+        "id": { "type": "string", "nonEmpty": true },
+        "kind": { "type": "string", "enum": ["practice", "example", "always_include"] },
+        "source_path": { "type": "string", "nonEmpty": true },
+        "reason": { "type": "string", "nonEmpty": true }
+      }, "required": ["id", "kind", "source_path", "reason"] } },
+      "warnings": { "type": "array", "items": { "type": "object", "properties": {
+        "code": { "type": "string", "nonEmpty": true },
+        "message": { "type": "string", "nonEmpty": true },
+        "severity": { "type": "string", "enum": ["info", "warning", "error"] }
+      }, "required": ["code", "message", "severity"] } }
+    },
+    "required": ["summary", "status", "phase", "source_playbook", "task_signals", "selected_practices", "selected_examples", "always_include", "phase_sections", "budget", "skipped_items", "warnings"]
+  },
   "bug-analysis/v1": {
     "type": "object",
     "properties": {
@@ -460,6 +550,151 @@
       }
     },
     "required": ["summary", "questions"]
+  },
+  "playbook-answers/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "answered_at": { "type": "string", "nonEmpty": true },
+      "answers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "question_id": { "type": "string", "nonEmpty": true },
+            "answer": { "type": "string" }
+          },
+          "required": ["question_id", "answer"]
+        }
+      },
+      "final_write_accepted": { "type": "boolean" }
+    },
+    "required": ["summary", "answered_at", "answers", "final_write_accepted"]
+  },
+  "playbook-draft/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "generated_at": { "type": "string", "nonEmpty": true },
+      "accepted_rules": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "nonEmpty": true },
+            "title": { "type": "string", "nonEmpty": true },
+            "rule": { "type": "string", "nonEmpty": true },
+            "evidence_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 1 }
+          },
+          "required": ["id", "title", "rule", "evidence_paths"]
+        }
+      },
+      "candidate_rules": { "type": "array", "items": { "type": "object" } },
+      "unresolved_questions": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "evidence_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "proposed_files": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 2 }
+    },
+    "required": ["summary", "generated_at", "accepted_rules", "candidate_rules", "unresolved_questions", "evidence_paths", "proposed_files"]
+  },
+  "playbook-final/v1": {
+    "type": "object",
+    "properties": {
+      "status": { "type": "string", "nonEmpty": true, "enum": ["accepted"] },
+      "accepted_at": { "type": "string", "nonEmpty": true },
+      "source_draft_artifact": { "type": "string", "nonEmpty": true },
+      "summary": { "type": "string", "nonEmpty": true },
+      "rules": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "nonEmpty": true },
+            "title": { "type": "string", "nonEmpty": true },
+            "rule": { "type": "string", "nonEmpty": true },
+            "evidence_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 1 }
+          },
+          "required": ["id", "title", "rule", "evidence_paths"]
+        }
+      },
+      "evidence_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true } }
+    },
+    "required": ["status", "accepted_at", "source_draft_artifact", "summary", "rules", "evidence_paths"]
+  },
+  "playbook-questions/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "questions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "nonEmpty": true },
+            "text": { "type": "string", "nonEmpty": true },
+            "rationale": { "type": "string", "nonEmpty": true },
+            "candidate_ids": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+            "evidence_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 1 },
+            "answer_kind": { "type": "string", "nonEmpty": true, "enum": ["text", "boolean", "single_select"] }
+          },
+          "required": ["id", "text", "rationale", "candidate_ids", "evidence_paths", "answer_kind"]
+        }
+      }
+    },
+    "required": ["summary", "questions"]
+  },
+  "playbook-write-result/v1": {
+    "type": "object",
+    "properties": {
+      "status": { "type": "string", "nonEmpty": true, "enum": ["written", "skipped_valid_existing", "blocked", "not_accepted", "dry_run_written", "invalid_manifest", "partial_manifest", "missing_playbook", "failed"] },
+      "message": { "type": "string", "nonEmpty": true },
+      "written_files": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "skipped_files": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "existing_playbook_path": { "type": "string" },
+      "intended_files": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "blocked_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true } }
+    },
+    "required": ["status", "message", "written_files", "skipped_files", "existing_playbook_path", "intended_files", "blocked_paths"]
+  },
+  "practice-candidates/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "candidates": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "nonEmpty": true },
+            "title": { "type": "string", "nonEmpty": true },
+            "proposed_rule_text": { "type": "string", "nonEmpty": true },
+            "confidence": { "type": "string", "nonEmpty": true, "enum": ["low", "medium", "high"] },
+            "evidence_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 1 },
+            "rationale": { "type": "string", "nonEmpty": true },
+            "questions_needed": { "type": "array", "items": { "type": "string", "nonEmpty": true } }
+          },
+          "required": ["id", "title", "proposed_rule_text", "confidence", "evidence_paths", "rationale", "questions_needed"]
+        }
+      }
+    },
+    "required": ["summary", "candidates"]
+  },
+  "repo-inventory/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "repository_root": { "type": "string", "nonEmpty": true },
+      "generated_at": { "type": "string", "nonEmpty": true },
+      "ignored_directories": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "stack_indicators": { "type": "array", "items": { "type": "object" } },
+      "test_structure": { "type": "array", "items": { "type": "object" } },
+      "architecture_hints": { "type": "array", "items": { "type": "object" } },
+      "quality_tooling": { "type": "array", "items": { "type": "object" } },
+      "specification_files": { "type": "array", "items": { "type": "object" } },
+      "runtime_configs": { "type": "array", "items": { "type": "object" } },
+      "generated_code": { "type": "array", "items": { "type": "object" } },
+      "evidence": { "type": "array", "items": { "type": "string", "nonEmpty": true } }
+    },
+    "required": ["summary", "repository_root", "generated_at", "ignored_directories", "stack_indicators", "test_structure", "architecture_hints", "quality_tooling", "specification_files", "runtime_configs", "generated_code", "evidence"]
   },
   "qa-plan/v1": {
     "type": "object",

@@ -246,7 +246,13 @@ describe("implement prompt bindings", () => {
     const planningIteration = 3;
     const promptVars = implementFlowSpec.phases[0].steps[0].prompt.vars;
     const context = {
-      flowParams: { taskKey, planningIteration, extraPrompt: null },
+      flowParams: {
+        taskKey,
+        planningIteration,
+        extraPrompt: null,
+        projectGuidanceFile: "not provided",
+        projectGuidanceJsonFile: "not provided",
+      },
       flowConstants: {},
       pipelineContext: {},
       repeatVars: {},

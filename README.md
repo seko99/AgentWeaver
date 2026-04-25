@@ -1,34 +1,44 @@
 # AgentWeaver
 
-`AgentWeaver` is a TypeScript/Node.js CLI for harness engineering around coding agents.
+`AgentWeaver` is a TypeScript/Node.js CLI for engineering durable workflows around coding agents.
 
-It is built around declarative workflow specs. A flow describes phases and steps in JSON, runtime nodes implement behavior in TypeScript, and artifacts on disk make runs resumable, inspectable, and operationally manageable from the TUI.
+It is built for teams that want agent work to behave less like one-off prompting and more like an inspectable engineering system: explicit workflows, durable artifacts, repeatable review gates, resumable execution, and repository-local guidance that evolves with the codebase.
 
 Typical usage looks like:
 
 `plan -> implement -> run-go-linter-loop -> run-go-tests-loop -> review -> review-fix`
 
-The important part is not that exact chain. The point is that AgentWeaver lets you design, operate, and evolve durable agent harnesses instead of accumulating one-off prompts and shell glue.
+Planning-heavy work can use:
 
-For planning-heavy work, a typical path can now include `plan -> design-review -> implement`, where `design-review` critiques planning artifacts before coding starts.
+`plan -> design-review -> implement -> review-loop`
 
-## What It Does
+The important part is not the exact chain. The point is that AgentWeaver lets you model, operate, and evolve the harness around the agent.
 
-- Fetches Jira issue context by issue key or browse URL
-- Fetches GitLab merge request diff and review data into reusable artifacts
-- Runs Codex-, OpenCode-, and process-backed stages through a common pipeline runtime
-- Persists artifacts and compact flow execution state under the current project scope
-- Supports both operator-driven work in a TUI and end-to-end automation flows
-- Resumes interrupted declarative flows when required artifacts and launch profile still match
+## Key Features
 
-## Harness Engineering Focus
+See [docs/features.md](docs/features.md) for the expanded feature overview.
+
+- **Declarative agent workflows**: flows are JSON specs with phases, steps, prompt bindings, params, expectations, and post-step actions. Workflow design stays declarative while runtime behavior lives in typed nodes and executors.
+- **Repository-local project playbook**: stable project conventions live under `.agentweaver/playbook/` as versioned rules, examples, and templates. Guided flows select relevant guidance before planning, implementation, review, and repair so repeated agent runs inherit the same project knowledge.
+- **Artifact-first execution**: each stage produces structured JSON and human-readable markdown artifacts on disk. Artifacts are the contract between stages, which makes runs inspectable, reviewable, and restartable.
+- **Planning and design-review gates**: planning flows produce design, implementation plan, and QA plan artifacts. `design-review` critiques those artifacts before coding starts, and `auto-common` can iterate through `plan-revise` before implementation.
+- **Review and repair loops**: review flows produce structured findings with severities. Repair flows can select blockers and critical findings, apply targeted fixes, and run follow-up checks.
+- **Resumable automation**: long-running flows persist compact execution state, support resume/continue/restart semantics, and can restart from selected phases when the artifacts and launch profile are compatible.
+- **Multiple execution backends**: Codex, OpenCode, shell/process checks, Jira, GitLab, Git commit, and Telegram notification integrations run through a common executor model.
+- **Interactive TUI and direct CLI**: the same workflow model works in an operator-driven terminal UI, direct CLI commands, and non-interactive automation.
+- **Custom flows**: built-in flows can be extended with global or project-local flow specs without changing AgentWeaver source code.
+- **Plugin SDK**: local plugins can add public-SDK-compatible nodes and executors, with manifest validation, version checks, and documented entrypoint rules.
+- **Operational diagnostics**: `doctor` checks system readiness, executor configuration, flow specs, node versions, and runtime environment shape before workflows fail mid-run.
+
+## Why Harness Engineering
 
 AgentWeaver is not positioned as a thin wrapper around one agent call. It is meant for harness engineering:
 
-- workflows are modeled explicitly as phases, steps, prompts, params, expectations, and artifacts
-- execution logic is isolated into reusable nodes and executors instead of being embedded in ad-hoc scripts
-- artifacts on disk are the contract between stages, which makes runs reviewable and restartable
-- the same workflow model can be used in direct CLI mode, interactive TUI mode, and resumable automation flows
+- The workflow is explicit instead of hidden in a long prompt.
+- The intermediate decisions are persisted instead of disappearing in chat history.
+- The agent receives project guidance from the repository instead of relying on memory or copy-pasted instructions.
+- Review, repair, checks, and restart behavior are first-class parts of the workflow.
+- The same model works in local CLI use, interactive operation, and automation.
 
 In practice, this means you can treat an agent workflow like an engineered system: versioned, inspectable, repeatable, and debuggable.
 
@@ -40,14 +50,15 @@ In practice, this means you can treat an agent workflow like an engineered syste
 - `scope`: isolated workspace key for artifacts and flow state; usually based on Jira task, otherwise derived from git context
 - `artifact`: file produced or consumed by flows, used as the stable contract between stages
 - `flow state`: compact persisted execution metadata used for resume/restart in long-running flows such as `auto-golang`
+- `project playbook`: local `.agentweaver/playbook/` directory with `manifest.yaml`, practices, examples, and templates; the format is described in [docs/playbook.md](docs/playbook.md)
 
-## Семантика Запуска
+## Launch Semantics
 
-- `resume` возобновляет только реально прерванный запуск и использует сохранённое состояние исполнения без пересборки уже выполненных шагов
-- `continue` предназначен для завершённых итерационных циклов и запускает следующую итерацию от последних валидных артефактов без удаления исторических артефактов
-- `restart` считается новым запуском: текущая активная попытка архивируется в `.agentweaver/scopes/<scope>/.artifacts/restart-archives/attempt-XXXX`, после чего создаётся новая активная попытка
-- Для неоднозначных запусков оператор должен явно выбрать действие: в интерактивном режиме через подтверждение, в неинтерактивном режиме через `--resume`, `--continue` или `--restart`
-- Контракт распространяется на `auto-common`, `auto-simple`, `auto-golang`, `instant-task`, `review-loop`, `run-go-linter-loop` и `run-go-tests-loop`
+- `resume` only resumes a genuinely interrupted run and uses the saved execution state without rebuilding already completed steps
+- `continue` is intended for completed iterative cycles and starts the next iteration from the latest valid artifacts without deleting historical artifacts
+- `restart` is treated as a new run: the current active attempt is archived under `.agentweaver/scopes/<scope>/.artifacts/restart-archives/attempt-XXXX`, then a new active attempt is created
+- For ambiguous launches, the operator must choose the action explicitly: by confirmation in interactive mode, or with `--resume`, `--continue`, or `--restart` in non-interactive mode
+- This contract applies to `auto-common`, `auto-simple`, `auto-golang`, `instant-task`, `review-loop`, `run-go-linter-loop`, and `run-go-tests-loop`
 
 ## Declarative Workflow Model
 
@@ -61,6 +72,8 @@ The center of the system is the declarative flow spec:
 - `after` actions update runtime state without introducing ad-hoc imperative glue
 
 This keeps workflow design in JSON while keeping implementation details in typed runtime code.
+
+The full flow-spec reference now lives in [docs/declarative-workflows.md](docs/declarative-workflows.md).
 
 ## Repository Layout
 
@@ -427,7 +440,50 @@ Recommended smoke checks:
 node dist/index.js --help
 node dist/index.js auto-golang --help-phases
 node dist/index.js auto-common --help-phases
+node dist/index.js auto-common-guided --help-phases
 node dist/index.js plan --dry DEMO-1234
 node dist/index.js implement --dry DEMO-1234
 node dist/index.js review --dry DEMO-1234
 ```
+
+## Guided Project Guidance
+
+The project playbook is AgentWeaver's way to turn project-specific conventions into durable agent context. Instead of repeating the same instructions in every prompt, a repository can keep stable rules, examples, and templates under `.agentweaver/playbook/`. Guided flows validate that material, select the parts relevant to the current task and phase, and pass compact guidance into the model before planning, implementation, review, and repair.
+
+Typical playbook content includes:
+
+- engineering rules such as required test locations, documentation language, or runtime validation boundaries
+- examples that should be opened only when relevant, instead of pasted into every prompt
+- templates for recurring artifact shapes or implementation notes
+- repository context that should remain visible across tasks without overriding task-specific inputs
+
+The guided flow is `auto-common-guided`. It first runs the same Jira fetch and task normalization steps as `auto-common`, then validates `.agentweaver/playbook/manifest.yaml` and generates compact project guidance before the `plan`, `design-review`, `implement`, `review`, and `repair/review-fix` phases. JSON artifacts remain English and machine-readable; markdown is generated in the workflow-selected language.
+
+The guidance is intentionally phase-aware. A rule can apply only to `plan`, `implement`, `review`, or another supported phase; it can also target languages, frameworks, glob patterns, and keywords. AgentWeaver writes both a structured `project-guidance/v1` JSON artifact and a derivative markdown file, then passes their paths into the phase prompt as supplemental project-local context.
+
+Initialize or refresh the playbook with:
+
+```bash
+agentweaver playbook-init
+agentweaver playbook-init --accept-playbook-draft
+```
+
+Use the guided flow with:
+
+```bash
+agentweaver auto-common-guided --help-phases
+agentweaver auto-common-guided --accept-playbook-draft DEMO-1234
+```
+
+The workflow does not read old `playbook.json` or `playbook.md` files as fallbacks. In non-interactive runs, a missing manifest stops the workflow before planning and reports the required action: run `agentweaver playbook-init --accept-playbook-draft` first, or rerun `agentweaver auto-common-guided --accept-playbook-draft <jira>`. The `--accept-playbook-draft` flag explicitly accepts the generated playbook without interactive review and allows AgentWeaver to write the manifest-based layout. An invalid manifest stops the guided phase before the LLM prompt.
+
+To inspect whether playbook guidance participated in a run, check the generated artifacts:
+
+```bash
+find .agentweaver/scopes -name 'project-guidance-*'
+rg -n "Project Guidance|practice\\." .agentweaver/scopes
+```
+
+Keep `.agentweaver/playbook/` in Git even when other AgentWeaver runtime state is ignored. The playbook format and maintenance workflow are documented in [docs/playbook.md](docs/playbook.md).
+
+Current limitations: skills integration is not available yet; the playbook generator must rely on repository evidence and clarification answers; guided prompts receive compact context and open full examples only when they are directly relevant to the current phase.

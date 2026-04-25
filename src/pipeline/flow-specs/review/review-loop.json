@@ -38,6 +38,8 @@
             "taskKey": { "ref": "params.taskKey" },
             "iteration": { "ref": "params.baseIteration" },
             "extraPrompt": { "ref": "params.extraPrompt" },
+            "projectGuidanceFile": { "ref": "params.projectGuidanceFile" },
+            "projectGuidanceJsonFile": { "ref": "params.projectGuidanceJsonFile" },
             "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
             "llmModel": { "ref": "params.llmModel" },
             "llmExecutor": { "ref": "params.llmExecutor" }
@@ -164,6 +166,8 @@
             },
             "reviewFixPoints": { "ref": "params.reviewFixPoints" },
             "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
+            "projectGuidanceFile": { "ref": "params.repairProjectGuidanceFile" },
+            "projectGuidanceJsonFile": { "ref": "params.repairProjectGuidanceJsonFile" },
             "extraPrompt": {
               "appendPrompt": {
                 "base": { "ref": "params.extraPrompt" },

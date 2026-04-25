@@ -1,0 +1,199 @@
+{
+  "kind": "playbook-init-flow",
+  "version": 1,
+  "description": "Initializes an evidence-backed project playbook from deterministic repository inventory, candidate practices, targeted questions, structured answers, a draft, and a guarded final write.",
+  "phases": [
+    {
+      "id": "playbook_init",
+      "steps": [
+        {
+          "id": "repo_inventory",
+          "node": "playbook-inventory",
+          "params": {
+            "outputJsonFile": { "artifact": { "kind": "repo-inventory-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "outputFile": { "artifact": { "kind": "repo-inventory-file", "taskKey": { "ref": "params.taskKey" } } }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                { "path": { "artifact": { "kind": "repo-inventory-json-file", "taskKey": { "ref": "params.taskKey" } } }, "schemaId": "repo-inventory/v1" }
+              ],
+              "message": "Playbook initialization requires a valid deterministic repository inventory."
+            }
+          ]
+        },
+        {
+          "id": "practice_candidates",
+          "node": "llm-prompt",
+          "routingGroup": "planning",
+          "prompt": {
+            "templateRef": "playbook-practice-candidates",
+            "vars": {
+              "repo_inventory_json_file": { "artifact": { "kind": "repo-inventory-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "practice_candidates_json_file": { "artifact": { "kind": "practice-candidates-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "practice_candidates_file": { "artifact": { "kind": "practice-candidates-file", "taskKey": { "ref": "params.taskKey" } } }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Generating evidence-backed practice candidates" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                { "artifact": { "kind": "practice-candidates-json-file", "taskKey": { "ref": "params.taskKey" } } },
+                { "artifact": { "kind": "practice-candidates-file", "taskKey": { "ref": "params.taskKey" } } }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                { "path": { "artifact": { "kind": "practice-candidates-json-file", "taskKey": { "ref": "params.taskKey" } } }, "schemaId": "practice-candidates/v1" }
+              ],
+              "message": "Practice candidate generation produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "clarification_questions",
+          "node": "llm-prompt",
+          "routingGroup": "planning",
+          "prompt": {
+            "templateRef": "playbook-questions",
+            "vars": {
+              "repo_inventory_json_file": { "artifact": { "kind": "repo-inventory-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "practice_candidates_json_file": { "artifact": { "kind": "practice-candidates-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "playbook_questions_json_file": { "artifact": { "kind": "playbook-questions-json-file", "taskKey": { "ref": "params.taskKey" } } }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Generating targeted playbook questions" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                { "artifact": { "kind": "playbook-questions-json-file", "taskKey": { "ref": "params.taskKey" } } }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                { "path": { "artifact": { "kind": "playbook-questions-json-file", "taskKey": { "ref": "params.taskKey" } } }, "schemaId": "playbook-questions/v1" }
+              ],
+              "message": "Playbook question generation produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "user_answers",
+          "node": "playbook-questions-form",
+          "params": {
+            "questionsJsonFile": { "artifact": { "kind": "playbook-questions-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "answersJsonFile": { "artifact": { "kind": "playbook-answers-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "formId": { "const": "playbook-clarifications" },
+            "title": { "const": "Playbook Clarifications" },
+            "mode": { "const": "clarifications" },
+            "acceptDraft": { "ref": "params.acceptPlaybookDraft" }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                { "path": { "artifact": { "kind": "playbook-answers-json-file", "taskKey": { "ref": "params.taskKey" } } }, "schemaId": "playbook-answers/v1" }
+              ],
+              "message": "Playbook answers are missing or invalid."
+            }
+          ]
+        },
+        {
+          "id": "playbook_draft",
+          "node": "llm-prompt",
+          "routingGroup": "planning",
+          "prompt": {
+            "templateRef": "playbook-draft",
+            "vars": {
+              "repo_inventory_json_file": { "artifact": { "kind": "repo-inventory-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "practice_candidates_json_file": { "artifact": { "kind": "practice-candidates-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "playbook_questions_json_file": { "artifact": { "kind": "playbook-questions-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "playbook_answers_json_file": { "artifact": { "kind": "playbook-answers-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "playbook_draft_json_file": { "artifact": { "kind": "playbook-draft-json-file", "taskKey": { "ref": "params.taskKey" } } },
+              "playbook_draft_file": { "artifact": { "kind": "playbook-draft-file", "taskKey": { "ref": "params.taskKey" } } }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Generating playbook draft" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" },
+            "requiredArtifacts": {
+              "list": [
+                { "artifact": { "kind": "playbook-draft-json-file", "taskKey": { "ref": "params.taskKey" } } },
+                { "artifact": { "kind": "playbook-draft-file", "taskKey": { "ref": "params.taskKey" } } }
+              ]
+            }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "when": { "not": { "ref": "context.dryRun" } },
+              "items": [
+                { "path": { "artifact": { "kind": "playbook-draft-json-file", "taskKey": { "ref": "params.taskKey" } } }, "schemaId": "playbook-draft/v1" }
+              ],
+              "message": "Playbook draft generation produced invalid structured artifacts."
+            }
+          ]
+        },
+        {
+          "id": "acceptance_confirmation",
+          "node": "playbook-questions-form",
+          "params": {
+            "questionsJsonFile": { "artifact": { "kind": "playbook-questions-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "answersJsonFile": { "artifact": { "kind": "playbook-answers-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "formId": { "const": "playbook-final-acceptance" },
+            "title": { "const": "Playbook Final Acceptance" },
+            "mode": { "const": "acceptance" },
+            "acceptDraft": { "ref": "params.acceptPlaybookDraft" }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                { "path": { "artifact": { "kind": "playbook-answers-json-file", "taskKey": { "ref": "params.taskKey" } } }, "schemaId": "playbook-answers/v1" }
+              ],
+              "message": "Playbook final acceptance is missing or invalid."
+            }
+          ]
+        },
+        {
+          "id": "write_playbook",
+          "node": "playbook-write",
+          "params": {
+            "draftJsonFile": { "artifact": { "kind": "playbook-draft-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "answersJsonFile": { "artifact": { "kind": "playbook-answers-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "writeResultJsonFile": { "artifact": { "kind": "playbook-write-result-json-file", "taskKey": { "ref": "params.taskKey" } } }
+          },
+          "expect": [
+            {
+              "kind": "require-structured-artifacts",
+              "items": [
+                { "path": { "artifact": { "kind": "playbook-write-result-json-file", "taskKey": { "ref": "params.taskKey" } } }, "schemaId": "playbook-write-result/v1" }
+              ],
+              "message": "Playbook write result is missing or invalid."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

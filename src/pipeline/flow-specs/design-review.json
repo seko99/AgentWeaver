@@ -134,6 +134,8 @@
               "plan_json_file": { "ref": "params.planJsonFile" },
               "qa_file": { "ref": "params.qaFile" },
               "qa_json_file": { "ref": "params.qaJsonFile" },
+              "project_guidance_file": { "ref": "params.projectGuidanceFile" },
+              "project_guidance_json_file": { "ref": "params.projectGuidanceJsonFile" },
               "review_file": {
                 "artifact": {
                   "kind": "design-review-file",

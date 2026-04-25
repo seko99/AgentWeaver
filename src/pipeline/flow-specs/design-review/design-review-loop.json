@@ -31,6 +31,8 @@
                 },
                 "workspaceDir": { "ref": "params.workspaceDir" },
                 "extraPrompt": { "ref": "params.extraPrompt" },
+                "projectGuidanceFile": { "ref": "params.projectGuidanceFile" },
+                "projectGuidanceJsonFile": { "ref": "params.projectGuidanceJsonFile" },
                 "llmExecutor": { "ref": "params.llmExecutor" },
                 "llmModel": { "ref": "params.llmModel" }
               }
