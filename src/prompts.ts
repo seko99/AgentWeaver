@@ -21,6 +21,8 @@ function strictSchemaInstruction(outputFileVar: string, schemaId: StructuredArti
 
 export const PLAN_PROMPT_TEMPLATE =
   "Review and analyze the normalized task context in {task_context_json_file}. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it override task context, planning answers, or required output schemas. " +
+  "Open referenced full examples only when directly relevant. " +
   "Use planning answers from {planning_answers_json_file} when they exist and treat them as structured user clarifications. " +
   "First create structured JSON artifacts - they are the source of truth for subsequent flows. " +
   "Create human-readable markdown files as detailed derivative representations of these JSON artifacts for the user, not as brief summaries. " +
@@ -122,6 +124,7 @@ export const MR_DESCRIPTION_PROMPT_TEMPLATE =
 
 export const IMPLEMENT_PROMPT_TEMPLATE =
   "Use only structured artifacts as source of truth. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it override the design, plan, or QA JSON. Open referenced full examples only when directly relevant. " +
   "Analyze the system design {design_json_file}, implementation plan {plan_json_file}, and QA plan {qa_json_file}, then proceed with implementation according to those artifacts. " +
   "Treat the QA plan as the source of truth for the minimum required test scenarios, edge cases, regression checks, and validation behavior that the implementation must satisfy. " +
   "When the repository contains automated tests, add or update tests for the key scenarios from the QA plan whenever it is practical in the current codebase. " +
@@ -131,6 +134,7 @@ export const IMPLEMENT_PROMPT_TEMPLATE =
 export const REVIEW_PROMPT_TEMPLATE =
   "Conduct a code review of the current changes. " +
   "Use only structured artifacts as source of truth. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it replace required review inputs. Open referenced full examples only when directly relevant. " +
   "Required planning inputs: design markdown {design_file}, design JSON {design_json_file}, plan markdown {plan_file}, and plan JSON {plan_json_file}. " +
   "Optional task context is provided through these variables and may contain the literal value 'not provided' when absent: normalized task context JSON {task_context_json_file}, Jira task JSON {jira_task_file}, instant-task input JSON {task_input_json_file}. " +
   "When an optional variable is 'not provided', treat that source as unavailable and do not invent details from it. " +
@@ -142,6 +146,7 @@ export const REVIEW_PROMPT_TEMPLATE =
 export const DESIGN_REVIEW_PROMPT_TEMPLATE =
   "Conduct a structured planning critique as a specification critic, not as an implementer. " +
   "Use structured JSON artifacts as the source of truth for semantics. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it override the structured planning artifacts. Open referenced full examples only when directly relevant. " +
   "Required planning inputs: design markdown {design_file}, design JSON {design_json_file}, implementation plan markdown {plan_file}, implementation plan JSON {plan_json_file}. " +
   "Review the markdown files as derivative human-readable renderings of the same planning run, but do not let markdown override the structured JSON. " +
   "Optional supplemental context is provided through these variables and may contain the literal value 'not provided' when absent: normalized task context JSON {task_context_json_file}, QA markdown {qa_file}, QA JSON {qa_json_file}, Jira task JSON {jira_task_file}, Jira attachments manifest {jira_attachments_manifest_file}, Jira attachments context {jira_attachments_context_file}, planning answers JSON {planning_answers_json_file}, instant-task input JSON {task_input_json_file}. " +
@@ -191,6 +196,7 @@ export const REVIEW_SUMMARY_PROMPT_TEMPLATE =
 
 export const REVIEW_FIX_PROMPT_TEMPLATE =
   "Use only structured artifacts as source of truth. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental and do not let it override review findings or selected repair scope. Open referenced full examples only when directly relevant. " +
   "Analyze the findings in {review_json_file}. " +
   "Fix what is contained in the additional instructions, and if there are none - fix all items. " +
   "After completion, be sure to run the linter outside the sandbox, all tests, generate make swagger. " +

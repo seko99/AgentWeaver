@@ -432,3 +432,9 @@ node dist/index.js plan --dry DEMO-1234
 node dist/index.js implement --dry DEMO-1234
 node dist/index.js review --dry DEMO-1234
 ```
+
+## Guided Project Guidance
+
+`auto-common-guided` генерирует компактные проектные рекомендации из `.agentweaver/playbook/manifest.yaml` перед фазами planning, design review, implementation, review и repair. JSON-артефакты остаются англоязычными и машинно-читаемыми, markdown создается на выбранном языке workflow.
+
+Поток не читает старые `playbook.json` или `playbook.md` как fallback. Отсутствующий manifest дает явный `missing_playbook` артефакт и продолжает выполнение, а некорректный manifest по умолчанию останавливает guided-фазу до LLM prompt.

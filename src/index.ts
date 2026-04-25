@@ -130,6 +130,7 @@ import {
 
 const COMMANDS = [
   "auto-golang",
+  "auto-common-guided",
   "auto-common",
   "auto-simple",
   "auto-status",
@@ -288,6 +289,7 @@ function usage(): string {
   agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] --from <phase> [<jira-browse-url|jira-issue-key>]
   agentweaver auto-golang --help-phases
+  agentweaver auto-common-guided [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] <jira-browse-url|jira-issue-key>
   agentweaver auto-common [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] <jira-browse-url|jira-issue-key>
   agentweaver auto-common --help-phases
   agentweaver auto-simple [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] <jira-browse-url|jira-issue-key>
@@ -601,14 +603,14 @@ async function printAutoPhasesHelp(): Promise<void> {
   printPanel("Auto-Golang Phases", phaseLines.join("\n"), "magenta");
 }
 
-async function autoCommonPhaseIds(): Promise<string[]> {
-  return (await loadDeclarativeFlow({ source: "built-in", fileName: "auto-common.json" })).phases.map((phase) => phase.id);
+async function autoCommonPhaseIds(fileName = "auto-common.json"): Promise<string[]> {
+  return (await loadDeclarativeFlow({ source: "built-in", fileName })).phases.map((phase) => phase.id);
 }
 
-async function printAutoCommonPhasesHelp(): Promise<void> {
-  const phaseLines = ["Available auto-common phases:", "", ...(await autoCommonPhaseIds())];
-  phaseLines.push("", "You can run auto-common with:", "agentweaver auto-common <jira>");
-  printPanel("Auto-Common Phases", phaseLines.join("\n"), "magenta");
+async function printAutoCommonPhasesHelp(command = "auto-common", fileName = "auto-common.json"): Promise<void> {
+  const phaseLines = [`Available ${command} phases:`, "", ...(await autoCommonPhaseIds(fileName))];
+  phaseLines.push("", `You can run ${command} with:`, `agentweaver ${command} <jira>`);
+  printPanel(command === "auto-common-guided" ? "Auto-Common Guided Phases" : "Auto-Common Phases", phaseLines.join("\n"), "magenta");
 }
 
 async function autoSimplePhaseIds(): Promise<string[]> {
@@ -669,6 +671,7 @@ function commandRequiresTask(command: string): boolean {
     command === "design-review" ||
     command === "mr-description" ||
     command === "auto-golang" ||
+    command === "auto-common-guided" ||
     command === "auto-common" ||
     command === "auto-simple" ||
     command === "auto-status" ||
@@ -1191,6 +1194,10 @@ function defaultDeclarativeFlowParams(
     mdLang: config.mdLang,
     llmExecutor: launchProfile.executor,
     llmModel: launchProfile.model,
+    projectGuidanceFile: "not provided",
+    projectGuidanceJsonFile: "not provided",
+    repairProjectGuidanceFile: "not provided",
+    repairProjectGuidanceJsonFile: "not provided",
     launchProfile,
     executionRouting,
     iteration,
@@ -1433,7 +1440,7 @@ async function executeCommand(
     );
     return false;
   }
-  if (config.command === "auto-common") {
+  if (config.command === "auto-common" || config.command === "auto-common-guided") {
     requireJiraConfig(config);
     await checkAutoPrerequisites(config, launchProfile, executionRouting);
     process.env.JIRA_BROWSE_URL = config.jiraBrowseUrl;
@@ -1441,7 +1448,7 @@ async function executeCommand(
     process.env.JIRA_TASK_FILE = config.jiraTaskFile;
 
     await runDeclarativeFlowBySpecFile(
-      "auto-common.json",
+      config.command === "auto-common-guided" ? "auto-common-guided.json" : "auto-common.json",
       config,
       autoFlowParams(config, forceRefreshSummary),
       flowOverrides,
@@ -2035,8 +2042,8 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
     await printAutoPhasesHelp();
     process.exit(0);
   }
-  if (command === "auto-common" && helpPhases) {
-    await printAutoCommonPhasesHelp();
+  if ((command === "auto-common" || command === "auto-common-guided") && helpPhases) {
+    await printAutoCommonPhasesHelp(command, command === "auto-common-guided" ? "auto-common-guided.json" : "auto-common.json");
     process.exit(0);
   }
   if (command === "auto-simple" && helpPhases) {

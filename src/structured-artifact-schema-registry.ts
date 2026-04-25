@@ -23,6 +23,7 @@ export const STRUCTURED_ARTIFACT_SCHEMA_IDS = [
   "playbook-questions/v1",
   "playbook-write-result/v1",
   "practice-candidates/v1",
+  "project-guidance/v1",
   "qa-plan/v1",
   "repo-inventory/v1",
   "review-assessment/v1",
@@ -58,6 +59,7 @@ export type StructuredArtifactSchemaNode =
     }
   | {
       type: "boolean" | "number" | "null";
+      minimum?: number;
       anyOf?: never;
     }
   | {
