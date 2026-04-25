@@ -211,7 +211,7 @@ export function collectRepoInventory(repositoryRoot: string, generatedAt = new D
 
 function renderObservationList(observations: InventoryObservation[]): string {
   if (observations.length === 0) {
-    return "- Нет подтвержденных сигналов.";
+    return "- No confirmed signals.";
   }
   return observations
     .map((observation) => `- ${observation.title}: ${observation.evidence_paths.join(", ")}`)
@@ -220,29 +220,29 @@ function renderObservationList(observations: InventoryObservation[]): string {
 
 export function renderRepoInventoryMarkdown(inventory: RepoInventory): string {
   return [
-    "# Инвентаризация репозитория",
+    "# Repository Inventory",
     "",
     inventory.summary,
     "",
-    "## Стек",
+    "## Stack",
     renderObservationList(inventory.stack_indicators),
     "",
-    "## Тесты",
+    "## Tests",
     renderObservationList(inventory.test_structure),
     "",
-    "## Архитектура",
+    "## Architecture",
     renderObservationList(inventory.architecture_hints),
     "",
-    "## Качество",
+    "## Quality",
     renderObservationList(inventory.quality_tooling),
     "",
-    "## Спецификации",
+    "## Specifications",
     renderObservationList(inventory.specification_files),
     "",
-    "## Runtime-конфигурация",
+    "## Runtime Configuration",
     renderObservationList(inventory.runtime_configs),
     "",
-    "## Сгенерированный код",
+    "## Generated Code",
     renderObservationList(inventory.generated_code),
     "",
   ].join("\n");

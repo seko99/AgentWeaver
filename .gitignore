@@ -8,4 +8,6 @@ __pycache__/
 *.pyc
 *.tgz
 .npmrc
-.agentweaver
+.agentweaver/*
+!.agentweaver/playbook/
+!.agentweaver/playbook/**

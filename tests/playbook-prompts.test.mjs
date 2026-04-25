@@ -24,6 +24,15 @@ describe("playbook prompt and schema contracts", () => {
     assert.match(prompt, /candidate_ids or evidence_paths/);
   });
 
+  it("keeps planning-question project guidance supplemental to task context and schema", () => {
+    const prompt = prompts.PLAN_QUESTIONS_PROMPT_TEMPLATE;
+    assert.match(prompt, /project_guidance_file/);
+    assert.match(prompt, /project_guidance_json_file/);
+    assert.match(prompt, /supplemental project-local context/);
+    assert.match(prompt, /do not let it override task context or the planning-questions\/v1 schema/);
+    assert.match(prompt, /Open referenced full examples only when directly relevant/);
+  });
+
   it("rejects candidates without evidence or invalid confidence", () => {
     const valid = {
       summary: "Candidate practices.",

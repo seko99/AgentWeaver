@@ -1,0 +1,96 @@
+{
+  "status": "accepted",
+  "accepted_at": "2026-04-25T13:14:06.123Z",
+  "source_draft_artifact": "/home/seko/Projects/github/AgentWeaver/.agentweaver/scopes/ag-101@c3263249/.artifacts/playbook-draft-ag-101@c3263249.json",
+  "summary": "Draft playbook rules were generated from repository inventory, practice candidates, clarification questions, and recorded answers. High-confidence practices were accepted directly, and medium-confidence practices were accepted only where the recorded answers resolved their clarification needs.",
+  "rules": [
+    {
+      "id": "practice-node-typescript-npm-entrypoints",
+      "title": "Use npm scripts as the supported project entrypoints",
+      "rule": "Run project build, type-check, development, packaging, and start workflows through the npm scripts declared in package.json.",
+      "evidence_paths": [
+        "package.json",
+        "tsconfig.json"
+      ]
+    },
+    {
+      "id": "practice-typecheck-before-delivery",
+      "title": "Use the declared check script for TypeScript validation",
+      "rule": "Before delivering changes that affect TypeScript source or tests, run the declared npm check script unless the task context makes that impossible.",
+      "evidence_paths": [
+        "package.json",
+        "tsconfig.json"
+      ]
+    },
+    {
+      "id": "practice-tests-under-tests-directory",
+      "title": "Place automated tests under the tests directory",
+      "rule": "Add or update automated tests under the top-level tests directory, following the existing nested areas when they fit the changed behavior.",
+      "evidence_paths": [
+        "tests",
+        "tests/doctor",
+        "tests/pipeline",
+        "tests/pipeline/nodes",
+        "tests/runtime",
+        "tests/artifact-manifest-schema.test.mjs",
+        "tests/auto-common-flow.test.ts",
+        "tests/pipeline/nodes/ensure-summary-json-node.test.mjs",
+        "tests/runtime/ready-to-merge.test.mjs"
+      ]
+    },
+    {
+      "id": "practice-runtime-configs-in-executor-configs",
+      "title": "Keep executor runtime defaults in src/executors/configs",
+      "rule": "Add new executor runtime configuration modules under src/executors/configs when introducing comparable executor defaults.",
+      "evidence_paths": [
+        "src/executors/configs/codex-config.ts",
+        "src/executors/configs/fetch-gitlab-diff-config.ts",
+        "src/executors/configs/fetch-gitlab-review-config.ts",
+        "src/executors/configs/jira-fetch-config.ts",
+        "src/executors/configs/opencode-config.ts",
+        "src/executors/configs/process-config.ts",
+        "src/executors/configs/telegram-notifier-config.ts"
+      ]
+    },
+    {
+      "id": "practice-document-environment-shape",
+      "title": "Keep environment examples limited to required variables",
+      "rule": "When required environment variables or runtime environment expectations change, update .env.example for those requirements. Treat .agentweaver/.env as a local runtime file that is excluded from committed practice guidance except as evidence that local configuration exists.",
+      "evidence_paths": [
+        ".env.example",
+        ".agentweaver/.env"
+      ]
+    },
+    {
+      "id": "practice-custom-scripts-for-repository-maintenance",
+      "title": "Keep repository maintenance scripts under scripts",
+      "rule": "Place repository maintenance automation under the top-level scripts directory when adding automation comparable to the existing maintenance script. No repository-wide .mjs module-format or naming-style requirement is established by the recorded answers.",
+      "evidence_paths": [
+        "scripts/copy-flow-specs.mjs"
+      ]
+    }
+  ],
+  "evidence_paths": [
+    ".agentweaver/.env",
+    ".env.example",
+    "package.json",
+    "scripts/copy-flow-specs.mjs",
+    "src/executors/configs/codex-config.ts",
+    "src/executors/configs/fetch-gitlab-diff-config.ts",
+    "src/executors/configs/fetch-gitlab-review-config.ts",
+    "src/executors/configs/jira-fetch-config.ts",
+    "src/executors/configs/opencode-config.ts",
+    "src/executors/configs/process-config.ts",
+    "src/executors/configs/telegram-notifier-config.ts",
+    "tests",
+    "tests/artifact-manifest-schema.test.mjs",
+    "tests/auto-common-flow.test.ts",
+    "tests/doctor",
+    "tests/pipeline",
+    "tests/pipeline/nodes",
+    "tests/pipeline/nodes/ensure-summary-json-node.test.mjs",
+    "tests/runtime",
+    "tests/runtime/ready-to-merge.test.mjs",
+    "tsconfig.json"
+  ]
+}
