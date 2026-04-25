@@ -21,6 +21,9 @@ import { localScriptCheckNode } from "./nodes/local-script-check-node.js";
 import { llmPromptNode } from "./nodes/llm-prompt-node.js";
 import { opencodePromptNode } from "./nodes/opencode-prompt-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
+import { playbookInventoryNode } from "./nodes/playbook-inventory-node.js";
+import { playbookQuestionsFormNode } from "./nodes/playbook-questions-form-node.js";
+import { playbookWriteNode } from "./nodes/playbook-write-node.js";
 import { planningBundleNode } from "./nodes/planning-bundle-node.js";
 import { planningQuestionsFormNode } from "./nodes/planning-questions-form-node.js";
 import { readFileNode } from "./nodes/read-file-node.js";
@@ -61,6 +64,9 @@ export type BuiltInNodeKind =
   | "llm-prompt"
   | "opencode-prompt"
   | "plan-codex"
+  | "playbook-inventory"
+  | "playbook-questions-form"
+  | "playbook-write"
   | "planning-bundle"
   | "planning-questions-form"
   | "read-file"
@@ -108,6 +114,9 @@ export const BUILT_IN_NODE_KINDS = [
   "llm-prompt",
   "opencode-prompt",
   "plan-codex",
+  "playbook-inventory",
+  "playbook-questions-form",
+  "playbook-write",
   "planning-bundle",
   "planning-questions-form",
   "read-file",
@@ -145,6 +154,9 @@ const builtInNodes: Record<BuiltInNodeKind, AnyNodeDefinition> = {
   "llm-prompt": llmPromptNode as unknown as AnyNodeDefinition,
   "opencode-prompt": opencodePromptNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
+  "playbook-inventory": playbookInventoryNode as unknown as AnyNodeDefinition,
+  "playbook-questions-form": playbookQuestionsFormNode as unknown as AnyNodeDefinition,
+  "playbook-write": playbookWriteNode as unknown as AnyNodeDefinition,
   "planning-bundle": planningBundleNode as unknown as AnyNodeDefinition,
   "planning-questions-form": planningQuestionsFormNode as unknown as AnyNodeDefinition,
   "read-file": readFileNode as unknown as AnyNodeDefinition,
@@ -280,6 +292,24 @@ const builtInNodeMetadata: Record<BuiltInNodeKind, NodeContractMetadata> = {
     prompt: "forbidden",
     requiredParams: ["prompt", "requiredArtifacts"],
     executors: ["codex"],
+  },
+  "playbook-inventory": {
+    kind: "playbook-inventory",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["outputJsonFile", "outputFile"],
+  },
+  "playbook-questions-form": {
+    kind: "playbook-questions-form",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["questionsJsonFile", "answersJsonFile", "formId", "title"],
+  },
+  "playbook-write": {
+    kind: "playbook-write",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["draftJsonFile", "answersJsonFile", "writeResultJsonFile"],
   },
   "planning-bundle": {
     kind: "planning-bundle",
