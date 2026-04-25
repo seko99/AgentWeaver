@@ -289,7 +289,7 @@ function usage(): string {
   agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] [<jira-browse-url|jira-issue-key>]
   agentweaver auto-golang [--dry] [--verbose] [--prompt <text>] --from <phase> [<jira-browse-url|jira-issue-key>]
   agentweaver auto-golang --help-phases
-  agentweaver auto-common-guided [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] <jira-browse-url|jira-issue-key>
+  agentweaver auto-common-guided [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] [--accept-playbook-draft] <jira-browse-url|jira-issue-key>
   agentweaver auto-common [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] <jira-browse-url|jira-issue-key>
   agentweaver auto-common --help-phases
   agentweaver auto-simple [--dry] [--verbose] [--prompt <text>] [--md-lang <en|ru>] <jira-browse-url|jira-issue-key>
@@ -314,7 +314,7 @@ Flags:
   --restart       Archive the active attempt and start a fresh run
   --blocking-severities  Comma-separated severities that block merge and drive review-fix auto-selection
   --md-lang       Language for markdown output files: en (English) or ru (Russian, default)
-  --accept-playbook-draft  Non-interactively accept the generated playbook draft for playbook-init
+  --accept-playbook-draft  Non-interactively accept generated playbook content for playbook-init or auto-common-guided missing-manifest runs
 
 Required environment variables:
   JIRA_API_KEY    Jira API token used for Jira-backed flows (Bearer by default, or Basic with Jira Cloud)
@@ -846,6 +846,8 @@ function autoFlowParams(config: Config, forceRefreshSummary = false): Record<str
     reviewBlockingSeverities: config.reviewBlockingSeverities,
     forceRefresh: forceRefreshSummary,
     mdLang: config.mdLang,
+    acceptPlaybookDraft: config.command === "auto-common-guided" ? config.acceptPlaybookDraft === true : false,
+    launchMode: config.command === "auto-common-guided" ? config.autoFromPhase ?? "restart" : undefined,
     runGoTestsScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_tests.py"),
     runGoLinterScript: path.join(agentweaverHome(PACKAGE_ROOT), "run_go_linter.py"),
     runGoTestsIteration: nextArtifactIteration(config.taskKey, "run-go-tests-result", "json"),

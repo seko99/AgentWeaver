@@ -72,7 +72,7 @@ export const PLAYBOOK_DRAFT_PROMPT_TEMPLATE =
   strictSchemaInstruction("{playbook_draft_json_file}", "playbook-draft/v1") +
   "The draft must separate accepted_rules from candidate_rules and unresolved_questions. " +
   "Do not promote weak or unresolved candidates to accepted_rules without supporting user answers. Preserve evidence paths. " +
-  "Set proposed_files to .agentweaver/playbook/playbook.json and .agentweaver/playbook/playbook.md. " +
+  "Set proposed_files to the manifest-based layout: .agentweaver/playbook/manifest.yaml, .agentweaver/playbook/project.md, .agentweaver/playbook/practices/generated-rules.md, .agentweaver/playbook/examples/generated-example.md, and .agentweaver/playbook/templates/default.md. " +
   "Markdown must be Russian and derivative of the JSON artifact. JSON files must contain only JSON without markdown wrapping. ";
 
 export const TASK_CONTEXT_FROM_JIRA_PROMPT_TEMPLATE =

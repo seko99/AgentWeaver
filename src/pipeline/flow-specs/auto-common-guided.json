@@ -37,6 +37,68 @@
       ]
     },
     {
+      "id": "playbook",
+      "steps": [
+        {
+          "id": "ensure_playbook",
+          "node": "playbook-ensure",
+          "params": {
+            "writeResultJsonFile": { "artifact": { "kind": "playbook-write-result-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "acceptPlaybookDraft": { "ref": "params.acceptPlaybookDraft" }
+          },
+          "stopFlowIf": {
+            "any": [
+              { "equals": [{ "ref": "steps.playbook.ensure_playbook.value.status" }, { "const": "blocked" }] },
+              { "equals": [{ "ref": "steps.playbook.ensure_playbook.value.status" }, { "const": "invalid_manifest" }] },
+              { "equals": [{ "ref": "steps.playbook.ensure_playbook.value.status" }, { "const": "partial_manifest" }] },
+              { "equals": [{ "ref": "steps.playbook.ensure_playbook.value.status" }, { "const": "not_accepted" }] },
+              { "equals": [{ "ref": "steps.playbook.ensure_playbook.value.status" }, { "const": "failed" }] }
+            ]
+          },
+          "stopFlowOutcome": "stopped"
+        },
+        {
+          "id": "run_playbook_init",
+          "node": "flow-run",
+          "when": { "ref": "steps.playbook.ensure_playbook.value.shouldRunPlaybookInit" },
+          "params": {
+            "fileName": { "const": "playbook-init.json" },
+            "labelText": { "const": "Initializing manifest-based project playbook" },
+            "taskKey": { "ref": "params.taskKey" },
+            "taskContextJsonFile": { "artifact": { "kind": "task-context-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.taskContextIteration" } } },
+            "markdownLanguage": { "ref": "params.mdLang" },
+            "iteration": { "ref": "params.planIteration" },
+            "launchMode": { "ref": "params.launchMode" },
+            "targetManifestPath": { "ref": "steps.playbook.ensure_playbook.value.manifestPath" },
+            "acceptPlaybookDraft": { "ref": "params.acceptPlaybookDraft" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
+            "extraPrompt": { "ref": "params.extraPrompt" }
+          }
+        },
+        {
+          "id": "verify_playbook",
+          "node": "playbook-ensure",
+          "when": { "ref": "steps.playbook.ensure_playbook.value.shouldRunPlaybookInit" },
+          "params": {
+            "writeResultJsonFile": { "artifact": { "kind": "playbook-write-result-json-file", "taskKey": { "ref": "params.taskKey" } } },
+            "acceptPlaybookDraft": { "ref": "params.acceptPlaybookDraft" },
+            "verifyAfterInit": { "const": true }
+          },
+          "stopFlowIf": {
+            "not": {
+              "any": [
+                { "equals": [{ "ref": "steps.playbook.verify_playbook.value.status" }, { "const": "written" }] },
+                { "equals": [{ "ref": "steps.playbook.verify_playbook.value.status" }, { "const": "skipped_valid_existing" }] },
+                { "equals": [{ "ref": "steps.playbook.verify_playbook.value.status" }, { "const": "dry_run_written" }] }
+              ]
+            }
+          },
+          "stopFlowOutcome": "stopped"
+        }
+      ]
+    },
+    {
       "id": "plan_guidance",
       "steps": [
         {
@@ -189,7 +251,12 @@
             "outputFile": { "artifact": { "kind": "project-guidance-review-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
             "markdownLanguage": { "ref": "params.mdLang" }
           }
-        },
+        }
+      ]
+    },
+    {
+      "id": "repair_guidance",
+      "steps": [
         {
           "id": "write_repair_guidance",
           "node": "project-guidance",
@@ -229,8 +296,8 @@
             "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
             "projectGuidanceFile": { "ref": "steps.review_guidance.write_review_guidance.value.outputFile" },
             "projectGuidanceJsonFile": { "ref": "steps.review_guidance.write_review_guidance.value.outputJsonFile" },
-            "repairProjectGuidanceFile": { "ref": "steps.review_guidance.write_repair_guidance.value.outputFile" },
-            "repairProjectGuidanceJsonFile": { "ref": "steps.review_guidance.write_repair_guidance.value.outputJsonFile" },
+            "repairProjectGuidanceFile": { "ref": "steps.repair_guidance.write_repair_guidance.value.outputFile" },
+            "repairProjectGuidanceJsonFile": { "ref": "steps.repair_guidance.write_repair_guidance.value.outputJsonFile" },
             "llmExecutor": { "ref": "params.llmExecutor" },
             "llmModel": { "ref": "params.llmModel" }
           }

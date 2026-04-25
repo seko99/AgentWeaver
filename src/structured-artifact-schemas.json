@@ -645,7 +645,7 @@
   "playbook-write-result/v1": {
     "type": "object",
     "properties": {
-      "status": { "type": "string", "nonEmpty": true, "enum": ["written", "skipped", "blocked", "not_accepted", "dry_run"] },
+      "status": { "type": "string", "nonEmpty": true, "enum": ["written", "skipped_valid_existing", "blocked", "not_accepted", "dry_run_written", "invalid_manifest", "partial_manifest", "missing_playbook", "failed"] },
       "message": { "type": "string", "nonEmpty": true },
       "written_files": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
       "skipped_files": { "type": "array", "items": { "type": "string", "nonEmpty": true } },

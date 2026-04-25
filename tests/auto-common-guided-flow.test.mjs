@@ -13,6 +13,7 @@ describe("auto-common-guided flow", () => {
   it("registers project-guidance and resolves canonical phase artifact names", () => {
     const registry = createNodeRegistry();
     assert.equal(registry.has("project-guidance"), true);
+    assert.equal(registry.has("playbook-ensure"), true);
     assert.match(projectGuidanceJsonFile("AG-103@test", "plan", 2), /project-guidance-plan-AG-103@test-2\.json$/);
     assert.match(projectGuidanceFile("AG-103@test", "repair\/review-fix", 2), /project-guidance-repair-review-fix-AG-103@test-2\.md$/);
   });
@@ -23,6 +24,7 @@ describe("auto-common-guided flow", () => {
     assert.deepEqual(phaseIds, [
       "source",
       "normalize",
+      "playbook",
       "plan_guidance",
       "plan",
       "design_review_guidance",
@@ -30,11 +32,14 @@ describe("auto-common-guided flow", () => {
       "implement_guidance",
       "implement",
       "review_guidance",
+      "repair_guidance",
       "review-loop",
     ]);
+    assert.equal(flow.phases.find((phase) => phase.id === "playbook").steps[0].node, "playbook-ensure");
+    assert.equal(flow.phases.find((phase) => phase.id === "playbook").steps[1].params.fileName.const, "playbook-init.json");
     assert.equal(flow.phases.find((phase) => phase.id === "plan_guidance").steps[0].node, "project-guidance");
     assert.equal(flow.phases.find((phase) => phase.id === "implement_guidance").steps[0].node, "project-guidance");
-    assert.equal(flow.phases.find((phase) => phase.id === "review_guidance").steps[1].params.phase.const, "repair/review-fix");
+    assert.equal(flow.phases.find((phase) => phase.id === "repair_guidance").steps[0].params.phase.const, "repair/review-fix");
   });
 
   it("prompt templates keep guidance supplemental to required planning JSON", () => {
