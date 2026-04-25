@@ -22,6 +22,7 @@ import { llmPromptNode } from "./nodes/llm-prompt-node.js";
 import { opencodePromptNode } from "./nodes/opencode-prompt-node.js";
 import { planCodexNode } from "./nodes/plan-codex-node.js";
 import { playbookInventoryNode } from "./nodes/playbook-inventory-node.js";
+import { playbookEnsureNode } from "./nodes/playbook-ensure-node.js";
 import { playbookQuestionsFormNode } from "./nodes/playbook-questions-form-node.js";
 import { playbookWriteNode } from "./nodes/playbook-write-node.js";
 import { planningBundleNode } from "./nodes/planning-bundle-node.js";
@@ -66,6 +67,7 @@ export type BuiltInNodeKind =
   | "opencode-prompt"
   | "plan-codex"
   | "playbook-inventory"
+  | "playbook-ensure"
   | "playbook-questions-form"
   | "playbook-write"
   | "planning-bundle"
@@ -117,6 +119,7 @@ export const BUILT_IN_NODE_KINDS = [
   "opencode-prompt",
   "plan-codex",
   "playbook-inventory",
+  "playbook-ensure",
   "playbook-questions-form",
   "playbook-write",
   "planning-bundle",
@@ -158,6 +161,7 @@ const builtInNodes: Record<BuiltInNodeKind, AnyNodeDefinition> = {
   "opencode-prompt": opencodePromptNode as unknown as AnyNodeDefinition,
   "plan-codex": planCodexNode as unknown as AnyNodeDefinition,
   "playbook-inventory": playbookInventoryNode as unknown as AnyNodeDefinition,
+  "playbook-ensure": playbookEnsureNode as unknown as AnyNodeDefinition,
   "playbook-questions-form": playbookQuestionsFormNode as unknown as AnyNodeDefinition,
   "playbook-write": playbookWriteNode as unknown as AnyNodeDefinition,
   "planning-bundle": planningBundleNode as unknown as AnyNodeDefinition,
@@ -302,6 +306,12 @@ const builtInNodeMetadata: Record<BuiltInNodeKind, NodeContractMetadata> = {
     version: 1,
     prompt: "forbidden",
     requiredParams: ["outputJsonFile", "outputFile"],
+  },
+  "playbook-ensure": {
+    kind: "playbook-ensure",
+    version: 1,
+    prompt: "forbidden",
+    requiredParams: ["writeResultJsonFile"],
   },
   "playbook-questions-form": {
     kind: "playbook-questions-form",
