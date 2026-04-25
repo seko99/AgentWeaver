@@ -90,6 +90,8 @@ export function resolveNestedFlowParams(
       hasTaskInputJsonFile: contract.hasTaskInputJsonFile,
       taskInputJsonFilePath: contract.taskInputJsonFilePath,
       taskInputJsonFile: contract.taskInputJsonFile,
+      projectGuidanceFile: flowParams["projectGuidanceFile"] ?? "not provided",
+      projectGuidanceJsonFile: flowParams["projectGuidanceJsonFile"] ?? "not provided",
     }, {
       "params.designFile": contract.designFile,
       "params.designJsonFile": contract.designJsonFile,
@@ -162,6 +164,8 @@ export function resolveNestedFlowParams(
       hasTaskInputJsonFile: contract.hasTaskInputJsonFile,
       taskInputJsonFilePath: contract.taskInputJsonFilePath,
       taskInputJsonFile: contract.taskInputJsonFile,
+      projectGuidanceFile: flowParams["projectGuidanceFile"] ?? "not provided",
+      projectGuidanceJsonFile: flowParams["projectGuidanceJsonFile"] ?? "not provided",
     }, {
       "params.reviewFile": contract.reviewFile,
       "params.reviewJsonFile": contract.reviewJsonFile,
@@ -216,6 +220,8 @@ export function resolveNestedFlowParams(
       hasTaskInputJsonFile: contract.hasTaskInputJsonFile,
       taskInputJsonFilePath: contract.taskInputJsonFilePath,
       taskInputJsonFile: contract.taskInputJsonFile,
+      projectGuidanceFile: flowParams["projectGuidanceFile"] ?? "not provided",
+      projectGuidanceJsonFile: flowParams["projectGuidanceJsonFile"] ?? "not provided",
     }, {
       "params.designFile": contract.designFile,
       "params.designJsonFile": contract.designJsonFile,
@@ -249,7 +255,13 @@ export const flowRunNode: PipelineNodeDefinition<FlowRunNodeParams, FlowRunNodeR
     const flow = await loadNamedDeclarativeFlow(fileName, context.cwd, {
       ...(context.registryContext ? { registryContext: context.registryContext } : {}),
     });
-    const resolvedFlowParams = resolveNestedFlowParams(flow.kind, flowParams);
+    const resolvedFlowParams = resolveNestedFlowParams(flow.kind, {
+      projectGuidanceFile: "not provided",
+      projectGuidanceJsonFile: "not provided",
+      repairProjectGuidanceFile: "not provided",
+      repairProjectGuidanceJsonFile: "not provided",
+      ...flowParams,
+    });
 
     const resumeValue = isFlowRunResumeEnvelope(context.resumeStepValue)
       && context.resumeStepValue.flowKind === flow.kind

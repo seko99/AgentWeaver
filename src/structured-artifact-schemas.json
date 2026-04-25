@@ -1,4 +1,94 @@
 {
+  "project-guidance/v1": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string", "nonEmpty": true },
+      "status": { "type": "string", "enum": ["available", "missing_playbook", "empty_selection", "invalid_playbook"] },
+      "phase": { "type": "string", "enum": ["plan", "design-review", "implement", "review", "repair/review-fix"] },
+      "source_playbook": {
+        "type": "object",
+        "properties": {
+          "root_dir": { "type": "string", "nonEmpty": true },
+          "manifest_path": { "type": "string", "nonEmpty": true },
+          "exists": { "type": "boolean" },
+          "valid": { "type": "boolean" },
+          "error": { "type": "string", "nonEmpty": true }
+        },
+        "required": ["root_dir", "manifest_path", "exists", "valid"]
+      },
+      "task_signals": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "nonEmpty": true },
+          "source_type": { "type": "string", "nonEmpty": true },
+          "keywords": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+          "file_globs": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+          "referenced_paths": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+          "languages": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+          "frameworks": { "type": "array", "items": { "type": "string", "nonEmpty": true } }
+        },
+        "required": ["title", "source_type", "keywords", "file_globs", "referenced_paths", "languages", "frameworks"]
+      },
+      "selected_practices": { "type": "array", "items": { "type": "object", "properties": {
+        "id": { "type": "string", "nonEmpty": true },
+        "title": { "type": "string", "nonEmpty": true },
+        "kind": { "type": "string", "enum": ["practice"] },
+        "source_path": { "type": "string", "nonEmpty": true },
+        "selection_reasons": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 1 },
+        "relevance_score": { "type": "number" },
+        "priority": { "type": "number" },
+        "severity": { "type": "string", "enum": ["must", "should", "info"] },
+        "reference_only": { "type": "boolean" },
+        "reference": { "type": "object", "properties": {
+          "source_path": { "type": "string", "nonEmpty": true },
+          "reason": { "type": "string", "nonEmpty": true }
+        }, "required": ["source_path", "reason"] },
+        "inline_content": { "type": "string", "nonEmpty": true }
+      }, "required": ["id", "title", "kind", "source_path", "selection_reasons", "relevance_score", "priority", "severity", "reference_only", "reference"] } },
+      "selected_examples": { "type": "array", "items": { "type": "object", "properties": {
+        "id": { "type": "string", "nonEmpty": true },
+        "title": { "type": "string", "nonEmpty": true },
+        "kind": { "type": "string", "enum": ["example"] },
+        "source_path": { "type": "string", "nonEmpty": true },
+        "selection_reasons": { "type": "array", "items": { "type": "string", "nonEmpty": true }, "minItems": 1 },
+        "relevance_score": { "type": "number" },
+        "priority": { "type": "number" },
+        "severity": { "type": "string", "enum": ["must", "should", "info"] },
+        "reference_only": { "type": "boolean" },
+        "reference": { "type": "object", "properties": {
+          "source_path": { "type": "string", "nonEmpty": true },
+          "reason": { "type": "string", "nonEmpty": true }
+        }, "required": ["source_path", "reason"] },
+        "inline_content": { "type": "string", "nonEmpty": true }
+      }, "required": ["id", "title", "kind", "source_path", "selection_reasons", "relevance_score", "priority", "severity", "reference_only", "reference"] } },
+      "always_include": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "phase_sections": { "type": "array", "items": { "type": "string", "nonEmpty": true } },
+      "budget": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "number", "minimum": 0 },
+          "used": { "type": "number", "minimum": 0 },
+          "remaining": { "type": "number", "minimum": 0 },
+          "inline_threshold": { "type": "number", "minimum": 0 },
+          "unit": { "type": "string", "enum": ["approx_tokens"] },
+          "estimator": { "type": "string", "enum": ["chars_div_4"] }
+        },
+        "required": ["limit", "used", "remaining", "inline_threshold", "unit", "estimator"]
+      },
+      "skipped_items": { "type": "array", "items": { "type": "object", "properties": {
+        "id": { "type": "string", "nonEmpty": true },
+        "kind": { "type": "string", "enum": ["practice", "example", "always_include"] },
+        "source_path": { "type": "string", "nonEmpty": true },
+        "reason": { "type": "string", "nonEmpty": true }
+      }, "required": ["id", "kind", "source_path", "reason"] } },
+      "warnings": { "type": "array", "items": { "type": "object", "properties": {
+        "code": { "type": "string", "nonEmpty": true },
+        "message": { "type": "string", "nonEmpty": true },
+        "severity": { "type": "string", "enum": ["info", "warning", "error"] }
+      }, "required": ["code", "message", "severity"] } }
+    },
+    "required": ["summary", "status", "phase", "source_playbook", "task_signals", "selected_practices", "selected_examples", "always_include", "phase_sections", "budget", "skipped_items", "warnings"]
+  },
   "bug-analysis/v1": {
     "type": "object",
     "properties": {

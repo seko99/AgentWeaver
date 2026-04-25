@@ -1,0 +1,246 @@
+{
+  "kind": "auto-common-guided-flow",
+  "version": 1,
+  "description": "End-to-end auto-common pipeline with compact manifest.yaml project guidance generated before guided LLM phases.",
+  "phases": [
+    {
+      "id": "source",
+      "steps": [
+        {
+          "id": "fetch_jira_source",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "jira-fetch.json" },
+            "labelText": { "const": "Fetching Jira task source" },
+            "jiraApiUrl": { "ref": "params.jiraApiUrl" },
+            "taskKey": { "ref": "params.taskKey" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "normalize",
+      "steps": [
+        {
+          "id": "run_normalize_source",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "normalize-task-source.json" },
+            "labelText": { "const": "Normalizing task source" },
+            "taskKey": { "ref": "params.taskKey" },
+            "iteration": { "ref": "params.taskContextIteration" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
+            "extraPrompt": { "ref": "params.extraPrompt" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "plan_guidance",
+      "steps": [
+        {
+          "id": "write_plan_guidance",
+          "node": "project-guidance",
+          "params": {
+            "taskContextJsonFile": { "artifact": { "kind": "task-context-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.taskContextIteration" } } },
+            "phase": { "const": "plan" },
+            "outputJsonFile": { "artifact": { "kind": "project-guidance-plan-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "outputFile": { "artifact": { "kind": "project-guidance-plan-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "markdownLanguage": { "ref": "params.mdLang" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "plan",
+      "steps": [
+        {
+          "id": "run_plan_flow",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "plan.json" },
+            "labelText": { "const": "Running planning flow" },
+            "taskKey": { "ref": "params.taskKey" },
+            "taskContextIteration": { "ref": "params.taskContextIteration" },
+            "designIteration": { "ref": "params.designIteration" },
+            "planIteration": { "ref": "params.planIteration" },
+            "qaIteration": { "ref": "params.qaIteration" },
+            "projectGuidanceFile": { "ref": "steps.plan_guidance.write_plan_guidance.value.outputFile" },
+            "projectGuidanceJsonFile": { "ref": "steps.plan_guidance.write_plan_guidance.value.outputJsonFile" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "mdLang": { "ref": "params.mdLang" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "design_review_guidance",
+      "steps": [
+        {
+          "id": "write_design_review_guidance",
+          "node": "project-guidance",
+          "params": {
+            "taskContextJsonFile": { "artifact": { "kind": "task-context-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.taskContextIteration" } } },
+            "phase": { "const": "design-review" },
+            "outputJsonFile": { "artifact": { "kind": "project-guidance-design-review-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "outputFile": { "artifact": { "kind": "project-guidance-design-review-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "markdownLanguage": { "ref": "params.mdLang" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "design_review_loop",
+      "steps": [
+        {
+          "id": "run_design_review_loop",
+          "node": "flow-run",
+          "params": {
+            "fileName": { "const": "design-review-loop.json" },
+            "labelText": { "const": "Running design-review loop" },
+            "taskKey": { "ref": "params.taskKey" },
+            "baseIteration": { "ref": "params.designReviewBaseIteration" },
+            "workspaceDir": { "ref": "params.workspaceDir" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "projectGuidanceFile": { "ref": "steps.design_review_guidance.write_design_review_guidance.value.outputFile" },
+            "projectGuidanceJsonFile": { "ref": "steps.design_review_guidance.write_design_review_guidance.value.outputJsonFile" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" }
+          },
+          "stopFlowIf": {
+            "equals": [
+              { "ref": "steps.design_review_loop.run_design_review_loop.value.executionState.terminationOutcome" },
+              { "const": "stopped" }
+            ]
+          },
+          "stopFlowOutcome": "stopped"
+        }
+      ]
+    },
+    {
+      "id": "implement_guidance",
+      "steps": [
+        {
+          "id": "write_implement_guidance",
+          "node": "project-guidance",
+          "params": {
+            "taskContextJsonFile": { "artifact": { "kind": "task-context-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.taskContextIteration" } } },
+            "phase": { "const": "implement" },
+            "outputJsonFile": { "artifact": { "kind": "project-guidance-implement-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "outputFile": { "artifact": { "kind": "project-guidance-implement-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "markdownLanguage": { "ref": "params.mdLang" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "implement",
+      "steps": [
+        {
+          "id": "resolve_planning_bundle",
+          "node": "planning-bundle",
+          "params": { "taskKey": { "ref": "params.taskKey" } }
+        },
+        {
+          "id": "run_implement",
+          "node": "llm-prompt",
+          "routingGroup": "implementation",
+          "prompt": {
+            "templateRef": "implement",
+            "vars": {
+              "design_file": { "ref": "steps.implement.resolve_planning_bundle.value.designFile" },
+              "design_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.designJsonFile" },
+              "plan_file": { "ref": "steps.implement.resolve_planning_bundle.value.planFile" },
+              "plan_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.planJsonFile" },
+              "qa_file": { "ref": "steps.implement.resolve_planning_bundle.value.qaFile" },
+              "qa_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.qaJsonFile" },
+              "project_guidance_file": { "ref": "steps.implement_guidance.write_implement_guidance.value.outputFile" },
+              "project_guidance_json_file": { "ref": "steps.implement_guidance.write_implement_guidance.value.outputJsonFile" }
+            },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "format": "task-prompt"
+          },
+          "params": {
+            "labelText": { "const": "Running implementation mode locally" },
+            "model": { "ref": "params.llmModel" },
+            "executor": { "ref": "params.llmExecutor" }
+          }
+        },
+        {
+          "id": "notify_implement_complete",
+          "node": "telegram-notify",
+          "params": { "message": { "template": "Implementation phase for {taskKey} complete.", "vars": { "taskKey": { "ref": "params.taskKey" } } } }
+        }
+      ]
+    },
+    {
+      "id": "review_guidance",
+      "steps": [
+        {
+          "id": "write_review_guidance",
+          "node": "project-guidance",
+          "params": {
+            "taskContextJsonFile": { "artifact": { "kind": "task-context-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.taskContextIteration" } } },
+            "phase": { "const": "review" },
+            "outputJsonFile": { "artifact": { "kind": "project-guidance-review-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "outputFile": { "artifact": { "kind": "project-guidance-review-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "markdownLanguage": { "ref": "params.mdLang" }
+          }
+        },
+        {
+          "id": "write_repair_guidance",
+          "node": "project-guidance",
+          "params": {
+            "taskContextJsonFile": { "artifact": { "kind": "task-context-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.taskContextIteration" } } },
+            "phase": { "const": "repair/review-fix" },
+            "outputJsonFile": { "artifact": { "kind": "project-guidance-repair-review-fix-json-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "outputFile": { "artifact": { "kind": "project-guidance-repair-review-fix-file", "taskKey": { "ref": "params.taskKey" }, "iteration": { "ref": "params.planIteration" } } },
+            "markdownLanguage": { "ref": "params.mdLang" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "review-loop",
+      "steps": [
+        {
+          "id": "run_review_loop",
+          "node": "flow-run",
+          "stopFlowIf": {
+            "not": {
+              "equals": [
+                { "ref": "steps.review-loop.run_review_loop.value.executionState.terminationOutcome" },
+                { "const": "success" }
+              ]
+            }
+          },
+          "stopFlowOutcome": "stopped",
+          "params": {
+            "fileName": { "const": "review-loop.json" },
+            "labelText": { "const": "Running review-loop" },
+            "taskKey": { "ref": "params.taskKey" },
+            "baseIteration": { "ref": "params.baseIteration" },
+            "workspaceDir": { "ref": "params.workspaceDir" },
+            "extraPrompt": { "ref": "params.extraPrompt" },
+            "reviewFixPoints": { "ref": "params.reviewFixPoints" },
+            "reviewBlockingSeverities": { "ref": "params.reviewBlockingSeverities" },
+            "projectGuidanceFile": { "ref": "steps.review_guidance.write_review_guidance.value.outputFile" },
+            "projectGuidanceJsonFile": { "ref": "steps.review_guidance.write_review_guidance.value.outputJsonFile" },
+            "repairProjectGuidanceFile": { "ref": "steps.review_guidance.write_repair_guidance.value.outputFile" },
+            "repairProjectGuidanceJsonFile": { "ref": "steps.review_guidance.write_repair_guidance.value.outputJsonFile" },
+            "llmExecutor": { "ref": "params.llmExecutor" },
+            "llmModel": { "ref": "params.llmModel" }
+          }
+        },
+        {
+          "id": "notify_task_complete",
+          "node": "telegram-notify",
+          "params": { "message": { "template": "Task {taskKey} complete.", "vars": { "taskKey": { "ref": "params.taskKey" } } } }
+        }
+      ]
+    }
+  ]
+}

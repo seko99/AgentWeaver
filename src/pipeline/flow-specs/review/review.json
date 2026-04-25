@@ -20,6 +20,8 @@
               "design_json_file": { "ref": "params.designJsonFile" },
               "plan_file": { "ref": "params.planFile" },
               "plan_json_file": { "ref": "params.planJsonFile" },
+              "project_guidance_file": { "ref": "params.projectGuidanceFile" },
+              "project_guidance_json_file": { "ref": "params.projectGuidanceJsonFile" },
               "review_file": {
                 "artifact": {
                   "kind": "review-file",

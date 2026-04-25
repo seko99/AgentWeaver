@@ -203,6 +203,8 @@
                   "taskKey": { "ref": "params.taskKey" }
                 }
               },
+              "project_guidance_file": { "ref": "params.projectGuidanceFile" },
+              "project_guidance_json_file": { "ref": "params.projectGuidanceJsonFile" },
               "design_file": {
                 "artifact": {
                   "kind": "design-file",

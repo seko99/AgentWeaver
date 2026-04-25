@@ -106,7 +106,9 @@
               "plan_file": { "ref": "steps.implement.resolve_planning_bundle.value.planFile" },
               "plan_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.planJsonFile" },
               "qa_file": { "ref": "steps.implement.resolve_planning_bundle.value.qaFile" },
-              "qa_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.qaJsonFile" }
+              "qa_json_file": { "ref": "steps.implement.resolve_planning_bundle.value.qaJsonFile" },
+              "project_guidance_file": { "const": "not provided" },
+              "project_guidance_json_file": { "const": "not provided" }
             },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"

@@ -54,7 +54,9 @@
                   "taskKey": { "ref": "params.taskKey" },
                   "iteration": { "ref": "params.planningIteration" }
                 }
-              }
+              },
+              "project_guidance_file": { "ref": "params.projectGuidanceFile" },
+              "project_guidance_json_file": { "ref": "params.projectGuidanceJsonFile" }
             },
             "extraPrompt": { "ref": "params.extraPrompt" },
             "format": "task-prompt"

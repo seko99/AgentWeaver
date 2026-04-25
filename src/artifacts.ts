@@ -222,6 +222,30 @@ export function taskContextJsonFile(taskKey: string, iteration?: number): string
   return versionedJsonArtifactFile(taskKey, "task-context", iteration);
 }
 
+export type ProjectGuidanceArtifactPhase =
+  | "plan"
+  | "design-review"
+  | "implement"
+  | "review"
+  | "repair/review-fix";
+
+export function projectGuidanceArtifactStem(phase: ProjectGuidanceArtifactPhase): string {
+  switch (phase) {
+    case "repair/review-fix":
+      return "project-guidance-repair-review-fix";
+    default:
+      return `project-guidance-${phase}`;
+  }
+}
+
+export function projectGuidanceFile(taskKey: string, phase: ProjectGuidanceArtifactPhase, iteration?: number): string {
+  return versionedMarkdownArtifactFile(taskKey, projectGuidanceArtifactStem(phase), iteration);
+}
+
+export function projectGuidanceJsonFile(taskKey: string, phase: ProjectGuidanceArtifactPhase, iteration?: number): string {
+  return versionedJsonArtifactFile(taskKey, projectGuidanceArtifactStem(phase), iteration);
+}
+
 export function taskDescribeInputJsonFile(taskKey: string): string {
   return taskArtifactsFile(taskKey, `task-describe-input-${taskKey}.json`);
 }

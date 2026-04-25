@@ -137,3 +137,15 @@ The validator must fail explicitly in these cases:
 - `severity` is not `must`, `should`, or `info`
 - ids are duplicated
 - a relationship reference points to an unknown id
+
+## Компактные проектные рекомендации
+
+`auto-common-guided` использует только `.agentweaver/playbook/manifest.yaml` как канонический источник проектных правил. Старые `.agentweaver/playbook/playbook.json` и `.agentweaver/playbook/playbook.md` не используются как семантический fallback.
+
+Перед фазами `plan`, `design-review`, `implement`, `review` и `repair/review-fix` поток пишет структурированный `project-guidance/v1` JSON и производный markdown. Канонические имена артефактов: `project-guidance-plan`, `project-guidance-design-review`, `project-guidance-implement`, `project-guidance-review`, `project-guidance-repair-review-fix`.
+
+Выбор рекомендаций учитывает фазу, `always_include`, `priority`, `severity`, ключевые слова, glob-пути, языки и фреймворки из task context. Бюджеты приблизительные: `plan` 1200, `design-review` 1000, `implement` 1400, `review` 1000, `repair/review-fix` 1000 токенов; порог inline-элемента по умолчанию 300 приблизительных токенов. Длинные примеры остаются ссылками на файлы, а не копируются целиком в подсказку.
+
+Если `manifest.yaml` отсутствует, создается явный `missing_playbook` артефакт, и guided-поток может продолжить работу. Если manifest некорректен, стандартная политика `fail_before_prompt` останавливает выполнение до LLM-подсказки; `invalid_playbook` предназначен только для явного диагностического режима.
+
+Project guidance является дополнительным контекстом. Он не заменяет task context, design, plan, QA, design-review или review JSON, которые остаются источником истины.
