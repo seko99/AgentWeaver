@@ -118,14 +118,14 @@ function toFinalPlaybook(draft: PlaybookDraftArtifact, draftJsonFile: string): R
 function renderFinalMarkdown(finalPlaybook: Record<string, unknown>): string {
   const rules = Array.isArray(finalPlaybook.rules) ? finalPlaybook.rules as DraftRule[] : [];
   return [
-    "# Проектный playbook",
+    "# Project playbook",
     "",
     String(finalPlaybook.summary ?? ""),
     "",
-    "## Обязательные правила",
+    "## Required rules",
     ...(rules.length === 0
-      ? ["- Нет принятых обязательных правил."]
-      : rules.map((rule) => `- ${rule.title}: ${rule.rule}\n  Доказательства: ${rule.evidence_paths.join(", ")}`)),
+      ? ["- No accepted required rules."]
+      : rules.map((rule) => `- ${rule.title}: ${rule.rule}\n  Evidence: ${rule.evidence_paths.join(", ")}`)),
     "",
   ].join("\n");
 }

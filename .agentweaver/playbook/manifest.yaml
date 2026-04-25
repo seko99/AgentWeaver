@@ -1,0 +1,49 @@
+version: 1
+project:
+  name: "Generated Project Playbook"
+context_budgets:
+  plan: 1200
+  design_review: 1000
+  implement: 1400
+  review: 1000
+  repair: 1000
+practices:
+  paths:
+    - "practices/generated-rules.md"
+    - "practices/documentation-language.md"
+  globs: []
+examples:
+  paths:
+    - "examples/generated-example.md"
+  globs: []
+templates:
+  paths:
+    - "templates/default.md"
+  globs: []
+always_include:
+  - "project.md"
+selection:
+  include_examples: true
+  max_examples: 1
+evidence_paths:
+  - ".agentweaver/.env"
+  - ".env.example"
+  - "package.json"
+  - "scripts/copy-flow-specs.mjs"
+  - "src/executors/configs/codex-config.ts"
+  - "src/executors/configs/fetch-gitlab-diff-config.ts"
+  - "src/executors/configs/fetch-gitlab-review-config.ts"
+  - "src/executors/configs/jira-fetch-config.ts"
+  - "src/executors/configs/opencode-config.ts"
+  - "src/executors/configs/process-config.ts"
+  - "src/executors/configs/telegram-notifier-config.ts"
+  - "tests"
+  - "tests/artifact-registry.test.mjs"
+  - "tests/auto-common-flow.test.ts"
+  - "tests/doctor"
+  - "tests/pipeline"
+  - "tests/pipeline/nodes"
+  - "tests/pipeline/nodes/ensure-summary-json-node.test.mjs"
+  - "tests/runtime"
+  - "tests/runtime/ready-to-merge.test.mjs"
+  - "tsconfig.json"

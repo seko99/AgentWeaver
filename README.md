@@ -428,6 +428,7 @@ Recommended smoke checks:
 node dist/index.js --help
 node dist/index.js auto-golang --help-phases
 node dist/index.js auto-common --help-phases
+node dist/index.js auto-common-guided --help-phases
 node dist/index.js plan --dry DEMO-1234
 node dist/index.js implement --dry DEMO-1234
 node dist/index.js review --dry DEMO-1234
@@ -435,6 +436,17 @@ node dist/index.js review --dry DEMO-1234
 
 ## Guided Project Guidance
 
-`auto-common-guided` сначала выполняет те же Jira fetch и нормализацию задачи, что и `auto-common`, затем проверяет `.agentweaver/playbook/manifest.yaml` и генерирует компактные проектные рекомендации перед фазами planning, design review, implementation, review и repair. JSON-артефакты остаются англоязычными и машинно-читаемыми, markdown создается на выбранном языке workflow.
+`auto-common-guided` first runs the same Jira fetch and task normalization steps as `auto-common`, then validates `.agentweaver/playbook/manifest.yaml` and generates compact project guidance before the `plan`, `design-review`, `implement`, `review`, and `repair/review-fix` phases. JSON artifacts remain English and machine-readable; markdown is generated in the workflow-selected language.
 
-Поток не читает старые `playbook.json` или `playbook.md` как fallback. В неинтерактивном запуске отсутствующий manifest останавливает поток до planning и пишет действие: сначала запустить `agentweaver playbook-init --accept-playbook-draft` или повторить `agentweaver auto-common-guided --accept-playbook-draft <jira>`. Флаг `--accept-playbook-draft` явно принимает сгенерированный playbook без интерактивной проверки и позволяет записать manifest-based layout. Некорректный manifest останавливает guided-фазу до LLM prompt.
+The workflow does not read old `playbook.json` or `playbook.md` files as fallbacks. In non-interactive runs, a missing manifest stops the workflow before planning and reports the required action: run `agentweaver playbook-init --accept-playbook-draft` first, or rerun `agentweaver auto-common-guided --accept-playbook-draft <jira>`. The `--accept-playbook-draft` flag explicitly accepts the generated playbook without interactive review and allows AgentWeaver to write the manifest-based layout. An invalid manifest stops the guided phase before the LLM prompt.
+
+Minimal commands:
+
+```bash
+agentweaver playbook-init
+agentweaver playbook-init --accept-playbook-draft
+agentweaver auto-common-guided --help-phases
+agentweaver auto-common-guided --accept-playbook-draft DEMO-1234
+```
+
+Limitations: skills integration is not available yet; the playbook generator must rely on repository evidence and clarification answers; guided prompts receive only compact context and open full examples only when they are directly relevant to the current phase.

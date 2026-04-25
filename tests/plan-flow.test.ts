@@ -4,6 +4,22 @@ import { planArtifacts } from "../src/artifacts.js";
 import { loadDeclarativeFlow } from "../src/pipeline/declarative-flows.js";
 
 describe("plan flow structure", () => {
+  it("passes compact project guidance into planning questions and plan generation", async () => {
+    const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
+    const planPhase = flow.phases.find((phase) => phase.id === "plan");
+    const questionsStep = planPhase?.steps.find((step) => step.id === "generate_planning_questions");
+    const runPlanStep = planPhase?.steps.find((step) => step.id === "run_plan");
+
+    expect(questionsStep?.prompt?.vars).toMatchObject({
+      project_guidance_file: { ref: "params.projectGuidanceFile" },
+      project_guidance_json_file: { ref: "params.projectGuidanceJsonFile" },
+    });
+    expect(runPlanStep?.prompt?.vars).toMatchObject({
+      project_guidance_file: { ref: "params.projectGuidanceFile" },
+      project_guidance_json_file: { ref: "params.projectGuidanceJsonFile" },
+    });
+  });
+
   it("notifies about planning questions only when the form has at least one question", async () => {
     const flow = await loadDeclarativeFlow({ source: "built-in", fileName: "plan.json" });
     const planPhase = flow.phases.find((phase) => phase.id === "plan");

@@ -40,9 +40,17 @@ describe("auto-common-guided flow", () => {
     assert.equal(flow.phases.find((phase) => phase.id === "plan_guidance").steps[0].node, "project-guidance");
     assert.equal(flow.phases.find((phase) => phase.id === "implement_guidance").steps[0].node, "project-guidance");
     assert.equal(flow.phases.find((phase) => phase.id === "repair_guidance").steps[0].params.phase.const, "repair/review-fix");
+
+    const planFlowStep = flow.phases.find((phase) => phase.id === "plan").steps[0];
+    assert.equal(planFlowStep.params.projectGuidanceFile.ref, "steps.plan_guidance.write_plan_guidance.value.outputFile");
+    assert.equal(planFlowStep.params.projectGuidanceJsonFile.ref, "steps.plan_guidance.write_plan_guidance.value.outputJsonFile");
   });
 
   it("prompt templates keep guidance supplemental to required planning JSON", () => {
+    const questionsPrompt = getPromptTemplate("plan-questions");
+    assert.match(questionsPrompt, /supplemental project-local context/);
+    assert.match(questionsPrompt, /planning-questions\/v1 schema/);
+
     const implementPrompt = getPromptTemplate("implement");
     assert.match(implementPrompt, /supplemental/);
     assert.match(implementPrompt, /do not let it override the design, plan, or QA JSON/);

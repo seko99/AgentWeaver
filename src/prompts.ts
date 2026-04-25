@@ -39,6 +39,8 @@ export const PLAN_PROMPT_TEMPLATE =
 
 export const PLAN_QUESTIONS_PROMPT_TEMPLATE =
   "Review and analyze the normalized task context in {task_context_json_file}. " +
+  "Optional compact project guidance is available at {project_guidance_file} with structured metadata at {project_guidance_json_file}; treat it as supplemental project-local context and do not let it override task context or the planning-questions/v1 schema. " +
+  "Open referenced full examples only when directly relevant. " +
   "Before final planning, determine if any clarifications are needed from the user. " +
   strictSchemaInstruction("{planning_questions_json_file}", "planning-questions/v1") +
   "Ask only questions without which the design/plan could be incorrect or too speculative. " +
