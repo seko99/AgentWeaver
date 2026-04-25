@@ -1,21 +1,21 @@
-# Flow Specs
+# Declarative Workflows
 
-This document describes the declarative flow-spec format used by AgentWeaver today.
+This document describes the declarative workflow and flow-spec format used by AgentWeaver today.
 
 In architectural terms, flow specs are the language AgentWeaver uses for harness engineering. They are not just config files for commands. They define the workflow model that the CLI, resumable automation, and TUI all operate on.
 
 The current implementation lives in:
 
-- [src/pipeline/spec-types.ts](src/pipeline/spec-types.ts)
-- [src/pipeline/spec-loader.ts](src/pipeline/spec-loader.ts)
-- [src/pipeline/spec-validator.ts](src/pipeline/spec-validator.ts)
-- [src/pipeline/spec-compiler.ts](src/pipeline/spec-compiler.ts)
-- [src/pipeline/declarative-flow-runner.ts](src/pipeline/declarative-flow-runner.ts)
-- [src/pipeline/value-resolver.ts](src/pipeline/value-resolver.ts)
+- [src/pipeline/spec-types.ts](../src/pipeline/spec-types.ts)
+- [src/pipeline/spec-loader.ts](../src/pipeline/spec-loader.ts)
+- [src/pipeline/spec-validator.ts](../src/pipeline/spec-validator.ts)
+- [src/pipeline/spec-compiler.ts](../src/pipeline/spec-compiler.ts)
+- [src/pipeline/declarative-flow-runner.ts](../src/pipeline/declarative-flow-runner.ts)
+- [src/pipeline/value-resolver.ts](../src/pipeline/value-resolver.ts)
 
 If this document and the code disagree, the code is the source of truth.
 
-## Why Flow Specs Exist
+## Why Declarative Workflows Exist
 
 Flow specs keep orchestration declarative:
 
@@ -189,8 +189,8 @@ Examples in the current codebase include:
 
 See:
 
-- [src/pipeline/node-registry.ts](src/pipeline/node-registry.ts)
-- [src/pipeline/nodes/](src/pipeline/nodes)
+- [src/pipeline/node-registry.ts](../src/pipeline/node-registry.ts)
+- [src/pipeline/nodes/](../src/pipeline/nodes)
 
 ## Prompt Binding
 
@@ -226,8 +226,8 @@ At least one of `templateRef` or `inlineTemplate` must be present when `prompt` 
 
 See:
 
-- [src/pipeline/prompt-registry.ts](src/pipeline/prompt-registry.ts)
-- [src/pipeline/prompt-runtime.ts](src/pipeline/prompt-runtime.ts)
+- [src/pipeline/prompt-registry.ts](../src/pipeline/prompt-registry.ts)
+- [src/pipeline/prompt-runtime.ts](../src/pipeline/prompt-runtime.ts)
 
 ## Params
 
