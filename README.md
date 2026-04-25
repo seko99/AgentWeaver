@@ -40,14 +40,15 @@ In practice, this means you can treat an agent workflow like an engineered syste
 - `scope`: isolated workspace key for artifacts and flow state; usually based on Jira task, otherwise derived from git context
 - `artifact`: file produced or consumed by flows, used as the stable contract between stages
 - `flow state`: compact persisted execution metadata used for resume/restart in long-running flows such as `auto-golang`
+- `project playbook`: local `.agentweaver/playbook/` directory with `manifest.yaml`, practices, examples, and templates; the format is described in [docs/playbook.md](docs/playbook.md)
 
-## Семантика Запуска
+## Launch Semantics
 
-- `resume` возобновляет только реально прерванный запуск и использует сохранённое состояние исполнения без пересборки уже выполненных шагов
-- `continue` предназначен для завершённых итерационных циклов и запускает следующую итерацию от последних валидных артефактов без удаления исторических артефактов
-- `restart` считается новым запуском: текущая активная попытка архивируется в `.agentweaver/scopes/<scope>/.artifacts/restart-archives/attempt-XXXX`, после чего создаётся новая активная попытка
-- Для неоднозначных запусков оператор должен явно выбрать действие: в интерактивном режиме через подтверждение, в неинтерактивном режиме через `--resume`, `--continue` или `--restart`
-- Контракт распространяется на `auto-common`, `auto-simple`, `auto-golang`, `instant-task`, `review-loop`, `run-go-linter-loop` и `run-go-tests-loop`
+- `resume` only resumes a genuinely interrupted run and uses the saved execution state without rebuilding already completed steps
+- `continue` is intended for completed iterative cycles and starts the next iteration from the latest valid artifacts without deleting historical artifacts
+- `restart` is treated as a new run: the current active attempt is archived under `.agentweaver/scopes/<scope>/.artifacts/restart-archives/attempt-XXXX`, then a new active attempt is created
+- For ambiguous launches, the operator must choose the action explicitly: by confirmation in interactive mode, or with `--resume`, `--continue`, or `--restart` in non-interactive mode
+- This contract applies to `auto-common`, `auto-simple`, `auto-golang`, `instant-task`, `review-loop`, `run-go-linter-loop`, and `run-go-tests-loop`
 
 ## Declarative Workflow Model
 
