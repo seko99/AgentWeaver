@@ -122,6 +122,16 @@ There are also built-in nested/helper flows that are loaded declaratively but ar
 - `opencode` CLI if you use OpenCode-backed stages
 - access to Jira and/or GitLab when the selected flow needs them
 
+## Web UI
+
+The `agentweaver web [--no-open] [--host <host>|--listen-all] [<jira-browse-url|jira-issue-key>]` command starts interactive mode through the Web UI. By default, the server binds to `127.0.0.1`, asks the operating system for a random port, and prints the final address as `AgentWeaver Web UI: http://127.0.0.1:<port>/`.
+
+To open the Web UI from another machine on a trusted network, use `agentweaver web --listen-all` or `agentweaver web --host 0.0.0.0`. In this mode, the server listens on all interfaces; connect to the IP address of the machine running AgentWeaver and the assigned port.
+
+By default, AgentWeaver tries to open the browser after the server starts successfully and the URL is printed. For CI, tests, and manual smoke checks, use `agentweaver web --no-open` or the `AGENTWEAVER_WEB_NO_OPEN=1` environment variable; the `--no-open` flag is supported only after the `web` command.
+
+The first Web UI version serves a built-in HTML shell without a separate static asset pipeline. Live browser interaction with the interactive session uses WebSocket on the same server. Bounded checks can use `GET /__agentweaver/health`, and shutdown is available through `POST /__agentweaver/exit` or `SIGINT`/`SIGTERM`.
+
 ## Installation
 
 Local development:
