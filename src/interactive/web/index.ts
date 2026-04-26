@@ -76,8 +76,12 @@ export function createWebInteractiveSession(
         controller.updateActiveFormValues(action.values);
         return;
       }
+      if (action.type === "form.fieldUpdate") {
+        controller.updateFormField(action.fieldId, action.value);
+        return;
+      }
       if (action.type === "form.submit") {
-        controller.submitActiveFormValues(action.values);
+        controller.submitForm(action.values);
         return;
       }
       if (action.type === "form.cancel") {
@@ -85,7 +89,11 @@ export function createWebInteractiveSession(
         return;
       }
       if (action.type === "flow.interrupt") {
-        await controller.interruptFlow(action.flowId);
+        await controller.interruptCurrentFlow(action.flowId);
+        return;
+      }
+      if (action.type === "interrupt.openConfirm") {
+        controller.openInterruptConfirm();
         return;
       }
       if (action.type === "log.clear") {
@@ -93,7 +101,7 @@ export function createWebInteractiveSession(
         return;
       }
       if (action.type === "help.toggle") {
-        controller.toggleHelp(action.visible);
+        controller.showHelp(action.visible ?? !controller.getViewModel().helpVisible);
         return;
       }
       controller.scrollPane(action.pane, { ...(action.delta !== undefined ? { delta: action.delta } : {}), ...(action.offset !== undefined ? { offset: action.offset } : {}) });

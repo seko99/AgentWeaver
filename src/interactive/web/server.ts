@@ -125,13 +125,14 @@ function htmlShell(): string {
         action.className = "muted";
         return;
       }
-      if (viewModel.confirmText) {
+      if (viewModel.confirmation || viewModel.confirmText) {
+        const confirmation = viewModel.confirmation;
         const label = document.createElement("div");
-        label.textContent = viewModel.confirmText;
+        label.textContent = confirmation ? confirmation.text : viewModel.confirmText;
         const row = document.createElement("div");
         row.className = "row";
-        for (const name of ["resume", "continue", "restart", "stop", "ok", "cancel"]) {
-          if (!viewModel.confirmText.toLowerCase().includes(name === "ok" ? "ok" : name)) continue;
+        const actions = confirmation ? confirmation.actions : ["resume", "continue", "restart", "stop", "ok", "cancel"].filter((name) => viewModel.confirmText.toLowerCase().includes(name === "ok" ? "ok" : name));
+        for (const name of actions) {
           const button = document.createElement("button");
           button.textContent = name === "ok" ? "OK" : name[0].toUpperCase() + name.slice(1);
           button.onclick = () => {
@@ -140,10 +141,12 @@ function htmlShell(): string {
           };
           row.append(button);
         }
-        const cancel = document.createElement("button");
-        cancel.textContent = "Cancel";
-        cancel.onclick = () => send({ type: "confirm.cancel" });
-        row.append(cancel);
+        if (!actions.includes("cancel")) {
+          const cancel = document.createElement("button");
+          cancel.textContent = "Cancel";
+          cancel.onclick = () => send({ type: "confirm.cancel" });
+          row.append(cancel);
+        }
         action.append(label, row);
         return;
       }
@@ -153,7 +156,7 @@ function htmlShell(): string {
         const title = document.createElement("strong");
         title.textContent = formModel.definition.title;
         form.append(title);
-        for (const field of formModel.definition.fields) {
+        for (const field of formModel.fields || formModel.definition.fields) {
           const label = document.createElement("label");
           label.textContent = field.label;
           let input;
@@ -200,7 +203,16 @@ function htmlShell(): string {
           }
           return values;
         }
-        form.oninput = () => send({ type: "form.update", values: collectValues() });
+        form.oninput = (event) => {
+          const target = event.target;
+          if (target && target.dataset && target.dataset.fieldId) {
+            const fieldId = target.dataset.fieldId;
+            const values = collectValues();
+            send({ type: "form.fieldUpdate", fieldId, value: values[fieldId] });
+            return;
+          }
+          send({ type: "form.update", values: collectValues() });
+        };
         form.onsubmit = (event) => {
           event.preventDefault();
           send({ type: "form.submit", values: collectValues() });
@@ -215,7 +227,7 @@ function htmlShell(): string {
       run.onclick = () => send({ type: "run.openConfirm" });
       const interrupt = document.createElement("button");
       interrupt.textContent = "Interrupt";
-      interrupt.onclick = () => send({ type: "flow.interrupt" });
+      interrupt.onclick = () => send({ type: "interrupt.openConfirm" });
       row.append(run, interrupt);
       action.append(row);
       action.className = "muted";

@@ -19,8 +19,10 @@ describe("interactive web protocol", () => {
       { type: "confirm.accept" },
       { type: "confirm.cancel" },
       { type: "form.update", values: { name: "Ada" } },
+      { type: "form.fieldUpdate", fieldId: "name", value: "Ada" },
       { type: "form.submit", values: { name: "Ada" } },
       { type: "form.cancel" },
+      { type: "interrupt.openConfirm" },
       { type: "flow.interrupt", flowId: "plan" },
       { type: "log.clear" },
       { type: "help.toggle", visible: true },
@@ -40,6 +42,7 @@ describe("interactive web protocol", () => {
     assert.throws(() => parseClientAction(JSON.stringify({ type: "flow.select" })), /requires index or key/);
     assert.throws(() => parseClientAction(JSON.stringify({ type: "folder.toggle", key: "" })), /key must be a non-empty string/);
     assert.throws(() => parseClientAction(JSON.stringify({ type: "form.update", values: [] })), /values must be an object/);
+    assert.throws(() => parseClientAction(JSON.stringify({ type: "form.fieldUpdate", fieldId: "name" })), /value is required/);
     assert.throws(() => parseClientAction(JSON.stringify({ type: "scroll", pane: "bad", delta: 1 })), /scroll pane/);
     assert.throws(() => parseClientAction(JSON.stringify({ type: "scroll", pane: "log" })), /requires delta or offset/);
   });
