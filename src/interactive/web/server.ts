@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import http, { type IncomingMessage } from "node:http";
+import path from "node:path";
 import process from "node:process";
 import type { Duplex } from "node:stream";
+import { fileURLToPath } from "node:url";
 
 import type { ClientAction, ServerEvent } from "./protocol.js";
 import { parseClientAction } from "./protocol.js";
@@ -29,6 +32,50 @@ export type StartedWebServer = {
   broadcast(message: ServerEvent): void;
   close(): Promise<void>;
 };
+
+const STATIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "static");
+
+const CONTENT_TYPES = new Map<string, string>([
+  [".html", "text/html; charset=utf-8"],
+  [".css", "text/css; charset=utf-8"],
+  [".js", "text/javascript; charset=utf-8"],
+  [".json", "application/json; charset=utf-8"],
+  [".svg", "image/svg+xml; charset=utf-8"],
+]);
+
+function staticAssetPath(requestUrl: string | undefined): string | null {
+  const parsed = new URL(requestUrl ?? "/", "http://agentweaver.local");
+  const pathname = parsed.pathname === "/" ? "/index.html" : parsed.pathname;
+  if (pathname !== "/index.html" && !pathname.startsWith("/static/")) {
+    return null;
+  }
+  const relativePath = pathname === "/index.html" ? "index.html" : pathname.slice("/static/".length);
+  const normalized = path.normalize(relativePath);
+  if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
+    return null;
+  }
+  const assetPath = path.join(STATIC_DIR, normalized);
+  if (!assetPath.startsWith(STATIC_DIR) || !existsSync(assetPath) || !statSync(assetPath).isFile()) {
+    return null;
+  }
+  return assetPath;
+}
+
+function serveStaticAsset(request: IncomingMessage, response: http.ServerResponse): boolean {
+  if (request.method !== "GET") {
+    return false;
+  }
+  const assetPath = staticAssetPath(request.url);
+  if (!assetPath) {
+    return false;
+  }
+  response.writeHead(200, {
+    "content-type": CONTENT_TYPES.get(path.extname(assetPath)) ?? "application/octet-stream",
+    "cache-control": "no-store",
+  });
+  response.end(readFileSync(assetPath));
+  return true;
+}
 
 function htmlShell(): string {
   return `<!doctype html>
@@ -345,9 +392,7 @@ export async function startWebServer(options: WebServerOptions): Promise<Started
   const host = options.host?.trim() || "127.0.0.1";
   let closed = false;
   const server = http.createServer((request, response) => {
-    if (request.method === "GET" && request.url === "/") {
-      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end(htmlShell());
+    if (serveStaticAsset(request, response)) {
       return;
     }
     if (request.method === "GET" && request.url === "/__agentweaver/health") {

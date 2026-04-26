@@ -78,7 +78,7 @@ function readServerMessage(socket) {
 }
 
 describe("web server", () => {
-  it("starts on 127.0.0.1 with an assigned port and serves shell plus health", async (t) => {
+  it("starts on 127.0.0.1 with an assigned port and serves static console assets plus health", async (t) => {
     const server = await startOrSkip(t, {
       noOpen: true,
       onClientAction: () => {},
@@ -93,7 +93,17 @@ describe("web server", () => {
 
       const root = await fetch(server.url);
       assert.equal(root.status, 200);
-      assert.match(await root.text(), /AgentWeaver Web UI/);
+      assert.match(await root.text(), /AgentWeaver Operator Console/);
+
+      const script = await fetch(new URL("/static/app.js", server.url));
+      assert.equal(script.status, 200);
+      assert.match(script.headers.get("content-type") ?? "", /text\/javascript/);
+      assert.match(await script.text(), /WebSocket/);
+
+      const styles = await fetch(new URL("/static/styles.css", server.url));
+      assert.equal(styles.status, 200);
+      assert.match(styles.headers.get("content-type") ?? "", /text\/css/);
+      assert.match(await styles.text(), /workspace/);
 
       const health = await fetch(new URL("/__agentweaver/health", server.url));
       assert.equal(health.status, 200);

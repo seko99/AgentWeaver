@@ -661,6 +661,10 @@ export class InteractiveSessionController {
       flowItems: this.visibleFlowItems.map((item) => ({
         key: item.key,
         label: this.renderFlowTreeLabel(item),
+        kind: item.kind,
+        name: item.name,
+        depth: item.depth,
+        ...(item.kind === "folder" ? { expanded: this.expandedFlowFolders.has(item.key) } : {}),
       })),
       selectedFlowIndex: Math.max(0, this.visibleFlowItems.findIndex((item) => item.key === this.state.selectedFlowItemKey)),
       progressTitle: this.panelTitle("Current Flow", "progress"),
