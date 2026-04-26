@@ -5,11 +5,12 @@ import { FlowInterruptedError } from "../../errors.js";
 import { InteractiveSessionController } from "../controller.js";
 import type { InteractiveSession, InteractiveSessionOptions } from "../session.js";
 import type { ClientAction, ServerEvent } from "./protocol.js";
-import { startWebServer, type StartedWebServer, type WebServerOptions, type WebSocketClient } from "./server.js";
+import { startWebServer, type StartedWebServer, type WebServerAuthConfig, type WebServerOptions, type WebSocketClient } from "./server.js";
 
 export type CreateWebInteractiveSessionOptions = {
   noOpen?: boolean;
   host?: string;
+  auth?: WebServerAuthConfig;
   onServerReady?: (server: StartedWebServer) => void;
   printInfo?: (message: string) => void;
   openBrowser?: WebServerOptions["openBrowser"];
@@ -132,6 +133,7 @@ export function createWebInteractiveSession(
       void startWebServer({
         ...(webOptions.noOpen !== undefined ? { noOpen: webOptions.noOpen } : {}),
         ...(webOptions.host !== undefined ? { host: webOptions.host } : {}),
+        ...(webOptions.auth !== undefined ? { auth: webOptions.auth } : {}),
         printInfo: (message) => {
           webOptions.printInfo?.(message);
           controller.appendLog(message);

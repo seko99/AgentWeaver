@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import http, { type IncomingMessage } from "node:http";
 import path from "node:path";
@@ -19,11 +19,17 @@ export type WebSocketClient = {
 export type WebServerOptions = {
   noOpen?: boolean;
   host?: string;
+  auth?: WebServerAuthConfig;
   onClientAction: (action: ClientAction, client: WebSocketClient) => void;
   onClientConnected: (client: WebSocketClient) => void;
   onExitRequested: () => void;
   printInfo?: (message: string) => void;
   openBrowser?: (url: string) => Promise<void>;
+};
+
+export type WebServerAuthConfig = {
+  username: string;
+  password: string;
 };
 
 export type StartedWebServer = {
@@ -42,6 +48,72 @@ const CONTENT_TYPES = new Map<string, string>([
   [".json", "application/json; charset=utf-8"],
   [".svg", "image/svg+xml; charset=utf-8"],
 ]);
+
+const BASIC_AUTH_REALM = "AgentWeaver Web UI";
+
+function hashCredential(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
+function timingSafeStringEqual(actual: string, expected: string): boolean {
+  return timingSafeEqual(hashCredential(actual), hashCredential(expected));
+}
+
+function parseBasicAuthorization(header: string | undefined): { username: string; password: string } | null {
+  if (!header) {
+    return null;
+  }
+  const match = header.match(/^Basic\s+(.+)$/i);
+  if (!match?.[1]) {
+    return null;
+  }
+  let decoded: string;
+  try {
+    decoded = Buffer.from(match[1], "base64").toString("utf8");
+  } catch {
+    return null;
+  }
+  const separatorIndex = decoded.indexOf(":");
+  if (separatorIndex < 0) {
+    return null;
+  }
+  return {
+    username: decoded.slice(0, separatorIndex),
+    password: decoded.slice(separatorIndex + 1),
+  };
+}
+
+function isAuthorized(request: IncomingMessage, auth: WebServerAuthConfig | undefined): boolean {
+  if (!auth) {
+    return true;
+  }
+  const credentials = parseBasicAuthorization(request.headers.authorization);
+  if (!credentials) {
+    return false;
+  }
+  return timingSafeStringEqual(credentials.username, auth.username) && timingSafeStringEqual(credentials.password, auth.password);
+}
+
+function writeAuthRequired(response: http.ServerResponse): void {
+  response.writeHead(401, {
+    "content-type": "text/plain; charset=utf-8",
+    "www-authenticate": `Basic realm="${BASIC_AUTH_REALM}"`,
+    "cache-control": "no-store",
+  });
+  response.end("Authentication required");
+}
+
+function rejectUnauthorizedUpgrade(socket: Duplex): void {
+  socket.write([
+    "HTTP/1.1 401 Unauthorized",
+    `WWW-Authenticate: Basic realm="${BASIC_AUTH_REALM}"`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Connection: close",
+    "",
+    "Authentication required",
+  ].join("\r\n"));
+  socket.destroy();
+}
 
 function staticAssetPath(requestUrl: string | undefined): string | null {
   const parsed = new URL(requestUrl ?? "/", "http://agentweaver.local");
@@ -386,21 +458,39 @@ function defaultOpenBrowser(url: string): Promise<void> {
   });
 }
 
+function formatHostForUrl(host: string): string {
+  if (host.includes(":") && !host.startsWith("[")) {
+    return `[${host}]`;
+  }
+  return host;
+}
+
 export async function startWebServer(options: WebServerOptions): Promise<StartedWebServer> {
   const clients = new Set<WebSocketClient>();
   const sockets = new Set<Duplex>();
   const host = options.host?.trim() || "127.0.0.1";
+  const auth = options.auth;
   let closed = false;
   const server = http.createServer((request, response) => {
-    if (serveStaticAsset(request, response)) {
-      return;
-    }
     if (request.method === "GET" && request.url === "/__agentweaver/health") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify({ ok: true }));
       return;
     }
+    if (request.method === "GET" && staticAssetPath(request.url)) {
+      if (!isAuthorized(request, auth)) {
+        writeAuthRequired(response);
+        return;
+      }
+      if (serveStaticAsset(request, response)) {
+        return;
+      }
+    }
     if (request.method === "POST" && request.url === "/__agentweaver/exit") {
+      if (!isAuthorized(request, auth)) {
+        writeAuthRequired(response);
+        return;
+      }
       response.writeHead(202, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify({ ok: true }));
       options.onExitRequested();
@@ -419,6 +509,10 @@ export async function startWebServer(options: WebServerOptions): Promise<Started
   server.on("upgrade", (request: IncomingMessage, socket: Duplex) => {
     if (request.url !== "/__agentweaver/ws") {
       socket.destroy();
+      return;
+    }
+    if (!isAuthorized(request, auth)) {
+      rejectUnauthorizedUpgrade(socket);
       return;
     }
     const key = request.headers["sec-websocket-key"];
@@ -486,7 +580,7 @@ export async function startWebServer(options: WebServerOptions): Promise<Started
     throw new Error("Unable to determine assigned Web UI port.");
   }
 
-  const url = `http://${host}:${address.port}/`;
+  const url = `http://${formatHostForUrl(host)}:${address.port}/`;
   process.stdout.write(`AgentWeaver Web UI: ${url}\n`);
   if (!options.noOpen) {
     try {

@@ -126,7 +126,19 @@ There are also built-in nested/helper flows that are loaded declaratively but ar
 
 The `agentweaver web [--no-open] [--host <host>|--listen-all] [<jira-browse-url|jira-issue-key>]` command starts interactive mode through the Web UI. By default, the server binds to `127.0.0.1`, asks the operating system for a random port, and prints the final address as `AgentWeaver Web UI: http://127.0.0.1:<port>/`.
 
-To open the Web UI from another machine on a trusted network, use `agentweaver web --listen-all` or `agentweaver web --host 0.0.0.0`. In this mode, the server listens on all interfaces; connect to the IP address of the machine running AgentWeaver and the assigned port.
+To open the Web UI from another machine on a trusted network, configure Web UI credentials first:
+
+```bash
+export AGENTWEAVER_WEB_USERNAME=operator
+export AGENTWEAVER_WEB_PASSWORD='choose-a-strong-password'
+agentweaver web --listen-all --no-open
+```
+
+External binding requires both `AGENTWEAVER_WEB_USERNAME` and `AGENTWEAVER_WEB_PASSWORD`. This applies to `agentweaver web --listen-all`, `agentweaver web --host 0.0.0.0`, `agentweaver web --host ::`, explicit non-loopback IP addresses such as `192.168.1.10` or `2001:db8::1`, and any hostname other than `localhost`. In this mode, the server listens on the requested interface; connect to the IP address or hostname of the machine running AgentWeaver and the assigned port.
+
+The default localhost bindings, including `127.0.0.1`, `::1`, and `localhost`, remain no-auth by default. If Web UI credentials are configured, the same Basic auth check also protects localhost Web UI requests.
+
+Web UI authentication uses HTTP Basic auth. Over plain HTTP, use it only on trusted networks because credentials are not encrypted in transit. For untrusted networks, put AgentWeaver behind TLS termination or an equivalent reverse proxy.
 
 By default, AgentWeaver tries to open the browser after the server starts successfully and the URL is printed. For CI, tests, and manual smoke checks, use `agentweaver web --no-open` or the `AGENTWEAVER_WEB_NO_OPEN=1` environment variable; the `--no-open` flag is supported only after the `web` command.
 
