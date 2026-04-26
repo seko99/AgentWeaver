@@ -130,7 +130,9 @@ To open the Web UI from another machine on a trusted network, use `agentweaver w
 
 By default, AgentWeaver tries to open the browser after the server starts successfully and the URL is printed. For CI, tests, and manual smoke checks, use `agentweaver web --no-open` or the `AGENTWEAVER_WEB_NO_OPEN=1` environment variable; the `--no-open` flag is supported only after the `web` command.
 
-The current Web UI version serves a built-in HTML shell without a separate static asset pipeline. Live browser interaction with the interactive session uses WebSocket on the same server. Bounded checks can use `GET /__agentweaver/health`, and shutdown is available through `POST /__agentweaver/exit` or `SIGINT`/`SIGTERM`.
+The Web UI serves the operator console from the same local process, including `/`, `/static/app.js`, and `/static/styles.css`. Live browser interaction uses WebSocket on `/__agentweaver/ws`. Bounded checks can use `GET /__agentweaver/health`, and shutdown is available through `POST /__agentweaver/exit` or `SIGINT`/`SIGTERM`.
+
+Web UI state is process-local: it exists only while the AgentWeaver process is running and is not shared with other AgentWeaver processes. The Web UI is intended to match the interactive operator workflow for flow selection, launch confirmation, routing and user-input forms, progress and logs, and interrupt handling.
 
 ## Installation
 
