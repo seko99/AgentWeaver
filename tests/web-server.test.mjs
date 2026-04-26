@@ -26,7 +26,13 @@ function portFromUrl(url) {
   return Number(new URL(url).port);
 }
 
-async function connectWebSocket(url) {
+const AUTH = { username: "operator", password: "secret-pass" };
+
+function basicAuthHeader(username = AUTH.username, password = AUTH.password) {
+  return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+}
+
+async function connectWebSocket(url, headers = []) {
   const parsed = new URL(url);
   const socket = net.createConnection({ host: parsed.hostname, port: Number(parsed.port) });
   await new Promise((resolve) => socket.once("connect", resolve));
@@ -37,18 +43,20 @@ async function connectWebSocket(url) {
     "Connection: Upgrade",
     `Sec-WebSocket-Key: ${crypto.randomBytes(16).toString("base64")}`,
     "Sec-WebSocket-Version: 13",
+    ...headers,
     "",
     "",
   ].join("\r\n"));
-  await new Promise((resolve) => {
+  const handshakeResponse = await new Promise((resolve) => {
     let buffer = Buffer.alloc(0);
     socket.on("data", (chunk) => {
       buffer = Buffer.concat([buffer, chunk]);
       if (buffer.includes("\r\n\r\n")) {
-        resolve();
+        resolve(buffer.toString("utf8"));
       }
     });
   });
+  socket.handshakeResponse = handshakeResponse;
   return socket;
 }
 
@@ -206,6 +214,126 @@ describe("web server", () => {
       const health = await fetch(`http://127.0.0.1:${portFromUrl(server.url)}/__agentweaver/health`);
       assert.equal(health.status, 200);
     } finally {
+      await server.close();
+    }
+  });
+
+  it("requires valid Basic auth for protected HTTP resources when auth is active", async (t) => {
+    let exitCount = 0;
+    const server = await startOrSkip(t, {
+      noOpen: true,
+      auth: AUTH,
+      onClientAction: () => {},
+      onClientConnected: () => {},
+      onExitRequested: () => {
+        exitCount += 1;
+      },
+    });
+    if (!server) return;
+    try {
+      const root = await fetch(server.url);
+      assert.equal(root.status, 401);
+      assert.match(root.headers.get("www-authenticate") ?? "", /Basic realm="AgentWeaver Web UI"/);
+      assert.doesNotMatch(await root.text(), /AgentWeaver Operator Console/);
+
+      const wrongUser = await fetch(server.url, { headers: { authorization: basicAuthHeader("other", AUTH.password) } });
+      assert.equal(wrongUser.status, 401);
+
+      const wrongPassword = await fetch(new URL("/static/app.js", server.url), { headers: { authorization: basicAuthHeader(AUTH.username, "bad") } });
+      assert.equal(wrongPassword.status, 401);
+      assert.doesNotMatch(await wrongPassword.text(), /WebSocket/);
+
+      const malformed = await fetch(server.url, { headers: { authorization: "Basic not-a-valid-pair" } });
+      assert.equal(malformed.status, 401);
+
+      const health = await fetch(new URL("/__agentweaver/health", server.url));
+      assert.equal(health.status, 200);
+      assert.deepEqual(await health.json(), { ok: true });
+
+      const exitDenied = await fetch(new URL("/__agentweaver/exit", server.url), { method: "POST" });
+      assert.equal(exitDenied.status, 401);
+      assert.equal(exitCount, 0);
+
+      const authedRoot = await fetch(server.url, { headers: { authorization: basicAuthHeader() } });
+      assert.equal(authedRoot.status, 200);
+      assert.match(await authedRoot.text(), /AgentWeaver Operator Console/);
+
+      const authedScript = await fetch(new URL("/static/app.js", server.url), { headers: { authorization: basicAuthHeader() } });
+      assert.equal(authedScript.status, 200);
+      assert.match(await authedScript.text(), /WebSocket/);
+
+      const authedExit = await fetch(new URL("/__agentweaver/exit", server.url), { method: "POST", headers: { authorization: basicAuthHeader() } });
+      assert.equal(authedExit.status, 202);
+      assert.equal(exitCount, 1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects unauthorized WebSocket upgrades before session callbacks when auth is active", async (t) => {
+    let connectedCount = 0;
+    let actionCount = 0;
+    const server = await startOrSkip(t, {
+      noOpen: true,
+      auth: AUTH,
+      onClientAction: () => {
+        actionCount += 1;
+      },
+      onClientConnected: () => {
+        connectedCount += 1;
+      },
+      onExitRequested: () => {},
+    });
+    if (!server) return;
+    const sockets = [];
+    try {
+      for (const headers of [
+        [],
+        [`Authorization: ${basicAuthHeader("other", AUTH.password)}`],
+        [`Authorization: ${basicAuthHeader(AUTH.username, "bad")}`],
+        ["Authorization: Basic malformed"],
+      ]) {
+        const socket = await connectWebSocket(server.url, headers);
+        sockets.push(socket);
+        assert.match(socket.handshakeResponse, /^HTTP\/1\.1 401 Unauthorized/);
+      }
+      assert.equal(connectedCount, 0);
+      assert.equal(actionCount, 0);
+    } finally {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      await server.close();
+    }
+  });
+
+  it("allows authenticated WebSocket clients to receive snapshots and dispatch actions", async (t) => {
+    let connectedCount = 0;
+    let actionType = "";
+    const server = await startOrSkip(t, {
+      noOpen: true,
+      auth: AUTH,
+      onClientAction: (action) => {
+        actionType = action.type;
+      },
+      onClientConnected: (client) => {
+        connectedCount += 1;
+        client.send({ type: "snapshot", viewModel: { title: "Authenticated" } });
+      },
+      onExitRequested: () => {},
+    });
+    if (!server) return;
+    const socket = await connectWebSocket(server.url, [`Authorization: ${basicAuthHeader()}`]);
+    try {
+      assert.match(socket.handshakeResponse, /^HTTP\/1\.1 101 Switching Protocols/);
+      assert.equal(connectedCount, 1);
+      const messagePromise = readServerMessage(socket);
+      assert.deepEqual(await messagePromise, { type: "snapshot", viewModel: { title: "Authenticated" } });
+      socket.write(encodeClientFrame(JSON.stringify({ type: "help.toggle", visible: true })));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(actionType, "help.toggle");
+    } finally {
+      socket.destroy();
       await server.close();
     }
   });

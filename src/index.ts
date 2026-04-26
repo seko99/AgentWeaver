@@ -106,6 +106,7 @@ import { requestInteractiveExecutionRouting } from "./runtime/interactive-execut
 import { createInteractiveSession } from "./interactive/create-interactive-session.js";
 import type { InteractiveSession } from "./interactive/session.js";
 import { createWebInteractiveSession } from "./interactive/web/index.js";
+import type { WebServerAuthConfig } from "./interactive/web/server.js";
 import type { InteractiveFlowDefinition } from "./interactive/types.js";
 import {
   bye,
@@ -158,6 +159,8 @@ const COMMANDS = [
 ] as const;
 
 const INTERACTIVE_SCOPE_WATCH_INTERVAL_MS = 1500;
+const WEB_AUTH_USERNAME_ENV = "AGENTWEAVER_WEB_USERNAME";
+const WEB_AUTH_PASSWORD_ENV = "AGENTWEAVER_WEB_PASSWORD";
 
 type CommandName = (typeof COMMANDS)[number];
 
@@ -236,6 +239,42 @@ type ProcessFailureLike = {
   output?: string;
   message?: string;
 };
+
+function isExternalWebHost(host: string | undefined): boolean {
+  const normalized = (host?.trim() || "127.0.0.1").toLowerCase();
+  if (normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost") {
+    return false;
+  }
+  const unbracketed = normalized.startsWith("[") && normalized.endsWith("]") ? normalized.slice(1, -1) : normalized;
+  if (unbracketed === "::1") {
+    return false;
+  }
+  return true;
+}
+
+function resolveWebAuthConfig(): WebServerAuthConfig | undefined {
+  const username = process.env[WEB_AUTH_USERNAME_ENV]?.trim() ?? "";
+  const password = process.env[WEB_AUTH_PASSWORD_ENV] ?? "";
+  const hasUsername = username.length > 0;
+  const hasPassword = password.length > 0;
+  if (hasUsername !== hasPassword) {
+    throw new TaskRunnerError(`Web UI auth requires both ${WEB_AUTH_USERNAME_ENV} and ${WEB_AUTH_PASSWORD_ENV}.`);
+  }
+  if (!hasUsername || !hasPassword) {
+    return undefined;
+  }
+  return { username, password };
+}
+
+function requireWebAuthForHost(host: string | undefined, auth: WebServerAuthConfig | undefined): void {
+  if (!isExternalWebHost(host) || auth) {
+    return;
+  }
+  throw new TaskRunnerError(
+    `External Web UI binding requires ${WEB_AUTH_USERNAME_ENV} and ${WEB_AUTH_PASSWORD_ENV}. ` +
+      "Use localhost for no-auth local access, or configure credentials before using --listen-all or --host with an external interface.",
+  );
+}
 
 function buildFailureOutputPreview(output: string): string {
   const normalized = stripAnsi(output).replace(/\r\n/g, "\n").trim();
@@ -349,10 +388,14 @@ Optional environment variables:
   OPENCODE_BIN
   OPENCODE_MODEL
   AGENTWEAVER_WEB_NO_OPEN  Set to 1 to disable browser auto-open for agentweaver web
+  ${WEB_AUTH_USERNAME_ENV}  Web UI Basic auth username; required for external Web UI binding
+  ${WEB_AUTH_PASSWORD_ENV}  Web UI Basic auth password; required for external Web UI binding
 
 Notes:
   - Jira-backed task flows will ask for Jira task via user-input when it is not passed as an argument. task-describe can also work from a manual task description without Jira.
-  - agentweaver web binds to 127.0.0.1 by default on an operating-system-assigned port. Use --listen-all or --host 0.0.0.0 only on trusted networks.
+  - agentweaver web binds to 127.0.0.1 by default on an operating-system-assigned port and does not require auth unless Web UI credentials are configured.
+  - External Web UI binding through --listen-all, --host 0.0.0.0, --host ::, non-loopback IPs, or hostnames other than localhost requires ${WEB_AUTH_USERNAME_ENV} and ${WEB_AUTH_PASSWORD_ENV}.
+  - Web UI Basic auth over plain HTTP is suitable only on trusted networks; use TLS termination or a reverse proxy on untrusted networks.
   - instant-task always uses the current branch-derived project scope and rejects explicit scope overrides or Jira arguments.
   - All flow state and artifacts are stored in the current project scope by default.
   - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.
@@ -2431,9 +2474,10 @@ async function runWebInteractive(
   forceRefresh = false,
   noOpen = false,
   host?: string,
+  auth?: WebServerAuthConfig,
 ): Promise<number> {
   return await runInteractiveWithSessionFactory(
-    (options) => createWebInteractiveSession(options, { noOpen, ...(host ? { host } : {}), printInfo }),
+    (options) => createWebInteractiveSession(options, { noOpen, ...(host ? { host } : {}), ...(auth ? { auth } : {}), printInfo }),
     jiraRef,
     forceRefresh,
     null,
@@ -2464,7 +2508,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 
     const parsedArgs = await parseCliArgs(args);
     if (parsedArgs.command === "web") {
-      return await runWebInteractive(parsedArgs.jiraRef, forceRefresh, parsedArgs.webNoOpen === true, parsedArgs.webHost);
+      const webAuth = resolveWebAuthConfig();
+      requireWebAuthForHost(parsedArgs.webHost, webAuth);
+      return await runWebInteractive(parsedArgs.jiraRef, forceRefresh, parsedArgs.webNoOpen === true, parsedArgs.webHost, webAuth);
     }
     const commandCompleted = await executeCommand(buildConfigFromArgs(parsedArgs), true, requestUserInputInTerminal, undefined, undefined, false, parsedArgs.launchMode);
     if (parsedArgs.command === "doctor") {
