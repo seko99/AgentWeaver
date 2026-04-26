@@ -1,28 +1,11 @@
 import process from "node:process";
 import { writeSync } from "node:fs";
 
-import { FlowInterruptedError, TaskRunnerError } from "../../errors.js";
-import type { FlowLaunchMode } from "../../flow-state.js";
-import { setOutputAdapter, stripAnsi, type OutputAdapter } from "../../tui.js";
-import {
-  buildInitialUserInputValues,
-  normalizeUserInputFieldValue,
-  validateUserInputValues,
-  type UserInputFormDefinition,
-  type UserInputResult,
-} from "../../user-input.js";
+import { FlowInterruptedError } from "../../errors.js";
+import { InteractiveSessionController } from "../controller.js";
 import type { InteractiveSession, InteractiveSessionOptions } from "../session.js";
-import type { WebClientAction, WebPendingConfirmation, WebPendingInput, WebServerMessage, WebSessionSnapshot } from "./protocol.js";
-import { startWebServer, type StartedWebServer, type WebServerOptions } from "./server.js";
-
-type PendingInput = WebPendingInput & {
-  resolve: (result: UserInputResult) => void;
-  reject: (error: Error) => void;
-};
-
-type PendingConfirmation = WebPendingConfirmation & {
-  running: boolean;
-};
+import type { ClientAction, ServerEvent } from "./protocol.js";
+import { startWebServer, type StartedWebServer, type WebServerOptions, type WebSocketClient } from "./server.js";
 
 export type CreateWebInteractiveSessionOptions = {
   noOpen?: boolean;
@@ -32,201 +15,92 @@ export type CreateWebInteractiveSessionOptions = {
   openBrowser?: WebServerOptions["openBrowser"];
 };
 
-let nextRequestNumber = 1;
-
-function nextRequestId(prefix: string): string {
-  const id = `${prefix}-${Date.now().toString(36)}-${nextRequestNumber.toString(36)}`;
-  nextRequestNumber += 1;
-  return id;
-}
-
-function normalizeLogText(text: string): string {
-  return stripAnsi(text).replace(/\r/g, "").trimEnd();
+function actionId(action: ClientAction): string | undefined {
+  return "actionId" in action ? action.actionId : undefined;
 }
 
 export function createWebInteractiveSession(
   options: InteractiveSessionOptions,
   webOptions: CreateWebInteractiveSessionOptions = {},
 ): InteractiveSession {
+  const controller = new InteractiveSessionController(options);
   let server: StartedWebServer | null = null;
+  let unsubscribe: (() => void) | null = null;
   let mounted = false;
-  let scopeKey = options.scopeKey;
-  let jiraIssueKey = options.jiraIssueKey ?? null;
-  let summaryText = options.summaryText.trim();
-  const logs: string[] = [];
-  let failedFlowId: string | null = null;
-  let pendingInput: PendingInput | null = null;
-  let pendingConfirmation: PendingConfirmation | null = null;
   let shuttingDown = false;
 
-  function snapshot(): WebSessionSnapshot {
-    return {
-      scopeKey,
-      jiraIssueKey,
-      summaryText,
-      logs: [...logs],
-      flows: options.flows.map((flow) => ({
-        id: flow.id,
-        label: flow.label,
-        description: flow.description,
-        treePath: flow.treePath,
-      })),
-      failedFlowId,
-      pendingInput: pendingInput ? { requestId: pendingInput.requestId, form: pendingInput.form } : null,
-      pendingConfirmation: pendingConfirmation
-        ? {
-            requestId: pendingConfirmation.requestId,
-            flowId: pendingConfirmation.flowId,
-            mode: pendingConfirmation.mode,
-            details: pendingConfirmation.details,
-          }
-        : null,
-      shuttingDown,
-    };
+  function snapshot(): ServerEvent {
+    return { type: "snapshot", viewModel: controller.getViewModel() };
   }
 
-  function broadcast(message: WebServerMessage): void {
-    server?.broadcast(message);
-  }
-
-  function appendLogLine(text: string): void {
-    const normalized = normalizeLogText(text);
-    if (!normalized) {
-      return;
+  function sendError(client: WebSocketClient | null, message: string, id?: string): void {
+    const event: ServerEvent = { type: "error", message, ...(id ? { actionId: id } : {}) };
+    if (client) {
+      client.send(event);
+    } else {
+      server?.broadcast(event);
     }
-    logs.push(normalized);
-    broadcast({ type: "logAppended", text: normalized });
   }
 
-  function rejectPendingInput(error: Error, message: string): void {
-    if (!pendingInput) {
-      return;
-    }
-    const requestId = pendingInput.requestId;
-    const reject = pendingInput.reject;
-    pendingInput = null;
-    broadcast({ type: "formInterrupted", requestId, message });
-    reject(error);
-  }
-
-  function clearPendingConfirmation(): void {
-    pendingConfirmation = null;
-  }
-
-  function chooseConfirmationMode(availability: Awaited<ReturnType<InteractiveSessionOptions["getRunConfirmation"]>>): FlowLaunchMode {
-    if (availability.resume.available) {
-      return "resume";
-    }
-    if (availability.continue.available) {
-      return "continue";
-    }
-    return "restart";
-  }
-
-  const outputAdapter: OutputAdapter = {
-    writeStdout: appendLogLine,
-    writeStderr: appendLogLine,
-    supportsTransientStatus: false,
-    supportsPassthrough: false,
-    renderAuxiliaryOutput: true,
-    renderPanelsAsPlainText: true,
-    setExecutionState: (state) => {
-      if (state.node || state.executor) {
-        appendLogLine(`[state] node=${state.node ?? "-"} executor=${state.executor ?? "-"}`);
-      }
-    },
-    setFlowState: (state) => {
-      if (state.flowId) {
-        appendLogLine(`[flow] ${state.flowId}`);
-      }
-    },
-  };
-
-  async function handleAction(action: WebClientAction): Promise<void> {
-    if (action.type === "submitInput") {
-      if (!pendingInput || pendingInput.requestId !== action.requestId) {
-        broadcast({ type: "error", message: "No matching pending input request.", requestId: action.requestId });
+  async function dispatch(action: ClientAction, client: WebSocketClient): Promise<void> {
+    try {
+      if (action.type === "flow.select") {
+        if (action.key) {
+          controller.selectFlowKey(action.key);
+        } else {
+          controller.selectFlowIndex(action.index ?? 0);
+        }
         return;
       }
-      const pending = pendingInput;
-      const values = { ...buildInitialUserInputValues(pending.form.fields), ...action.values };
-      for (const field of pending.form.fields) {
-        normalizeUserInputFieldValue(field, values);
-      }
-      try {
-        validateUserInputValues(pending.form, values);
-      } catch (error) {
-        broadcast({ type: "error", message: (error as Error).message, requestId: action.requestId });
+      if (action.type === "folder.toggle") {
+        controller.toggleFolderKey(action.key);
         return;
       }
-      pendingInput = null;
-      pending.resolve({
-        formId: pending.form.formId,
-        submittedAt: new Date().toISOString(),
-        values,
-      });
-      return;
-    }
-    if (action.type === "cancelInput") {
-      if (!pendingInput || pendingInput.requestId !== action.requestId) {
-        broadcast({ type: "error", message: "No matching pending input request.", requestId: action.requestId });
+      if (action.type === "run.openConfirm") {
+        await controller.openRunConfirm(action.flowId, action.key);
         return;
       }
-      rejectPendingInput(new TaskRunnerError(`User cancelled form '${pendingInput.form.formId}'.`), "Input cancelled.");
-      return;
-    }
-    if (action.type === "requestRun") {
-      if (!options.flows.some((flow) => flow.id === action.flowId)) {
-        broadcast({ type: "error", message: `Unknown flow: ${action.flowId}` });
+      if (action.type === "confirm.select") {
+        controller.selectConfirmAction(action.action);
         return;
       }
-      try {
-        const availability = await options.getRunConfirmation(action.flowId);
-        const mode = chooseConfirmationMode(availability);
-        pendingConfirmation = {
-          requestId: nextRequestId("confirm"),
-          flowId: action.flowId,
-          mode,
-          details: availability.details ?? null,
-          running: false,
-        };
-        pendingInput = null;
-        broadcast({
-          type: "confirmationRequested",
-          requestId: pendingConfirmation.requestId,
-          flowId: pendingConfirmation.flowId,
-          mode,
-          details: pendingConfirmation.details,
-        });
-      } catch (error) {
-        broadcast({ type: "error", message: (error as Error).message });
-      }
-      return;
-    }
-    if (action.type === "confirmRun" || action.type === "rejectRun") {
-      if (!pendingConfirmation || pendingConfirmation.requestId !== action.requestId) {
-        broadcast({ type: "error", message: "No matching pending confirmation request.", requestId: action.requestId });
+      if (action.type === "confirm.accept") {
+        await controller.acceptConfirmation();
         return;
       }
-      const pending = pendingConfirmation;
-      clearPendingConfirmation();
-      if (action.type === "confirmRun" && !pending.running) {
-        pending.running = true;
-        void options.onRun(pending.flowId, pending.mode).catch((error) => {
-          appendLogLine(`Flow failed: ${(error as Error).message}`);
-        });
+      if (action.type === "confirm.cancel") {
+        controller.cancelConfirmation();
+        return;
       }
-      return;
-    }
-    if (action.type === "interrupt") {
-      rejectPendingInput(new FlowInterruptedError("Flow interrupted by user."), "Flow interrupted by user.");
-      if (action.flowId) {
-        await options.onInterrupt(action.flowId);
+      if (action.type === "form.update") {
+        controller.updateActiveFormValues(action.values);
+        return;
       }
-      return;
-    }
-    if (action.type === "exit") {
-      options.onExit();
+      if (action.type === "form.submit") {
+        controller.submitActiveFormValues(action.values);
+        return;
+      }
+      if (action.type === "form.cancel") {
+        controller.cancelForm();
+        return;
+      }
+      if (action.type === "flow.interrupt") {
+        await controller.interruptFlow(action.flowId);
+        return;
+      }
+      if (action.type === "log.clear") {
+        controller.clearLog();
+        return;
+      }
+      if (action.type === "help.toggle") {
+        controller.toggleHelp(action.visible);
+        return;
+      }
+      controller.scrollPane(action.pane, { ...(action.delta !== undefined ? { delta: action.delta } : {}), ...(action.offset !== undefined ? { offset: action.offset } : {}) });
+    } catch (error) {
+      const message = (error as Error).message;
+      controller.appendLog(`Web action failed: ${message}`);
+      sendError(client, message, actionId(action));
     }
   }
 
@@ -236,20 +110,27 @@ export function createWebInteractiveSession(
         return;
       }
       mounted = true;
-      setOutputAdapter(outputAdapter);
+      controller.mount();
+      unsubscribe = controller.subscribe((event) => {
+        if (event.type === "log") {
+          server?.broadcast({ type: "log.append", appendedLines: event.appendedLines });
+          return;
+        }
+        server?.broadcast(snapshot());
+      });
       void startWebServer({
         ...(webOptions.noOpen !== undefined ? { noOpen: webOptions.noOpen } : {}),
         ...(webOptions.host !== undefined ? { host: webOptions.host } : {}),
         printInfo: (message) => {
           webOptions.printInfo?.(message);
-          appendLogLine(message);
+          controller.appendLog(message);
         },
         ...(webOptions.openBrowser ? { openBrowser: webOptions.openBrowser } : {}),
-        onClientAction: (action) => {
-          void handleAction(action);
+        onClientAction: (action, client) => {
+          void dispatch(action, client);
         },
         onClientConnected: (client) => {
-          client.send({ type: "snapshot", state: snapshot() });
+          client.send(snapshot());
         },
         onExitRequested: () => {
           options.onExit();
@@ -265,7 +146,7 @@ export function createWebInteractiveSession(
         webOptions.onServerReady?.(started);
       }).catch((error) => {
         const message = `Web UI startup failed: ${(error as Error).message}`;
-        appendLogLine(message);
+        controller.appendLog(message);
         writeSync(process.stderr.fd, `${message}\n`);
         options.onExit();
       });
@@ -276,9 +157,9 @@ export function createWebInteractiveSession(
         return;
       }
       shuttingDown = true;
-      rejectPendingInput(new FlowInterruptedError("Web UI session closed."), "Web UI session closed.");
-      clearPendingConfirmation();
-      broadcast({ type: "shutdown" });
+      controller.interruptActiveForm("Web UI session closed.");
+      unsubscribe?.();
+      unsubscribe = null;
       const closePromise = server?.close();
       server = null;
       if (closePromise) {
@@ -286,59 +167,20 @@ export function createWebInteractiveSession(
           process.stderr.write(`Failed to close Web UI server: ${(error as Error).message}\n`);
         });
       }
-      setOutputAdapter(null);
+      controller.destroy();
     },
 
-    requestUserInput(form: UserInputFormDefinition): Promise<UserInputResult> {
-      if (pendingInput) {
-        return Promise.reject(new TaskRunnerError("Another user input form is already active."));
+    requestUserInput: (form) => controller.requestUserInput(form),
+    setSummary: (markdown) => controller.setSummary(markdown),
+    clearSummary: () => controller.clearSummary(),
+    setScope: (scopeKey, jiraIssueKey) => controller.setScope(scopeKey, jiraIssueKey),
+    appendLog: (text) => controller.appendLog(text),
+    setFlowFailed: (flowId) => controller.setFlowFailed(flowId),
+    interruptActiveForm: (message = "Flow interrupted by user.") => {
+      controller.interruptActiveForm(message);
+      if (message) {
+        controller.appendLog(new FlowInterruptedError(message).message);
       }
-      if (form.fields.length === 0) {
-        return Promise.resolve({
-          formId: form.formId,
-          submittedAt: new Date().toISOString(),
-          values: {},
-        });
-      }
-      return new Promise<UserInputResult>((resolve, reject) => {
-        pendingInput = {
-          requestId: nextRequestId("input"),
-          form,
-          resolve,
-          reject,
-        };
-        pendingConfirmation = null;
-        broadcast({ type: "inputRequested", requestId: pendingInput.requestId, form });
-      });
-    },
-
-    setSummary(markdown: string): void {
-      summaryText = markdown.trim();
-      broadcast({ type: "summaryUpdated", markdown: summaryText });
-    },
-
-    clearSummary(): void {
-      summaryText = "";
-      broadcast({ type: "summaryCleared" });
-    },
-
-    setScope(nextScopeKey: string, nextJiraIssueKey?: string | null): void {
-      scopeKey = nextScopeKey;
-      jiraIssueKey = nextJiraIssueKey ?? null;
-      broadcast({ type: "scopeUpdated", scopeKey, jiraIssueKey });
-    },
-
-    appendLog(text: string): void {
-      appendLogLine(text);
-    },
-
-    setFlowFailed(flowId: string): void {
-      failedFlowId = flowId;
-      broadcast({ type: "flowFailed", flowId });
-    },
-
-    interruptActiveForm(message = "Flow interrupted by user."): void {
-      rejectPendingInput(new FlowInterruptedError(message), message);
     },
   };
 }

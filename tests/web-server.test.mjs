@@ -52,6 +52,31 @@ async function connectWebSocket(url) {
   return socket;
 }
 
+function encodeClientFrame(raw) {
+  const payload = Buffer.from(raw);
+  const mask = crypto.randomBytes(4);
+  const header = Buffer.from([0x81, 0x80 | payload.length]);
+  const masked = Buffer.from(payload);
+  for (let index = 0; index < masked.length; index += 1) {
+    masked[index] = masked[index] ^ mask[index % 4];
+  }
+  return Buffer.concat([header, mask, masked]);
+}
+
+function readServerMessage(socket) {
+  return new Promise((resolve) => {
+    let buffer = Buffer.alloc(0);
+    socket.on("data", function onData(chunk) {
+      buffer = Buffer.concat([buffer, chunk]);
+      if (buffer.length < 2) return;
+      const length = buffer[1] & 0x7f;
+      if (buffer.length < 2 + length) return;
+      socket.off("data", onData);
+      resolve(JSON.parse(buffer.subarray(2, 2 + length).toString("utf8")));
+    });
+  });
+}
+
 describe("web server", () => {
   it("starts on 127.0.0.1 with an assigned port and serves shell plus health", async (t) => {
     const server = await startOrSkip(t, {
@@ -147,7 +172,9 @@ describe("web server", () => {
     if (!server) return;
     const socket = await connectWebSocket(server.url);
     try {
+      const closedPromise = readServerMessage(socket);
       await server.close();
+      assert.deepEqual(await closedPromise, { type: "closed", reason: "Server shutting down." });
       assert.equal(socket.destroyed, true);
     } finally {
       socket.destroy();
@@ -169,6 +196,27 @@ describe("web server", () => {
       const health = await fetch(`http://127.0.0.1:${portFromUrl(server.url)}/__agentweaver/health`);
       assert.equal(health.status, 200);
     } finally {
+      await server.close();
+    }
+  });
+
+  it("returns protocol errors for malformed WebSocket messages", async (t) => {
+    const server = await startOrSkip(t, {
+      noOpen: true,
+      onClientAction: () => {},
+      onClientConnected: () => {},
+      onExitRequested: () => {},
+    });
+    if (!server) return;
+    const socket = await connectWebSocket(server.url);
+    try {
+      const messagePromise = readServerMessage(socket);
+      socket.write(encodeClientFrame("{"));
+      const message = await messagePromise;
+      assert.equal(message.type, "error");
+      assert.match(message.message, /valid JSON/);
+    } finally {
+      socket.destroy();
       await server.close();
     }
   });

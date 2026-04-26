@@ -82,6 +82,10 @@ describe("web CLI", () => {
     const nonWebHost = await runCli(["plan", "--host", "0.0.0.0"]);
     assert.equal(nonWebHost.code, 1);
     assert.match(nonWebHost.stderr, /--host is only supported after the web command/);
+
+    const nonWebListenAll = await runCli(["plan", "--listen-all"]);
+    assert.equal(nonWebListenAll.code, 1);
+    assert.match(nonWebListenAll.stderr, /--listen-all is only supported after the web command/);
   });
 
   it("starts a bounded web command with no-open and exits through HTTP", async (t) => {

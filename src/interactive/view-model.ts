@@ -1,7 +1,12 @@
+import type { UserInputFormDefinition, UserInputFormValues } from "../user-input.js";
+
 export type InteractiveFormViewModel = {
   title: string;
   content: string;
   footer: string;
+  formId: string;
+  definition: UserInputFormDefinition;
+  values: UserInputFormValues;
 };
 
 export type InteractiveSessionViewModel = {

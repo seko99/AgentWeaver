@@ -4,19 +4,19 @@ import http, { type IncomingMessage } from "node:http";
 import process from "node:process";
 import type { Duplex } from "node:stream";
 
-import type { WebClientAction, WebServerMessage } from "./protocol.js";
-import { parseWebClientAction } from "./protocol.js";
+import type { ClientAction, ServerEvent } from "./protocol.js";
+import { parseClientAction } from "./protocol.js";
 
-type WebSocketClient = {
+export type WebSocketClient = {
   socket: Duplex;
-  send: (message: WebServerMessage) => void;
+  send: (message: ServerEvent) => void;
   close: () => void;
 };
 
 export type WebServerOptions = {
   noOpen?: boolean;
   host?: string;
-  onClientAction: (action: WebClientAction) => void;
+  onClientAction: (action: ClientAction, client: WebSocketClient) => void;
   onClientConnected: (client: WebSocketClient) => void;
   onExitRequested: () => void;
   printInfo?: (message: string) => void;
@@ -26,7 +26,7 @@ export type WebServerOptions = {
 export type StartedWebServer = {
   url: string;
   host: string;
-  broadcast(message: WebServerMessage): void;
+  broadcast(message: ServerEvent): void;
   close(): Promise<void>;
 };
 
@@ -68,7 +68,10 @@ function htmlShell(): string {
         <h1>AgentWeaver Web UI</h1>
         <div id="scope" class="muted">Connecting...</div>
       </div>
-      <button id="exit">Exit</button>
+      <div class="row">
+        <button id="help">Help</button>
+        <button id="clear-log">Clear Log</button>
+      </div>
     </header>
     <div class="grid">
       <section>
@@ -91,59 +94,76 @@ function htmlShell(): string {
     const action = document.getElementById("action");
     const flows = document.getElementById("flows");
     const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/__agentweaver/ws");
-    let pendingInput = null;
-    let pendingConfirmation = null;
+    let viewModel = null;
     function send(message) { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); }
-    function renderState(state) {
-      scope.textContent = "Scope " + state.scopeKey + (state.jiraIssueKey ? " | Jira " + state.jiraIssueKey : "");
-      summary.textContent = state.summaryText || "Task summary is not available yet.";
-      logs.textContent = (state.logs || []).join("\\n");
+    function appendLogLine(line) {
+      logs.textContent += (logs.textContent ? "\\n" : "") + line;
+    }
+    function renderState(next) {
+      viewModel = next;
+      scope.textContent = next.header || next.title || "AgentWeaver";
+      summary.textContent = next.summaryText || "Task summary is not available yet.";
+      logs.textContent = next.logText || "";
       flows.innerHTML = "";
-      for (const flow of state.flows || []) {
+      for (const [index, flow] of (next.flowItems || []).entries()) {
         const button = document.createElement("button");
-        button.textContent = flow.label || flow.id;
-        button.title = (flow.treePath || []).join(" / ");
-        button.onclick = () => send({ type: "requestRun", flowId: flow.id });
+        button.textContent = flow.label;
+        button.title = flow.key;
+        button.onclick = () => send({ type: "flow.select", index });
+        button.ondblclick = () => {
+          if (flow.key.startsWith("folder:")) send({ type: "folder.toggle", key: flow.key });
+          else send({ type: "run.openConfirm", key: flow.key });
+        };
         flows.append(button);
       }
-      pendingInput = state.pendingInput;
-      pendingConfirmation = state.pendingConfirmation;
       renderAction();
     }
     function renderAction() {
       action.innerHTML = "";
-      if (pendingConfirmation) {
+      if (!viewModel) {
+        action.textContent = "No action is pending.";
+        action.className = "muted";
+        return;
+      }
+      if (viewModel.confirmText) {
         const label = document.createElement("div");
-        label.textContent = "Run " + pendingConfirmation.flowId + (pendingConfirmation.mode ? " (" + pendingConfirmation.mode + ")" : "") + "?";
+        label.textContent = viewModel.confirmText;
         const row = document.createElement("div");
         row.className = "row";
-        const yes = document.createElement("button");
-        yes.textContent = "Run";
-        yes.onclick = () => send({ type: "confirmRun", requestId: pendingConfirmation.requestId });
-        const no = document.createElement("button");
-        no.textContent = "Cancel";
-        no.onclick = () => send({ type: "rejectRun", requestId: pendingConfirmation.requestId });
-        row.append(yes, no);
+        for (const name of ["resume", "continue", "restart", "stop", "ok", "cancel"]) {
+          if (!viewModel.confirmText.toLowerCase().includes(name === "ok" ? "ok" : name)) continue;
+          const button = document.createElement("button");
+          button.textContent = name === "ok" ? "OK" : name[0].toUpperCase() + name.slice(1);
+          button.onclick = () => {
+            send({ type: "confirm.select", action: name });
+            send({ type: "confirm.accept" });
+          };
+          row.append(button);
+        }
+        const cancel = document.createElement("button");
+        cancel.textContent = "Cancel";
+        cancel.onclick = () => send({ type: "confirm.cancel" });
+        row.append(cancel);
         action.append(label, row);
         return;
       }
-      if (pendingInput) {
+      if (viewModel.form) {
+        const formModel = viewModel.form;
         const form = document.createElement("form");
-        const values = {};
         const title = document.createElement("strong");
-        title.textContent = pendingInput.form.title;
+        title.textContent = formModel.definition.title;
         form.append(title);
-        for (const field of pendingInput.form.fields) {
+        for (const field of formModel.definition.fields) {
           const label = document.createElement("label");
           label.textContent = field.label;
           let input;
           if (field.type === "boolean") {
             input = document.createElement("input");
             input.type = "checkbox";
-            input.checked = Boolean(field.default);
+            input.checked = Boolean(formModel.values[field.id]);
           } else if (field.type === "text") {
             input = document.createElement(field.multiline ? "textarea" : "input");
-            input.value = field.default || "";
+            input.value = String(formModel.values[field.id] || "");
           } else {
             input = document.createElement("select");
             input.multiple = field.type === "multi-select";
@@ -151,6 +171,8 @@ function htmlShell(): string {
               const opt = document.createElement("option");
               opt.value = option.value;
               opt.textContent = option.label;
+              const current = formModel.values[field.id];
+              opt.selected = Array.isArray(current) ? current.includes(option.value) : current === option.value;
               input.append(opt);
             }
           }
@@ -162,42 +184,51 @@ function htmlShell(): string {
         const row = document.createElement("div");
         row.className = "row";
         const submit = document.createElement("button");
-        submit.textContent = pendingInput.form.submitLabel || "Submit";
+        submit.textContent = formModel.definition.submitLabel || "Submit";
         const cancel = document.createElement("button");
         cancel.type = "button";
         cancel.textContent = "Cancel";
-        cancel.onclick = () => send({ type: "cancelInput", requestId: pendingInput.requestId });
+        cancel.onclick = () => send({ type: "form.cancel" });
         row.append(submit, cancel);
         form.append(row);
-        form.onsubmit = (event) => {
-          event.preventDefault();
+        function collectValues() {
+          const values = {};
           for (const el of form.querySelectorAll("[data-field-id]")) {
             if (el.dataset.fieldType === "boolean") values[el.dataset.fieldId] = el.checked;
             else if (el.dataset.fieldType === "multi-select") values[el.dataset.fieldId] = Array.from(el.selectedOptions).map((option) => option.value);
             else values[el.dataset.fieldId] = el.value;
           }
-          send({ type: "submitInput", requestId: pendingInput.requestId, values });
+          return values;
+        }
+        form.oninput = () => send({ type: "form.update", values: collectValues() });
+        form.onsubmit = (event) => {
+          event.preventDefault();
+          send({ type: "form.submit", values: collectValues() });
         };
         action.append(form);
         return;
       }
-      action.textContent = "No action is pending.";
+      const row = document.createElement("div");
+      row.className = "row";
+      const run = document.createElement("button");
+      run.textContent = "Run Selected";
+      run.onclick = () => send({ type: "run.openConfirm" });
+      const interrupt = document.createElement("button");
+      interrupt.textContent = "Interrupt";
+      interrupt.onclick = () => send({ type: "flow.interrupt" });
+      row.append(run, interrupt);
+      action.append(row);
       action.className = "muted";
     }
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
-      if (message.type === "snapshot") renderState(message.state);
-      if (message.type === "summaryUpdated") summary.textContent = message.markdown;
-      if (message.type === "summaryCleared") summary.textContent = "Task summary is not available yet.";
-      if (message.type === "scopeUpdated") scope.textContent = "Scope " + message.scopeKey + (message.jiraIssueKey ? " | Jira " + message.jiraIssueKey : "");
-      if (message.type === "logAppended") logs.textContent += (logs.textContent ? "\\n" : "") + message.text;
-      if (message.type === "flowFailed") logs.textContent += (logs.textContent ? "\\n" : "") + "[failed] " + message.flowId;
-      if (message.type === "inputRequested") { pendingInput = { requestId: message.requestId, form: message.form }; pendingConfirmation = null; renderAction(); }
-      if (message.type === "confirmationRequested") { pendingConfirmation = { requestId: message.requestId, flowId: message.flowId, mode: message.mode, details: message.details }; pendingInput = null; renderAction(); }
-      if (message.type === "formInterrupted" || message.type === "shutdown") { pendingInput = null; pendingConfirmation = null; renderAction(); }
-      if (message.type === "error") logs.textContent += (logs.textContent ? "\\n" : "") + "[protocol] " + message.message;
+      if (message.type === "snapshot") renderState(message.viewModel);
+      if (message.type === "log.append") for (const line of message.appendedLines) appendLogLine(line);
+      if (message.type === "error") appendLogLine("[protocol] " + message.message);
+      if (message.type === "closed") appendLogLine("[closed] " + (message.reason || "Session closed."));
     };
-    document.getElementById("exit").onclick = () => send({ type: "exit" });
+    document.getElementById("help").onclick = () => send({ type: "help.toggle" });
+    document.getElementById("clear-log").onclick = () => send({ type: "log.clear" });
   </script>
 </body>
 </html>`;
@@ -373,7 +404,7 @@ export async function startWebServer(options: WebServerOptions): Promise<Started
       }
       for (const message of decoded.messages) {
         try {
-          options.onClientAction(parseWebClientAction(message));
+          options.onClientAction(parseClientAction(message), client);
         } catch (error) {
           client.send({ type: "error", message: (error as Error).message });
         }
@@ -422,7 +453,7 @@ export async function startWebServer(options: WebServerOptions): Promise<Started
       }
       closed = true;
       for (const client of clients) {
-        client.send({ type: "shutdown" });
+        client.send({ type: "closed", reason: "Server shutting down." });
         client.close();
       }
       clients.clear();
