@@ -65,6 +65,9 @@ export function createWebInteractiveSession(
         return;
       }
       if (action.type === "confirm.accept") {
+        if (action.action) {
+          controller.selectConfirmAction(action.action);
+        }
         await controller.acceptConfirmation();
         return;
       }

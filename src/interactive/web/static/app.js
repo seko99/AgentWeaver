@@ -5,6 +5,7 @@
     viewModel: null,
     connectionState: "connecting",
     formValues: {},
+    modalSignature: null,
   };
 
   var elements = {
@@ -111,8 +112,7 @@
         api.send({ type: "confirm.cancel" });
         return;
       }
-      api.send({ type: "confirm.select", action: action });
-      api.send({ type: "confirm.accept" });
+      api.send({ type: "confirm.accept", action: action });
     },
     submitForm: function () {
       api.send({ type: "form.submit", values: collectFormValues() });
@@ -156,9 +156,11 @@
     }
 
     if (message.type === "snapshot") {
+      var uiState = captureUiState();
       state.viewModel = message.viewModel || {};
       state.formValues = state.viewModel.form ? Object.assign({}, state.viewModel.form.values || {}) : {};
       render();
+      restoreUiState(uiState);
       return;
     }
     if (message.type === "log.append") {
@@ -192,17 +194,98 @@
     elements.flowsTitle.textContent = text(vm.flowListTitle, "Flows");
     elements.description.textContent = text(vm.descriptionText, "No flow selected.");
     elements.progressTitle.textContent = text(vm.progressTitle, "Progress");
-    elements.progress.textContent = text(vm.progressText, "No progress yet.");
+    setTextPreservingScroll(elements.progress, text(vm.progressText, "No progress yet."));
     elements.summaryTitle.textContent = text(vm.summaryTitle, "Task Summary");
-    elements.summary.textContent = vm.summaryVisible === false ? "Summary is hidden." : text(vm.summaryText, "No task summary yet.");
+    setTextPreservingScroll(elements.summary, vm.summaryVisible === false ? "Summary is hidden." : text(vm.summaryText, "No task summary yet."));
     elements.logTitle.textContent = text(vm.logTitle, "Activity");
-    elements.log.textContent = text(vm.logText, "");
+    setTextPreservingScroll(elements.log, text(vm.logText, ""));
     elements.helpText.textContent = text(vm.helpText, "No help is available.");
     elements.helpPanel.hidden = !vm.helpVisible;
     elements.help.setAttribute("aria-pressed", vm.helpVisible ? "true" : "false");
 
     renderFlows(vm);
     renderModal(vm);
+  }
+
+  function setTextPreservingScroll(element, value) {
+    if (element.textContent === value) {
+      return;
+    }
+    var previousScrollTop = element.scrollTop;
+    var wasPinned = previousScrollTop + element.clientHeight >= element.scrollHeight - 8;
+    element.textContent = value;
+    element.scrollTop = wasPinned ? element.scrollHeight : previousScrollTop;
+  }
+
+  function captureUiState() {
+    var active = document.activeElement;
+    var activeFieldId = active && active.dataset ? active.dataset.fieldId : null;
+    var activeFieldValue = active && active.dataset && active.dataset.fieldId && "value" in active ? active.value : null;
+    var selectionStart = null;
+    var selectionEnd = null;
+    var modalBody = currentModalBody();
+    if (activeFieldId && typeof active.selectionStart === "number" && typeof active.selectionEnd === "number") {
+      selectionStart = active.selectionStart;
+      selectionEnd = active.selectionEnd;
+    }
+    return {
+      progressScrollTop: elements.progress.scrollTop,
+      summaryScrollTop: elements.summary.scrollTop,
+      logScrollTop: elements.log.scrollTop,
+      helpScrollTop: elements.helpText.scrollTop,
+      modalScrollTop: elements.modalRoot.scrollTop,
+      modalBodyScrollTop: modalBody ? modalBody.scrollTop : 0,
+      activeFieldId: activeFieldId,
+      activeFieldValue: activeFieldValue,
+      selectionStart: selectionStart,
+      selectionEnd: selectionEnd,
+      formId: state.viewModel && state.viewModel.form ? state.viewModel.form.formId : null,
+    };
+  }
+
+  function restoreUiState(uiState) {
+    if (!uiState) return;
+    elements.progress.scrollTop = uiState.progressScrollTop;
+    elements.summary.scrollTop = uiState.summaryScrollTop;
+    elements.log.scrollTop = uiState.logScrollTop;
+    elements.helpText.scrollTop = uiState.helpScrollTop;
+    elements.modalRoot.scrollTop = uiState.modalScrollTop;
+    var modalBody = currentModalBody();
+    if (modalBody) {
+      modalBody.scrollTop = uiState.modalBodyScrollTop;
+    }
+
+    var currentFormId = state.viewModel && state.viewModel.form ? state.viewModel.form.formId : null;
+    if (!uiState.activeFieldId || uiState.formId !== currentFormId) {
+      return;
+    }
+    var selector = '[data-field-id="' + cssEscape(uiState.activeFieldId) + '"]';
+    if (uiState.activeFieldValue !== null) {
+      selector += '[value="' + cssEscape(uiState.activeFieldValue) + '"]';
+    }
+    var field = elements.modalRoot.querySelector(selector);
+    if (!field) {
+      field = elements.modalRoot.querySelector('[data-field-id="' + cssEscape(uiState.activeFieldId) + '"] input, [data-field-id="' + cssEscape(uiState.activeFieldId) + '"] textarea, input[data-field-id="' + cssEscape(uiState.activeFieldId) + '"], textarea[data-field-id="' + cssEscape(uiState.activeFieldId) + '"]');
+    }
+    if (!field || typeof field.focus !== "function") {
+      return;
+    }
+    field.focus();
+    if (typeof field.setSelectionRange === "function" && uiState.selectionStart !== null && uiState.selectionEnd !== null) {
+      var valueLength = typeof field.value === "string" ? field.value.length : 0;
+      field.setSelectionRange(Math.min(uiState.selectionStart, valueLength), Math.min(uiState.selectionEnd, valueLength));
+    }
+  }
+
+  function cssEscape(value) {
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(value);
+    }
+    return String(value).replace(/["\\]/g, "\\$&");
+  }
+
+  function currentModalBody() {
+    return elements.modalRoot.querySelector(".modal-body");
   }
 
   function renderFlows(vm) {
@@ -253,6 +336,11 @@
   }
 
   function renderModal(vm) {
+    var nextSignature = modalSignature(vm);
+    if (state.modalSignature === nextSignature) {
+      return;
+    }
+    state.modalSignature = nextSignature;
     elements.modalRoot.innerHTML = "";
     if (vm.confirmation) {
       elements.modalRoot.append(renderConfirmation(vm.confirmation));
@@ -269,6 +357,48 @@
     }
     if (vm.form) {
       elements.modalRoot.append(renderForm(vm.form));
+    }
+  }
+
+  function modalSignature(vm) {
+    if (vm.confirmation) {
+      return stableJson({
+        type: "confirmation",
+        kind: vm.confirmation.kind,
+        flowId: vm.confirmation.flowId,
+        text: vm.confirmation.text,
+        actions: vm.confirmation.actions,
+        selectedAction: vm.confirmation.selectedAction,
+      });
+    }
+    if (vm.confirmText) {
+      return stableJson({
+        type: "legacy-confirmation",
+        text: vm.confirmText,
+      });
+    }
+    if (vm.form) {
+      var definition = vm.form.definition || {};
+      return stableJson({
+        type: "form",
+        formId: vm.form.formId,
+        title: vm.form.title || definition.title,
+        content: definition.description || vm.form.content,
+        footer: vm.form.footer,
+        error: vm.form.error,
+        submitLabel: definition.submitLabel,
+        preview: definition.preview,
+        fields: vm.form.fields || definition.fields || [],
+      });
+    }
+    return "none";
+  }
+
+  function stableJson(value) {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      return String(Date.now());
     }
   }
 
@@ -336,6 +466,7 @@
   function renderForm(formModel) {
     var definition = formModel.definition || {};
     var modal = createModal(text(formModel.title || definition.title, "Input required"), text(definition.description || formModel.content, ""));
+    modal.classList.add("form-" + classNameToken(formModel.formId || definition.formId || "unknown"));
     var body = modal.querySelector(".modal-body");
     var footerNote = modal.querySelector(".modal-note");
     var footerActions = modal.querySelector(".modal-actions");
@@ -356,9 +487,10 @@
 
     var fields = document.createElement("div");
     fields.className = "form-fields";
-    (formModel.fields || definition.fields || []).forEach(function (field) {
-      fields.append(renderField(field));
-    });
+    if ((formModel.formId || definition.formId) === "flow-routing-editor") {
+      fields.classList.add("route-fields");
+    }
+    appendRenderedFields(fields, formModel.fields || definition.fields || [], (formModel.formId || definition.formId) === "flow-routing-editor");
     body.append(fields);
 
     footerNote.textContent = text(formModel.footer, "");
@@ -373,6 +505,42 @@
     cancel.addEventListener("click", api.cancelForm);
     footerActions.append(submit, cancel);
     return modal;
+  }
+
+  function appendRenderedFields(container, fields, pairExecutorModelFields) {
+    var index = 0;
+    while (index < fields.length) {
+      var field = fields[index];
+      var next = fields[index + 1];
+      if (pairExecutorModelFields && isExecutorModelPair(field, next)) {
+        var pair = document.createElement("div");
+        pair.className = "field-pair executor-model-pair";
+        pair.dataset.routeKey = field.id.slice(0, -"executor".length).replace(/_$/, "");
+        pair.append(renderField(field), renderField(next));
+        container.append(pair);
+        index += 2;
+        continue;
+      }
+      container.append(renderField(field));
+      index += 1;
+    }
+  }
+
+  function isExecutorModelPair(field, next) {
+    return Boolean(
+      field
+      && next
+      && field.type === "single-select"
+      && next.type === "single-select"
+      && typeof field.id === "string"
+      && typeof next.id === "string"
+      && field.id.endsWith("_executor")
+      && next.id === field.id.slice(0, -"executor".length) + "model",
+    );
+  }
+
+  function classNameToken(value) {
+    return String(value).toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
   }
 
   function currentValue(field) {
@@ -399,6 +567,8 @@
       checkRow.className = "check-row";
       var checkbox = document.createElement("input");
       checkbox.type = "checkbox";
+      checkbox.dataset.fieldId = field.id;
+      checkbox.dataset.fieldType = field.type;
       checkbox.checked = currentValue(field) === true;
       checkbox.addEventListener("change", function () {
         updateField(field.id, checkbox.checked);
@@ -416,6 +586,8 @@
         if (!field.multiline) input.type = "text";
         if (field.placeholder) input.placeholder = field.placeholder;
         if (field.rows) input.rows = field.rows;
+        input.dataset.fieldId = field.id;
+        input.dataset.fieldType = field.type;
         input.value = String(currentValue(field) || "");
         input.addEventListener("input", function () {
           updateField(field.id, input.value);
@@ -448,6 +620,8 @@
       input.type = "radio";
       input.name = "field-" + field.id;
       input.value = option.value;
+      input.dataset.fieldId = field.id;
+      input.dataset.fieldType = field.type;
       input.checked = option.value === value;
       input.addEventListener("change", function () {
         if (input.checked) updateField(field.id, option.value);
@@ -476,6 +650,8 @@
       var input = document.createElement("input");
       input.type = "checkbox";
       input.value = option.value;
+      input.dataset.fieldId = field.id;
+      input.dataset.fieldType = field.type;
       input.checked = selected.indexOf(option.value) !== -1;
       input.addEventListener("change", function () {
         var next = collectMultiSelect(field.id);
