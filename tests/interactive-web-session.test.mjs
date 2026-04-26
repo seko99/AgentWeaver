@@ -137,7 +137,7 @@ async function connectWebSocket(url) {
 }
 
 describe("web interactive session", () => {
-  it("streams state updates and resolves user input through WebSocket actions", async (t) => {
+  it("streams controller snapshots, logs, and semantic actions", async (t) => {
     let ready;
     let runResolve;
     const runPromise = new Promise((resolve) => {
@@ -166,25 +166,39 @@ describe("web interactive session", () => {
     try {
       const snapshot = await client.nextMessage();
       assert.equal(snapshot.type, "snapshot");
-      assert.equal(snapshot.state.scopeKey, "ag-107");
-      assert.equal(snapshot.state.summaryText, "Initial summary");
-      assert.equal(snapshot.state.flows[0].id, "plan");
+      assert.match(snapshot.viewModel.header, /Scope ag-107/);
+      assert.match(snapshot.viewModel.summaryText, /Initial summary/);
+      assert.equal(snapshot.viewModel.flowItems.some((item) => item.key === "flow:plan"), true);
 
       session.setScope("ag-108", "AG-108");
-      assert.deepEqual(await client.nextMessage(), { type: "scopeUpdated", scopeKey: "ag-108", jiraIssueKey: "AG-108" });
+      assert.match((await client.nextMessage()).viewModel.header, /Scope ag-108/);
       session.setSummary("Next summary");
-      assert.deepEqual(await client.nextMessage(), { type: "summaryUpdated", markdown: "Next summary" });
+      assert.match((await client.nextMessage()).viewModel.summaryText, /Next summary/);
       session.appendLog("hello");
-      assert.deepEqual(await client.nextMessage(), { type: "logAppended", text: "hello" });
+      assert.deepEqual(await client.nextMessage(), { type: "log.append", appendedLines: ["hello"] });
+      const reconnect = await connectWebSocket(server.url);
+      try {
+        const recovered = await reconnect.nextMessage();
+        assert.equal(recovered.type, "snapshot");
+        assert.match(recovered.viewModel.logText, /hello/);
+        session.setSummary("Fanout summary");
+        const firstFanout = await client.nextMessage();
+        const secondFanout = await reconnect.nextMessage();
+        assert.match(firstFanout.viewModel.summaryText, /Fanout summary/);
+        assert.match(secondFanout.viewModel.summaryText, /Fanout summary/);
+      } finally {
+        reconnect.close();
+      }
       session.setFlowFailed("plan");
-      assert.deepEqual(await client.nextMessage(), { type: "flowFailed", flowId: "plan" });
+      assert.equal((await client.nextMessage()).type, "snapshot");
 
-      client.send({ type: "requestRun", flowId: "plan" });
+      client.send({ type: "run.openConfirm", flowId: "plan" });
       const confirmation = await client.nextMessage();
-      assert.equal(confirmation.type, "confirmationRequested");
-      assert.equal(confirmation.flowId, "plan");
-      assert.equal(confirmation.mode, "restart");
-      client.send({ type: "confirmRun", requestId: confirmation.requestId });
+      assert.equal(confirmation.type, "snapshot");
+      assert.match(confirmation.viewModel.confirmText, /Run flow/);
+      client.send({ type: "confirm.select", action: "restart" });
+      assert.equal((await client.nextMessage()).type, "snapshot");
+      client.send({ type: "confirm.accept" });
       assert.deepEqual(await runPromise, { flowId: "plan", mode: "restart" });
 
       const inputPromise = session.requestUserInput({
@@ -193,8 +207,11 @@ describe("web interactive session", () => {
         fields: [{ id: "name", type: "text", label: "Name", required: true }],
       });
       const requested = await client.nextMessage();
-      assert.equal(requested.type, "inputRequested");
-      client.send({ type: "submitInput", requestId: requested.requestId, values: { name: "Ada" } });
+      assert.equal(requested.type, "snapshot");
+      assert.equal(requested.viewModel.form.formId, "demo");
+      client.send({ type: "form.update", values: { name: "Ada" } });
+      assert.equal((await client.nextMessage()).type, "snapshot");
+      client.send({ type: "form.submit" });
       const result = await inputPromise;
       assert.equal(result.formId, "demo");
       assert.equal(result.values.name, "Ada");
@@ -232,11 +249,15 @@ describe("web interactive session", () => {
         fields: [{ id: "name", type: "text", label: "Name", required: true }],
       });
       const requested = await client.nextMessage();
-      client.send({ type: "cancelInput", requestId: requested.requestId });
+      client.send({ type: "form.cancel" });
       await assert.rejects(inputPromise, /User cancelled form 'demo'/);
       const interrupted = await client.nextMessage();
-      assert.equal(interrupted.type, "formInterrupted");
-      assert.equal(interrupted.requestId, requested.requestId);
+      assert.equal(interrupted.type, "snapshot");
+      assert.equal(interrupted.viewModel.form, null);
+      client.send({ type: "form.cancel" });
+      const stale = await client.nextMessage();
+      assert.equal(stale.type, "error");
+      assert.match(stale.message, /No form is active/);
     } finally {
       client.close();
       session.destroy();

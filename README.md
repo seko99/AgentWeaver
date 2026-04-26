@@ -130,7 +130,7 @@ To open the Web UI from another machine on a trusted network, use `agentweaver w
 
 By default, AgentWeaver tries to open the browser after the server starts successfully and the URL is printed. For CI, tests, and manual smoke checks, use `agentweaver web --no-open` or the `AGENTWEAVER_WEB_NO_OPEN=1` environment variable; the `--no-open` flag is supported only after the `web` command.
 
-The first Web UI version serves a built-in HTML shell without a separate static asset pipeline. Live browser interaction with the interactive session uses WebSocket on the same server. Bounded checks can use `GET /__agentweaver/health`, and shutdown is available through `POST /__agentweaver/exit` or `SIGINT`/`SIGTERM`.
+The current Web UI version serves a built-in HTML shell without a separate static asset pipeline. Live browser interaction with the interactive session uses WebSocket on the same server. Bounded checks can use `GET /__agentweaver/health`, and shutdown is available through `POST /__agentweaver/exit` or `SIGINT`/`SIGTERM`.
 
 ## Installation
 
@@ -318,7 +318,7 @@ Notes:
 - `--verbose` streams child process stdout/stderr in direct CLI mode
 - `--prompt <text>` appends extra instructions to the prompt
 - `--scope <name>` is supported by scope-flexible flows such as `implement`, `review`, `review-fix`, `review-loop`, `run-go-tests-loop`, `run-go-linter-loop`, `gitlab-review`, and `gitlab-diff-review`
-- `--md-lang <en|ru>` currently applies to `plan`
+- `--md-lang <en|ru>` applies only to generated workflow markdown artifacts, not repository source files or committed documentation
 - `--force` only affects interactive mode: it skips loading cached summary-pane content on startup so Jira-backed flows that regenerate summary artifacts can repopulate it during the run
 - Jira-backed flows ask for Jira input interactively when it is omitted
 - `task-describe` can also work from manual task description input without Jira
@@ -467,7 +467,7 @@ Typical playbook content includes:
 - templates for recurring artifact shapes or implementation notes
 - repository context that should remain visible across tasks without overriding task-specific inputs
 
-The guided flow is `auto-common-guided`. It first runs the same Jira fetch and task normalization steps as `auto-common`, then validates `.agentweaver/playbook/manifest.yaml` and generates compact project guidance before the `plan`, `design-review`, `implement`, `review`, and `repair/review-fix` phases. JSON artifacts remain English and machine-readable; markdown is generated in the workflow-selected language.
+The guided flow is `auto-common-guided`. It first runs the same Jira fetch and task normalization steps as `auto-common`, then validates `.agentweaver/playbook/manifest.yaml` and generates compact project guidance before the `plan`, `design-review`, `implement`, `review`, and `repair/review-fix` phases. JSON artifacts remain English and machine-readable; workflow markdown artifacts are generated in the workflow-selected language. The markdown language setting does not apply to repository source files, committed documentation, or playbook rules.
 
 The guidance is intentionally phase-aware. A rule can apply only to `plan`, `implement`, `review`, or another supported phase; it can also target languages, frameworks, glob patterns, and keywords. AgentWeaver writes both a structured `project-guidance/v1` JSON artifact and a derivative markdown file, then passes their paths into the phase prompt as supplemental project-local context.
 

@@ -26,9 +26,13 @@ export function renderPrompt(binding: PromptBindingSpec, context: DeclarativeRes
   const jsonInstruction = STRUCTURED_JSON_LANGUAGE_INSTRUCTION.trim();
   let langInstruction: string | null = null;
   if (mdLang === "en") {
-    langInstruction = "Generate all markdown output files in English language.";
+    langInstruction =
+      "Generate workflow markdown artifact files in English language. " +
+      "This language setting applies only to generated AgentWeaver artifacts, not to repository source files, code comments, committed documentation, or project-local playbook rules.";
   } else if (mdLang === "ru" || mdLang === null || mdLang === undefined) {
-    langInstruction = "Generate all markdown output files in Russian language.";
+    langInstruction =
+      "Generate workflow markdown artifact files in Russian language. " +
+      "This language setting applies only to generated AgentWeaver artifacts, not to repository source files, code comments, committed documentation, or project-local playbook rules.";
   }
   const finalExtraPrompt = [extraPrompt, jsonInstruction, langInstruction].filter(Boolean).join("\n");
   if ((binding.format ?? "task-prompt") === "plain") {

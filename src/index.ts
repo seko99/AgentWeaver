@@ -330,7 +330,7 @@ Flags:
   --continue      Continue a terminated iterative run when valid
   --restart       Archive the active attempt and start a fresh run
   --blocking-severities  Comma-separated severities that block merge and drive review-fix auto-selection
-  --md-lang       Language for markdown output files: en (English) or ru (Russian, default)
+  --md-lang       Language for workflow markdown artifacts only: en (English) or ru (Russian, default)
   --accept-playbook-draft  Non-interactively accept generated playbook content for playbook-init or auto-common-guided missing-manifest runs
 
 Required environment variables:

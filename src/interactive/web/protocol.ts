@@ -1,65 +1,95 @@
-import type { UserInputFormDefinition, UserInputFormValues } from "../../user-input.js";
-import type { FlowLaunchMode } from "../../flow-state.js";
-import type { InteractiveFlowDefinition } from "../types.js";
+import type { UserInputFormValues } from "../../user-input.js";
+import type { FocusPane } from "../types.js";
+import type { InteractiveSessionViewModel } from "../view-model.js";
 
-export type WebSessionSnapshot = {
-  scopeKey: string;
-  jiraIssueKey: string | null;
-  summaryText: string;
-  logs: string[];
-  flows: Pick<InteractiveFlowDefinition, "id" | "label" | "description" | "treePath">[];
-  failedFlowId: string | null;
-  pendingInput: WebPendingInput | null;
-  pendingConfirmation: WebPendingConfirmation | null;
-  shuttingDown: boolean;
-};
+export type ServerEvent =
+  | { type: "snapshot"; viewModel: InteractiveSessionViewModel }
+  | { type: "log.append"; appendedLines: string[] }
+  | { type: "error"; message: string; requestId?: string; actionId?: string }
+  | { type: "closed"; reason?: string };
 
-export type WebPendingInput = {
-  requestId: string;
-  form: UserInputFormDefinition;
-};
+export type ClientAction =
+  | { type: "flow.select"; index?: number; key?: string; actionId?: string }
+  | { type: "folder.toggle"; key: string; actionId?: string }
+  | { type: "run.openConfirm"; flowId?: string; key?: string; actionId?: string }
+  | { type: "confirm.select"; action: string; actionId?: string }
+  | { type: "confirm.accept"; actionId?: string }
+  | { type: "confirm.cancel"; actionId?: string }
+  | { type: "form.update"; values: UserInputFormValues; actionId?: string }
+  | { type: "form.submit"; values?: UserInputFormValues; actionId?: string }
+  | { type: "form.cancel"; actionId?: string }
+  | { type: "flow.interrupt"; flowId?: string; actionId?: string }
+  | { type: "log.clear"; actionId?: string }
+  | { type: "help.toggle"; visible?: boolean; actionId?: string }
+  | { type: "scroll"; pane: FocusPane | "help"; delta?: number; offset?: number; actionId?: string };
 
-export type WebPendingConfirmation = {
-  requestId: string;
-  flowId: string;
-  mode: FlowLaunchMode;
-  details: string | null;
-};
+const ACTION_TYPES = new Set([
+  "flow.select",
+  "folder.toggle",
+  "run.openConfirm",
+  "confirm.select",
+  "confirm.accept",
+  "confirm.cancel",
+  "form.update",
+  "form.submit",
+  "form.cancel",
+  "flow.interrupt",
+  "log.clear",
+  "help.toggle",
+  "scroll",
+]);
 
-export type WebServerMessage =
-  | { type: "snapshot"; state: WebSessionSnapshot }
-  | { type: "summaryUpdated"; markdown: string }
-  | { type: "summaryCleared" }
-  | { type: "scopeUpdated"; scopeKey: string; jiraIssueKey: string | null }
-  | { type: "logAppended"; text: string }
-  | { type: "flowFailed"; flowId: string }
-  | { type: "inputRequested"; requestId: string; form: UserInputFormDefinition }
-  | { type: "confirmationRequested"; requestId: string; flowId: string; mode: FlowLaunchMode; details: string | null }
-  | { type: "formInterrupted"; requestId: string | null; message: string }
-  | { type: "shutdown" }
-  | { type: "error"; message: string; requestId?: string };
-
-export type WebClientAction =
-  | { type: "submitInput"; requestId: string; values: UserInputFormValues }
-  | { type: "requestRun"; flowId: string }
-  | { type: "cancelInput"; requestId: string }
-  | { type: "confirmRun"; requestId: string }
-  | { type: "rejectRun"; requestId: string }
-  | { type: "interrupt"; flowId?: string }
-  | { type: "exit" };
+const SCROLL_PANES = new Set(["flows", "progress", "summary", "log", "help"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function requireRequestId(value: Record<string, unknown>): string {
-  if (typeof value.requestId !== "string" || value.requestId.trim().length === 0) {
-    throw new Error("Protocol action requires a non-empty requestId.");
+function optionalActionId(value: Record<string, unknown>): string | undefined {
+  if (value.actionId === undefined) {
+    return undefined;
   }
-  return value.requestId;
+  if (typeof value.actionId !== "string" || value.actionId.trim().length === 0) {
+    throw new Error("actionId must be a non-empty string when provided.");
+  }
+  return value.actionId;
 }
 
-export function parseWebClientAction(raw: string): WebClientAction {
+function requireNonEmptyString(value: Record<string, unknown>, fieldName: string): string {
+  const field = value[fieldName];
+  if (typeof field !== "string" || field.trim().length === 0) {
+    throw new Error(`${fieldName} must be a non-empty string.`);
+  }
+  return field;
+}
+
+function optionalNonEmptyString(value: Record<string, unknown>, fieldName: string): string | undefined {
+  if (value[fieldName] === undefined) {
+    return undefined;
+  }
+  return requireNonEmptyString(value, fieldName);
+}
+
+function optionalInteger(value: Record<string, unknown>, fieldName: string): number | undefined {
+  if (value[fieldName] === undefined) {
+    return undefined;
+  }
+  const field = value[fieldName];
+  if (typeof field !== "number" || !Number.isInteger(field)) {
+    throw new Error(`${fieldName} must be an integer.`);
+  }
+  return field;
+}
+
+function requireValues(value: Record<string, unknown>, fieldName = "values"): UserInputFormValues {
+  const values = value[fieldName];
+  if (!isRecord(values)) {
+    throw new Error(`${fieldName} must be an object.`);
+  }
+  return values as UserInputFormValues;
+}
+
+export function parseClientAction(raw: string): ClientAction {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -70,38 +100,68 @@ export function parseWebClientAction(raw: string): WebClientAction {
   if (!isRecord(parsed) || typeof parsed.type !== "string") {
     throw new Error("Protocol message requires a string type.");
   }
-
-  if (parsed.type === "submitInput") {
-    const requestId = requireRequestId(parsed);
-    if (!isRecord(parsed.values)) {
-      throw new Error("submitInput requires object values.");
-    }
-    return { type: "submitInput", requestId, values: parsed.values as UserInputFormValues };
-  }
-  if (parsed.type === "requestRun") {
-    if (typeof parsed.flowId !== "string" || parsed.flowId.trim().length === 0) {
-      throw new Error("requestRun requires a non-empty flowId.");
-    }
-    return { type: "requestRun", flowId: parsed.flowId };
-  }
-  if (parsed.type === "cancelInput") {
-    return { type: "cancelInput", requestId: requireRequestId(parsed) };
-  }
-  if (parsed.type === "confirmRun") {
-    return { type: "confirmRun", requestId: requireRequestId(parsed) };
-  }
-  if (parsed.type === "rejectRun") {
-    return { type: "rejectRun", requestId: requireRequestId(parsed) };
-  }
-  if (parsed.type === "interrupt") {
-    if (parsed.flowId !== undefined && typeof parsed.flowId !== "string") {
-      throw new Error("interrupt flowId must be a string when provided.");
-    }
-    return parsed.flowId ? { type: "interrupt", flowId: parsed.flowId } : { type: "interrupt" };
-  }
-  if (parsed.type === "exit") {
-    return { type: "exit" };
+  if (!ACTION_TYPES.has(parsed.type)) {
+    throw new Error(`Unknown protocol action: ${parsed.type}`);
   }
 
-  throw new Error(`Unknown protocol action: ${parsed.type}`);
+  const actionId = optionalActionId(parsed);
+  if (parsed.type === "flow.select") {
+    const index = optionalInteger(parsed, "index");
+    const key = optionalNonEmptyString(parsed, "key");
+    if (index === undefined && key === undefined) {
+      throw new Error("flow.select requires index or key.");
+    }
+    return { type: "flow.select", ...(index !== undefined ? { index } : {}), ...(key ? { key } : {}), ...(actionId ? { actionId } : {}) };
+  }
+  if (parsed.type === "folder.toggle") {
+    return { type: "folder.toggle", key: requireNonEmptyString(parsed, "key"), ...(actionId ? { actionId } : {}) };
+  }
+  if (parsed.type === "run.openConfirm") {
+    const flowId = optionalNonEmptyString(parsed, "flowId");
+    const key = optionalNonEmptyString(parsed, "key");
+    return { type: "run.openConfirm", ...(flowId ? { flowId } : {}), ...(key ? { key } : {}), ...(actionId ? { actionId } : {}) };
+  }
+  if (parsed.type === "confirm.select") {
+    return { type: "confirm.select", action: requireNonEmptyString(parsed, "action"), ...(actionId ? { actionId } : {}) };
+  }
+  if (parsed.type === "confirm.accept" || parsed.type === "confirm.cancel" || parsed.type === "form.cancel" || parsed.type === "log.clear") {
+    return { type: parsed.type, ...(actionId ? { actionId } : {}) } as ClientAction;
+  }
+  if (parsed.type === "form.update") {
+    return { type: "form.update", values: requireValues(parsed), ...(actionId ? { actionId } : {}) };
+  }
+  if (parsed.type === "form.submit") {
+    return {
+      type: "form.submit",
+      ...(parsed.values !== undefined ? { values: requireValues(parsed) } : {}),
+      ...(actionId ? { actionId } : {}),
+    };
+  }
+  if (parsed.type === "flow.interrupt") {
+    const flowId = optionalNonEmptyString(parsed, "flowId");
+    return { type: "flow.interrupt", ...(flowId ? { flowId } : {}), ...(actionId ? { actionId } : {}) };
+  }
+  if (parsed.type === "help.toggle") {
+    if (parsed.visible !== undefined && typeof parsed.visible !== "boolean") {
+      throw new Error("visible must be a boolean when provided.");
+    }
+    return { type: "help.toggle", ...(parsed.visible !== undefined ? { visible: parsed.visible } : {}), ...(actionId ? { actionId } : {}) };
+  }
+
+  const pane = requireNonEmptyString(parsed, "pane");
+  if (!SCROLL_PANES.has(pane)) {
+    throw new Error("scroll pane must be one of flows, progress, summary, log, or help.");
+  }
+  const delta = optionalInteger(parsed, "delta");
+  const offset = optionalInteger(parsed, "offset");
+  if (delta === undefined && offset === undefined) {
+    throw new Error("scroll requires delta or offset.");
+  }
+  return {
+    type: "scroll",
+    pane: pane as FocusPane | "help",
+    ...(delta !== undefined ? { delta } : {}),
+    ...(offset !== undefined ? { offset } : {}),
+    ...(actionId ? { actionId } : {}),
+  };
 }
