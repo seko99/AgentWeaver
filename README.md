@@ -122,6 +122,30 @@ There are also built-in nested/helper flows that are loaded declaratively but ar
 - `opencode` CLI if you use OpenCode-backed stages
 - access to Jira and/or GitLab when the selected flow needs them
 
+## Web UI
+
+The `agentweaver web [--no-open] [--host <host>|--listen-all] [<jira-browse-url|jira-issue-key>]` command starts interactive mode through the Web UI. By default, the server binds to `127.0.0.1`, asks the operating system for a random port, and prints the final address as `AgentWeaver Web UI: http://127.0.0.1:<port>/`.
+
+To open the Web UI from another machine on a trusted network, configure Web UI credentials first:
+
+```bash
+export AGENTWEAVER_WEB_USERNAME=operator
+export AGENTWEAVER_WEB_PASSWORD='choose-a-strong-password'
+agentweaver web --listen-all --no-open
+```
+
+External binding requires both `AGENTWEAVER_WEB_USERNAME` and `AGENTWEAVER_WEB_PASSWORD`. This applies to `agentweaver web --listen-all`, `agentweaver web --host 0.0.0.0`, `agentweaver web --host ::`, explicit non-loopback IP addresses such as `192.168.1.10` or `2001:db8::1`, and any hostname other than `localhost`. In this mode, the server listens on the requested interface; connect to the IP address or hostname of the machine running AgentWeaver and the assigned port.
+
+The default localhost bindings, including `127.0.0.1`, `::1`, and `localhost`, remain no-auth by default. If Web UI credentials are configured, the same Basic auth check also protects localhost Web UI requests.
+
+Web UI authentication uses HTTP Basic auth. Over plain HTTP, use it only on trusted networks because credentials are not encrypted in transit. For untrusted networks, put AgentWeaver behind TLS termination or an equivalent reverse proxy.
+
+By default, AgentWeaver tries to open the browser after the server starts successfully and the URL is printed. For CI, tests, and manual smoke checks, use `agentweaver web --no-open` or the `AGENTWEAVER_WEB_NO_OPEN=1` environment variable; the `--no-open` flag is supported only after the `web` command.
+
+The Web UI serves the operator console from the same local process, including `/`, `/static/app.js`, and `/static/styles.css`. Live browser interaction uses WebSocket on `/__agentweaver/ws`. Bounded checks can use `GET /__agentweaver/health`, and shutdown is available through `POST /__agentweaver/exit` or `SIGINT`/`SIGTERM`.
+
+Web UI state is process-local: it exists only while the AgentWeaver process is running and is not shared with other AgentWeaver processes. The Web UI is intended to match the interactive operator workflow for flow selection, launch confirmation, routing and user-input forms, progress and logs, and interrupt handling.
+
 ## Installation
 
 Local development:
@@ -308,7 +332,7 @@ Notes:
 - `--verbose` streams child process stdout/stderr in direct CLI mode
 - `--prompt <text>` appends extra instructions to the prompt
 - `--scope <name>` is supported by scope-flexible flows such as `implement`, `review`, `review-fix`, `review-loop`, `run-go-tests-loop`, `run-go-linter-loop`, `gitlab-review`, and `gitlab-diff-review`
-- `--md-lang <en|ru>` currently applies to `plan`
+- `--md-lang <en|ru>` applies only to generated workflow markdown artifacts, not repository source files or committed documentation
 - `--force` only affects interactive mode: it skips loading cached summary-pane content on startup so Jira-backed flows that regenerate summary artifacts can repopulate it during the run
 - Jira-backed flows ask for Jira input interactively when it is omitted
 - `task-describe` can also work from manual task description input without Jira
@@ -349,6 +373,7 @@ Artifacts and flow state are stored under the current project scope. In practice
 - Jira-backed runs usually use the Jira issue key as scope
 - non-Jira runs can fall back to a git-derived scope
 - `--scope <name>` lets you override the default for supported commands
+- interactive and web sessions automatically switch the branch-derived scope after the git branch changes, unless the session was started with an explicit Jira argument or `--scope`
 
 The runtime uses artifacts as the contract between stages, including markdown outputs and structured JSON files validated against schemas.
 
@@ -457,7 +482,7 @@ Typical playbook content includes:
 - templates for recurring artifact shapes or implementation notes
 - repository context that should remain visible across tasks without overriding task-specific inputs
 
-The guided flow is `auto-common-guided`. It first runs the same Jira fetch and task normalization steps as `auto-common`, then validates `.agentweaver/playbook/manifest.yaml` and generates compact project guidance before the `plan`, `design-review`, `implement`, `review`, and `repair/review-fix` phases. JSON artifacts remain English and machine-readable; markdown is generated in the workflow-selected language.
+The guided flow is `auto-common-guided`. It first runs the same Jira fetch and task normalization steps as `auto-common`, then validates `.agentweaver/playbook/manifest.yaml` and generates compact project guidance before the `plan`, `design-review`, `implement`, `review`, and `repair/review-fix` phases. JSON artifacts remain English and machine-readable; workflow markdown artifacts are generated in the workflow-selected language. The markdown language setting does not apply to repository source files, committed documentation, or playbook rules.
 
 The guidance is intentionally phase-aware. A rule can apply only to `plan`, `implement`, `review`, or another supported phase; it can also target languages, frameworks, glob patterns, and keywords. AgentWeaver writes both a structured `project-guidance/v1` JSON artifact and a derivative markdown file, then passes their paths into the phase prompt as supplemental project-local context.
 

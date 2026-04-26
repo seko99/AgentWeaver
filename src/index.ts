@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -105,6 +105,8 @@ import {
 import { requestInteractiveExecutionRouting } from "./runtime/interactive-execution-routing.js";
 import { createInteractiveSession } from "./interactive/create-interactive-session.js";
 import type { InteractiveSession } from "./interactive/session.js";
+import { createWebInteractiveSession } from "./interactive/web/index.js";
+import type { WebServerAuthConfig } from "./interactive/web/server.js";
 import type { InteractiveFlowDefinition } from "./interactive/types.js";
 import {
   bye,
@@ -122,7 +124,6 @@ import type { UserInputFieldDefinition, UserInputFormDefinition, UserInputFormVa
 import { runDoctorCommand } from "./doctor/index.js";
 import {
   attachJiraContext,
-  detectGitBranchName,
   requestJiraContext,
   resolveProjectScope,
   type ResolvedScope,
@@ -148,6 +149,7 @@ const COMMANDS = [
   "plan-revise",
   "playbook-init",
   "task-describe",
+  "web",
   "implement",
   "review",
   "review-fix",
@@ -156,10 +158,23 @@ const COMMANDS = [
   "run-go-linter-loop",
 ] as const;
 
+const INTERACTIVE_SCOPE_WATCH_INTERVAL_MS = 1500;
+const WEB_AUTH_USERNAME_ENV = "AGENTWEAVER_WEB_USERNAME";
+const WEB_AUTH_PASSWORD_ENV = "AGENTWEAVER_WEB_PASSWORD";
+
 type CommandName = (typeof COMMANDS)[number];
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(MODULE_DIR, "..");
+
+function writeStdoutSync(text: string): void {
+  writeSync(process.stdout.fd, text);
+}
+
+function writeStderrSync(text: string): void {
+  writeSync(process.stderr.fd, text);
+}
+
 function createRuntimeServices(signal?: AbortSignal): RuntimeServices {
   return {
     resolveCmd,
@@ -215,6 +230,8 @@ type ParsedArgs = {
   doctorArgs?: string[];
   launchMode?: FlowLaunchMode;
   acceptPlaybookDraft?: boolean;
+  webNoOpen?: boolean;
+  webHost?: string;
 };
 
 type ProcessFailureLike = {
@@ -222,6 +239,42 @@ type ProcessFailureLike = {
   output?: string;
   message?: string;
 };
+
+function isExternalWebHost(host: string | undefined): boolean {
+  const normalized = (host?.trim() || "127.0.0.1").toLowerCase();
+  if (normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost") {
+    return false;
+  }
+  const unbracketed = normalized.startsWith("[") && normalized.endsWith("]") ? normalized.slice(1, -1) : normalized;
+  if (unbracketed === "::1") {
+    return false;
+  }
+  return true;
+}
+
+function resolveWebAuthConfig(): WebServerAuthConfig | undefined {
+  const username = process.env[WEB_AUTH_USERNAME_ENV]?.trim() ?? "";
+  const password = process.env[WEB_AUTH_PASSWORD_ENV] ?? "";
+  const hasUsername = username.length > 0;
+  const hasPassword = password.length > 0;
+  if (hasUsername !== hasPassword) {
+    throw new TaskRunnerError(`Web UI auth requires both ${WEB_AUTH_USERNAME_ENV} and ${WEB_AUTH_PASSWORD_ENV}.`);
+  }
+  if (!hasUsername || !hasPassword) {
+    return undefined;
+  }
+  return { username, password };
+}
+
+function requireWebAuthForHost(host: string | undefined, auth: WebServerAuthConfig | undefined): void {
+  if (!isExternalWebHost(host) || auth) {
+    return;
+  }
+  throw new TaskRunnerError(
+    `External Web UI binding requires ${WEB_AUTH_USERNAME_ENV} and ${WEB_AUTH_PASSWORD_ENV}. ` +
+      "Use localhost for no-auth local access, or configure credentials before using --listen-all or --host with an external interface.",
+  );
+}
 
 function buildFailureOutputPreview(output: string): string {
   const normalized = stripAnsi(output).replace(/\r\n/g, "\n").trim();
@@ -267,6 +320,7 @@ function usage(): string {
   agentweaver
   agentweaver <jira-browse-url|jira-issue-key>
   agentweaver --force <jira-browse-url|jira-issue-key>
+  agentweaver web [--no-open] [--host <host>|--listen-all] [<jira-browse-url|jira-issue-key>]
   agentweaver git-commit [--dry] [--verbose] [--prompt <text>] [--scope <name>] [<jira-browse-url|jira-issue-key>]
   agentweaver gitlab-diff-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
   agentweaver gitlab-review [--dry] [--verbose] [--prompt <text>] [--scope <name>]
@@ -305,6 +359,9 @@ Interactive Mode:
 Flags:
   --version       Show package version
   --force         In interactive mode, regenerate task summary in Jira-backed flows
+  --no-open       Web command only: print the Web UI URL without opening a browser
+  --host          Web command only: bind Web UI to this host (default: 127.0.0.1)
+  --listen-all    Web command only: bind Web UI to 0.0.0.0
   --dry           Fetch Jira task, but print codex/opencode commands instead of executing them
   --verbose       Show live stdout/stderr of launched commands
   --scope         Explicit workflow scope name for non-Jira runs except instant-task
@@ -313,7 +370,7 @@ Flags:
   --continue      Continue a terminated iterative run when valid
   --restart       Archive the active attempt and start a fresh run
   --blocking-severities  Comma-separated severities that block merge and drive review-fix auto-selection
-  --md-lang       Language for markdown output files: en (English) or ru (Russian, default)
+  --md-lang       Language for workflow markdown artifacts only: en (English) or ru (Russian, default)
   --accept-playbook-draft  Non-interactively accept generated playbook content for playbook-init or auto-common-guided missing-manifest runs
 
 Required environment variables:
@@ -330,9 +387,15 @@ Optional environment variables:
   CODEX_MODEL
   OPENCODE_BIN
   OPENCODE_MODEL
+  AGENTWEAVER_WEB_NO_OPEN  Set to 1 to disable browser auto-open for agentweaver web
+  ${WEB_AUTH_USERNAME_ENV}  Web UI Basic auth username; required for external Web UI binding
+  ${WEB_AUTH_PASSWORD_ENV}  Web UI Basic auth password; required for external Web UI binding
 
 Notes:
   - Jira-backed task flows will ask for Jira task via user-input when it is not passed as an argument. task-describe can also work from a manual task description without Jira.
+  - agentweaver web binds to 127.0.0.1 by default on an operating-system-assigned port and does not require auth unless Web UI credentials are configured.
+  - External Web UI binding through --listen-all, --host 0.0.0.0, --host ::, non-loopback IPs, or hostnames other than localhost requires ${WEB_AUTH_USERNAME_ENV} and ${WEB_AUTH_PASSWORD_ENV}.
+  - Web UI Basic auth over plain HTTP is suitable only on trusted networks; use TLS termination or a reverse proxy on untrusted networks.
   - instant-task always uses the current branch-derived project scope and rejects explicit scope overrides or Jira arguments.
   - All flow state and artifacts are stored in the current project scope by default.
   - gitlab-review and gitlab-diff-review ask for GitLab merge request URL via user-input.
@@ -1931,21 +1994,21 @@ async function executeCommand(
 
 async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
   if (argv.includes("--version") || argv.includes("-v")) {
-    process.stdout.write(`${packageVersion()}\n`);
+    writeStdoutSync(`${packageVersion()}\n`);
     process.exit(0);
   }
   if (argv.includes("--help") || argv.includes("-h")) {
-    process.stdout.write(`${usage()}\n`);
+    writeStdoutSync(`${usage()}\n`);
     process.exit(0);
   }
   if (argv.length === 0) {
-    process.stderr.write(`${usage()}\n`);
+    writeStderrSync(`${usage()}\n`);
     process.exit(1);
   }
 
   const command = argv[0];
   if (!COMMANDS.includes(command as CommandName)) {
-    process.stderr.write(`${usage()}\n`);
+    writeStderrSync(`${usage()}\n`);
     process.exit(1);
   }
 
@@ -1960,6 +2023,8 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
   let mdLang: "en" | "ru" | undefined;
   let launchMode: FlowLaunchMode | undefined;
   let acceptPlaybookDraft = false;
+  let webNoOpen = process.env.AGENTWEAVER_WEB_NO_OPEN === "1";
+  let webHost: string | undefined;
   const doctorArgs: string[] = [];
 
   for (let index = 1; index < argv.length; index += 1) {
@@ -1980,9 +2045,52 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
       acceptPlaybookDraft = true;
       continue;
     }
+    if (token === "--no-open") {
+      if (command !== "web") {
+        writeStderrSync("Error: --no-open is only supported after the web command.\n");
+        process.exit(1);
+      }
+      webNoOpen = true;
+      continue;
+    }
+    if (token === "--listen-all") {
+      if (command !== "web") {
+        writeStderrSync("Error: --listen-all is only supported after the web command.\n");
+        process.exit(1);
+      }
+      webHost = "0.0.0.0";
+      continue;
+    }
+    if (token === "--host") {
+      if (command !== "web") {
+        writeStderrSync("Error: --host is only supported after the web command.\n");
+        process.exit(1);
+      }
+      const hostValue = argv[index + 1]?.trim();
+      if (!hostValue || hostValue.startsWith("-")) {
+        writeStderrSync("Error: --host requires a host value.\n");
+        process.exit(1);
+      }
+      webHost = hostValue;
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--host=")) {
+      if (command !== "web") {
+        writeStderrSync("Error: --host is only supported after the web command.\n");
+        process.exit(1);
+      }
+      const hostValue = token.slice("--host=".length).trim();
+      if (!hostValue) {
+        writeStderrSync("Error: --host requires a host value.\n");
+        process.exit(1);
+      }
+      webHost = hostValue;
+      continue;
+    }
     if (token === "--resume" || token === "--continue" || token === "--restart") {
       if (launchMode) {
-        process.stderr.write("Error: --resume, --continue, and --restart are mutually exclusive.\n");
+        writeStderrSync("Error: --resume, --continue, and --restart are mutually exclusive.\n");
         process.exit(1);
       }
       launchMode = token.slice(2) as FlowLaunchMode;
@@ -2017,7 +2125,7 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
       if (langValue === "en" || langValue === "ru") {
         mdLang = langValue;
       } else {
-        process.stderr.write("Error: --md-lang accepts only 'en' or 'ru' as values.\n");
+        writeStderrSync("Error: --md-lang accepts only 'en' or 'ru' as values.\n");
         process.exit(1);
       }
       index += 1;
@@ -2028,7 +2136,7 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
       if (langValue === "en" || langValue === "ru") {
         mdLang = langValue;
       } else {
-        process.stderr.write("Error: --md-lang accepts only 'en' or 'ru' as values.\n");
+        writeStderrSync("Error: --md-lang accepts only 'en' or 'ru' as values.\n");
         process.exit(1);
       }
       continue;
@@ -2067,6 +2175,8 @@ async function parseCliArgs(argv: string[]): Promise<ParsedArgs> {
     ...(doctorArgs.length > 0 ? { doctorArgs } : {}),
     ...(launchMode !== undefined ? { launchMode } : {}),
     ...(acceptPlaybookDraft ? { acceptPlaybookDraft } : {}),
+    ...(command === "web" ? { webNoOpen } : {}),
+    ...(command === "web" && webHost !== undefined ? { webHost } : {}),
   };
 }
 
@@ -2085,24 +2195,81 @@ function buildConfigFromArgs(args: ParsedArgs): BaseConfig {
   });
 }
 
-async function runInteractive(jiraRef?: string | null, forceRefresh = false, scopeName?: string | null): Promise<number> {
+type InteractiveSessionFactory = (options: Parameters<typeof createInteractiveSession>[0]) => InteractiveSession;
+
+async function runInteractiveWithSessionFactory(
+  createSession: InteractiveSessionFactory,
+  jiraRef?: string | null,
+  forceRefresh = false,
+  scopeName?: string | null,
+  installSignalCleanup = false,
+): Promise<number> {
   let currentScope = resolveProjectScope(scopeName, jiraRef);
-  const gitBranchName = detectGitBranchName();
   const flowCatalog = await loadInteractiveFlowCatalog(process.cwd());
   let activeAbortController: AbortController | null = null;
   let activeFlowId: string | null = null;
+  let pendingScopeSwitch: ResolvedScope | null = null;
+  const autoScopeSwitchEnabled = !scopeName?.trim() && !jiraRef?.trim();
+  let lastObservedGitScope = currentScope;
+  let ui!: InteractiveSession;
 
   let exiting = false;
-  const ui = createInteractiveSession(
+  const applyScopeSwitch = (nextScope: ResolvedScope, reason: string): void => {
+    const previousScope = currentScope;
+    currentScope = nextScope;
+    ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null, currentScope.gitBranchName);
+    syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
+    ui.appendLog(
+      `[scope] ${reason}: ${previousScope.scopeKey} -> ${currentScope.scopeKey}`,
+    );
+  };
+  const handleObservedScope = (observedScope: ResolvedScope, reason: string): void => {
+    if (
+      observedScope.scopeKey === currentScope.scopeKey
+      && observedScope.gitBranchName === currentScope.gitBranchName
+    ) {
+      pendingScopeSwitch = null;
+      return;
+    }
+    if (activeAbortController) {
+      if (
+        !pendingScopeSwitch
+        || pendingScopeSwitch.scopeKey !== observedScope.scopeKey
+        || pendingScopeSwitch.gitBranchName !== observedScope.gitBranchName
+      ) {
+        pendingScopeSwitch = observedScope;
+        ui.appendLog(`[scope] ${reason}: switch to ${observedScope.scopeKey} pending until current flow finishes`);
+      }
+      return;
+    }
+    pendingScopeSwitch = null;
+    applyScopeSwitch(observedScope, reason);
+  };
+  const refreshScopeFromGit = (reason: string): void => {
+    if (!autoScopeSwitchEnabled) {
+      return;
+    }
+    const observedScope = resolveProjectScope(null, null);
+    if (
+      observedScope.scopeKey === lastObservedGitScope.scopeKey
+      && observedScope.gitBranchName === lastObservedGitScope.gitBranchName
+    ) {
+      return;
+    }
+    lastObservedGitScope = observedScope;
+    handleObservedScope(observedScope, reason);
+  };
+  ui = createSession(
     {
       scopeKey: currentScope.scopeKey,
       jiraIssueKey: currentScope.jiraIssueKey ?? null,
       summaryText: "",
       cwd: process.cwd(),
-      gitBranchName,
+      gitBranchName: currentScope.gitBranchName,
       version: packageVersion(),
       flows: interactiveFlowDefinitions(flowCatalog),
       getRunConfirmation: async (flowId) => {
+        refreshScopeFromGit("git scope refresh before launch confirmation");
         const flowEntry = findCatalogEntry(flowId, flowCatalog);
         if (!flowEntry) {
           throw new TaskRunnerError(`Unknown flow: ${flowId}`);
@@ -2111,6 +2278,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
         return resumeLookup;
       },
       onRun: async (flowId, launchMode) => {
+        refreshScopeFromGit("git scope refresh before flow launch");
         const abortController = new AbortController();
         activeAbortController = abortController;
         activeFlowId = flowId;
@@ -2145,7 +2313,7 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
             const jiraContext = await requestJiraContext((form) => ui.requestUserInput(form));
             currentScope = resolveProjectScope(null, jiraContext.jiraRef);
           }
-          ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null);
+          ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null, currentScope.gitBranchName);
           if (previousScopeKey !== currentScope.scopeKey || currentScope.jiraIssueKey) {
             syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
           }
@@ -2215,6 +2383,11 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
           if (activeAbortController === abortController) {
             activeAbortController = null;
             activeFlowId = null;
+            if (pendingScopeSwitch && !exiting) {
+              const nextScope = pendingScopeSwitch;
+              pendingScopeSwitch = null;
+              applyScopeSwitch(nextScope, "git scope refresh after flow completion");
+            }
           }
         }
       },
@@ -2226,6 +2399,10 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
         activeAbortController.abort();
       },
       onExit: () => {
+        if (activeAbortController) {
+          ui.interruptActiveForm();
+          activeAbortController.abort();
+        }
         exiting = true;
       },
     },
@@ -2238,14 +2415,46 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
     ui.appendLog("[scope] project scope active; task summary will appear after a Jira-backed flow runs");
   }
   syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
+  const scopeWatchInterval = autoScopeSwitchEnabled
+    ? setInterval(() => {
+        if (!exiting) {
+          refreshScopeFromGit("git branch changed");
+        }
+      }, INTERACTIVE_SCOPE_WATCH_INTERVAL_MS)
+    : null;
 
   return await new Promise<number>((resolve, reject) => {
+    let cleanupStarted = false;
+    const requestExit = () => {
+      if (activeAbortController) {
+        ui.interruptActiveForm();
+        activeAbortController.abort();
+      }
+      exiting = true;
+    };
+    const onSigint = () => requestExit();
+    const onSigterm = () => requestExit();
+    if (installSignalCleanup) {
+      process.once("SIGINT", onSigint);
+      process.once("SIGTERM", onSigterm);
+    }
     const interval = setInterval(() => {
       if (!exiting) {
         return;
       }
       clearInterval(interval);
       try {
+        if (cleanupStarted) {
+          return;
+        }
+        cleanupStarted = true;
+        if (scopeWatchInterval) {
+          clearInterval(scopeWatchInterval);
+        }
+        if (installSignalCleanup) {
+          process.off("SIGINT", onSigint);
+          process.off("SIGTERM", onSigterm);
+        }
         ui.destroy();
         bye();
         resolve(0);
@@ -2254,6 +2463,26 @@ async function runInteractive(jiraRef?: string | null, forceRefresh = false, sco
       }
     }, 100);
   });
+}
+
+async function runInteractive(jiraRef?: string | null, forceRefresh = false, scopeName?: string | null): Promise<number> {
+  return await runInteractiveWithSessionFactory(createInteractiveSession, jiraRef, forceRefresh, scopeName);
+}
+
+async function runWebInteractive(
+  jiraRef?: string | null,
+  forceRefresh = false,
+  noOpen = false,
+  host?: string,
+  auth?: WebServerAuthConfig,
+): Promise<number> {
+  return await runInteractiveWithSessionFactory(
+    (options) => createWebInteractiveSession(options, { noOpen, ...(host ? { host } : {}), ...(auth ? { auth } : {}), printInfo }),
+    jiraRef,
+    forceRefresh,
+    null,
+    true,
+  );
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
@@ -2267,6 +2496,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
 
   try {
+    if (args[0] === "--no-open") {
+      throw new TaskRunnerError("--no-open is only supported after the web command.");
+    }
     if (args.length === 0) {
       return await runInteractive(undefined, forceRefresh);
     }
@@ -2275,6 +2507,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
 
     const parsedArgs = await parseCliArgs(args);
+    if (parsedArgs.command === "web") {
+      const webAuth = resolveWebAuthConfig();
+      requireWebAuthForHost(parsedArgs.webHost, webAuth);
+      return await runWebInteractive(parsedArgs.jiraRef, forceRefresh, parsedArgs.webNoOpen === true, parsedArgs.webHost, webAuth);
+    }
     const commandCompleted = await executeCommand(buildConfigFromArgs(parsedArgs), true, requestUserInputInTerminal, undefined, undefined, false, parsedArgs.launchMode);
     if (parsedArgs.command === "doctor") {
       return commandCompleted ? 0 : 1;
@@ -2282,12 +2519,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     return 0;
   } catch (error) {
     if (error instanceof TaskRunnerError) {
-      printError(error.message);
+      writeStderrSync(`Error: ${error.message}\n`);
       return 1;
     }
     const returnCode = Number((error as { returnCode?: number }).returnCode);
     if (!Number.isNaN(returnCode)) {
-      printError(formatProcessFailure(error as ProcessFailureLike));
+      writeStderrSync(`Error: ${formatProcessFailure(error as ProcessFailureLike)}\n`);
       return returnCode || 1;
     }
     throw error;

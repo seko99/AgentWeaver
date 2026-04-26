@@ -20,7 +20,7 @@ import { selectHeaderLabel } from "./selectors.js";
 import { createInitialInteractiveState, type InteractiveSessionState } from "./state.js";
 import { buildFlowTree, collectInitiallyExpandedFolderKeys, computeVisibleFlowItems, makeFlowKey, makeFolderKey } from "./tree.js";
 import type { FocusPane, FlowTreeNode, InteractiveFlowDefinition, VisibleFlowTreeItem } from "./types.js";
-import type { InteractiveSessionViewModel, InteractiveFormViewModel } from "./view-model.js";
+import type { InteractiveConfirmationAction, InteractiveSessionViewModel, InteractiveFormViewModel } from "./view-model.js";
 
 type Keypress = {
   full?: string;
@@ -47,6 +47,7 @@ type ActiveFormSession = {
   currentOptionIndex: number;
   currentTextCursorIndex: number;
   previewScrollOffset: number;
+  validationError: string | null;
   resolve: (result: UserInputResult) => void;
   reject: (error: Error) => void;
 };
@@ -61,7 +62,7 @@ type ConfirmSession = {
     restart: boolean;
   };
   details?: string | null;
-  selectedAction: "resume" | "continue" | "restart" | "cancel" | "ok" | "stop";
+  selectedAction: InteractiveConfirmationAction;
 };
 
 const HELP_TEXT = renderMarkdownToTerminal(
@@ -263,6 +264,7 @@ export class InteractiveSessionController {
         currentOptionIndex: initialOptionIndex,
         currentTextCursorIndex: initialCursorIndex,
         previewScrollOffset: 0,
+        validationError: null,
         resolve,
         reject,
       };
@@ -290,9 +292,12 @@ export class InteractiveSessionController {
     this.emitChange();
   }
 
-  setScope(scopeKey: string, jiraIssueKey?: string | null): void {
+  setScope(scopeKey: string, jiraIssueKey?: string | null, gitBranchName?: string | null): void {
     this.state.scopeKey = scopeKey;
     this.state.jiraIssueKey = jiraIssueKey ?? null;
+    if (gitBranchName !== undefined) {
+      this.state.gitBranchName = gitBranchName;
+    }
     this.emitChange();
   }
 
@@ -398,13 +403,240 @@ export class InteractiveSessionController {
   selectFlowIndex(index: number): void {
     const selectedItem = this.visibleFlowItems[index];
     if (!selectedItem) {
-      return;
+      throw new Error(`Invalid flow index: ${index}`);
     }
     this.state.selectedFlowItemKey = selectedItem.key;
     if (selectedItem.kind === "flow") {
       this.state.selectedFlowId = selectedItem.flow.id;
     }
     this.emitChange();
+  }
+
+  selectFlowKey(key: string): void {
+    const selectedItem = this.visibleFlowItems.find((item) => item.key === key);
+    if (!selectedItem) {
+      throw new Error(`Unknown visible flow item key: ${key}`);
+    }
+    this.state.selectedFlowItemKey = selectedItem.key;
+    if (selectedItem.kind === "flow") {
+      this.state.selectedFlowId = selectedItem.flow.id;
+    }
+    this.emitChange();
+  }
+
+  selectFlowId(flowId: string): void {
+    const selectedItem = this.visibleFlowItems.find(
+      (item): item is Extract<VisibleFlowTreeItem, { kind: "flow" }> => item.kind === "flow" && item.flow.id === flowId,
+    );
+    if (!selectedItem) {
+      throw new Error(`Unknown visible flow: ${flowId}`);
+    }
+    this.state.selectedFlowItemKey = selectedItem.key;
+    this.state.selectedFlowId = selectedItem.flow.id;
+    this.emitChange();
+  }
+
+  toggleFolderKey(key: string): void {
+    const item = this.visibleFlowItems.find((candidate) => candidate.key === key);
+    if (!item || item.kind !== "folder") {
+      throw new Error(`Unknown visible folder key: ${key}`);
+    }
+    this.toggleFlowFolder(key);
+  }
+
+  toggleFolder(key: string): void {
+    this.toggleFolderKey(key);
+  }
+
+  async openRunConfirm(flowId?: string, key?: string): Promise<void> {
+    if (flowId) {
+      if (!this.visibleFlowItems.some((item) => item.kind === "flow" && item.flow.id === flowId)) {
+        throw new Error(`Unknown visible flow: ${flowId}`);
+      }
+      this.selectFlowId(flowId);
+    } else if (key) {
+      const keyedItem = this.visibleFlowItems.find((item) => item.key === key);
+      if (!keyedItem || keyedItem.kind !== "flow") {
+        throw new Error(`Unknown visible flow item key: ${key}`);
+      }
+      this.selectFlowKey(key);
+    }
+    const selectedItem = this.selectedFlowTreeItem();
+    if (!selectedItem || selectedItem.kind !== "flow") {
+      throw new Error("A flow must be selected before opening run confirmation.");
+    }
+    await this.openConfirm();
+  }
+
+  selectConfirmAction(action: string): void {
+    if (!this.confirmSession) {
+      throw new Error("No confirmation is active.");
+    }
+    const actions = this.confirmActions();
+    if (!actions.includes(action as InteractiveConfirmationAction)) {
+      throw new Error(`Invalid confirmation action: ${action}`);
+    }
+    this.confirmSession.selectedAction = action as InteractiveConfirmationAction;
+    this.emitChange();
+  }
+
+  async acceptConfirmation(): Promise<void> {
+    await this.acceptConfirm();
+  }
+
+  async acceptConfirm(): Promise<void> {
+    if (!this.confirmSession) {
+      throw new Error("No confirmation is active.");
+    }
+    await this.acceptActiveConfirm();
+  }
+
+  cancelConfirmation(): void {
+    this.cancelConfirm();
+  }
+
+  cancelConfirm(): void {
+    if (!this.confirmSession) {
+      throw new Error("No confirmation is active.");
+    }
+    this.confirmSession = null;
+    this.emitChange();
+  }
+
+  updateActiveFormValues(values: UserInputFormValues): void {
+    const session = this.activeFormSession;
+    if (!session) {
+      throw new Error("No form is active.");
+    }
+    const fieldIds = new Set(session.form.fields.map((field) => field.id));
+    const nextValues = { ...session.values };
+    let changed = false;
+    for (const [fieldId, value] of Object.entries(values)) {
+      if (!fieldIds.has(fieldId)) {
+        continue;
+      }
+      nextValues[fieldId] = value;
+      changed = true;
+    }
+    if (!changed) {
+      return;
+    }
+    session.values = nextValues;
+    for (const field of session.form.fields) {
+      normalizeUserInputFieldValue(field, session.values);
+    }
+    session.validationError = null;
+    const field = this.currentFormField();
+    if (field?.type === "text") {
+      session.currentTextCursorIndex = String(session.values[field.id] ?? "").length;
+    } else if (field?.type === "single-select" || field?.type === "multi-select") {
+      session.currentOptionIndex = this.selectedOptionIndexForField(field);
+    }
+    this.emitChange();
+  }
+
+  updateFormField(fieldId: string, value: UserInputFormValues[string]): void {
+    const session = this.activeFormSession;
+    if (!session) {
+      throw new Error("No form is active.");
+    }
+    const fieldIndex = session.form.fields.findIndex((candidate) => candidate.id === fieldId);
+    const baseField = session.form.fields[fieldIndex];
+    if (!baseField) {
+      throw new Error(`Unknown form field: ${fieldId}`);
+    }
+    const field = resolveFieldDefinition(baseField, session.values);
+    if (field.type === "boolean" && typeof value !== "boolean") {
+      throw new Error(`Field '${field.label}' must be a boolean.`);
+    }
+    if (field.type === "text" && typeof value !== "string") {
+      throw new Error(`Field '${field.label}' must be a string.`);
+    }
+    if (field.type === "single-select" && typeof value !== "string") {
+      throw new Error(`Field '${field.label}' must be a string.`);
+    }
+    if (
+      field.type === "multi-select"
+      && (!Array.isArray(value) || value.some((item) => typeof item !== "string"))
+    ) {
+      throw new Error(`Field '${field.label}' must be a string array.`);
+    }
+    session.currentFieldIndex = fieldIndex;
+    this.updateActiveFormValues({ [fieldId]: value });
+  }
+
+  submitActiveFormValues(values?: UserInputFormValues): void {
+    if (!this.activeFormSession) {
+      throw new Error("No form is active.");
+    }
+    if (values) {
+      this.updateActiveFormValues(values);
+    }
+    this.submitActiveForm();
+    if (this.activeFormSession) {
+      throw new Error("Form validation failed. See session log for details.");
+    }
+  }
+
+  submitForm(values?: UserInputFormValues): void {
+    this.submitActiveFormValues(values);
+  }
+
+  cancelForm(): void {
+    if (!this.activeFormSession) {
+      throw new Error("No form is active.");
+    }
+    this.cancelActiveForm();
+  }
+
+  async interruptFlow(flowId?: string): Promise<void> {
+    const hadActiveForm = this.activeFormSession !== null;
+    if (this.activeFormSession) {
+      this.interruptActiveForm();
+    }
+    const targetFlowId = flowId ?? this.state.currentFlowId;
+    if (!targetFlowId && hadActiveForm) {
+      return;
+    }
+    if (!targetFlowId) {
+      throw new Error("No running flow is available to interrupt.");
+    }
+    await this.options.onInterrupt(targetFlowId);
+  }
+
+  async interruptCurrentFlow(flowId?: string): Promise<void> {
+    await this.interruptFlow(flowId);
+  }
+
+  toggleHelp(visible?: boolean): void {
+    this.helpVisible = visible ?? !this.helpVisible;
+    this.emitChange();
+  }
+
+  showHelp(visible: boolean): void {
+    this.toggleHelp(visible);
+  }
+
+  scrollPane(panel: FocusPane | "help", options: { delta?: number; offset?: number }): void {
+    if (panel === "flows") {
+      if (options.delta !== undefined) {
+        this.moveSelectedFlow(options.delta);
+        return;
+      }
+      if (options.offset !== undefined) {
+        this.selectFlowIndex(options.offset);
+        return;
+      }
+      throw new Error("Flow scroll requires delta or offset.");
+    }
+    const scrollPanel = panel as "progress" | "summary" | "log" | "help";
+    const maxOffset = this.panelMaxScroll(scrollPanel);
+    const current = this.scrollOffsetFor(scrollPanel);
+    this.applyScrollOffset(scrollPanel, options.offset ?? current + (options.delta ?? 0), maxOffset);
+  }
+
+  setScrollOffset(panel: "progress" | "summary" | "log" | "help", offset: number): void {
+    this.applyScrollOffset(panel, offset, this.panelMaxScroll(panel));
   }
 
   getViewModel(layout?: { formContentWidth?: number }): InteractiveSessionViewModel {
@@ -432,6 +664,10 @@ export class InteractiveSessionController {
       flowItems: this.visibleFlowItems.map((item) => ({
         key: item.key,
         label: this.renderFlowTreeLabel(item),
+        kind: item.kind,
+        name: item.name,
+        depth: item.depth,
+        ...(item.kind === "folder" ? { expanded: this.expandedFlowFolders.has(item.key) } : {}),
       })),
       selectedFlowIndex: Math.max(0, this.visibleFlowItems.findIndex((item) => item.key === this.state.selectedFlowItemKey)),
       progressTitle: this.panelTitle("Current Flow", "progress"),
@@ -447,6 +683,7 @@ export class InteractiveSessionController {
       logText: this.logText,
       logScrollOffset: this.state.logScrollOffset,
       confirmText: this.renderConfirmText(),
+      confirmation: this.renderConfirmationView(),
       form: this.renderFormView(layout),
     };
   }
@@ -493,7 +730,7 @@ export class InteractiveSessionController {
     const current = this.state.currentFlowId ?? selectHeaderLabel(this.selectedFlowTreeItem(), this.state.selectedFlowId);
     const pathParts = this.options.cwd.split(path.sep).filter(Boolean);
     const folderName = pathParts.slice(-3).join("/") || this.options.cwd;
-    const branchLabel = this.options.gitBranchName ? this.options.gitBranchName : "detached-head";
+    const branchLabel = this.state.gitBranchName ? this.state.gitBranchName : "detached-head";
     const runningSuffix = this.state.busy ? " [running]" : "";
     const versionLabel = this.state.version ? ` | Version ${this.state.version}` : "";
     const jiraLabel = this.state.jiraIssueKey ? ` | Jira ${this.state.jiraIssueKey}` : "";
@@ -619,6 +856,21 @@ export class InteractiveSessionController {
     return lines.join("\n");
   }
 
+  private renderConfirmationView(): InteractiveSessionViewModel["confirmation"] {
+    const session = this.confirmSession;
+    const text = this.renderConfirmText();
+    if (!session || !text) {
+      return null;
+    }
+    return {
+      kind: session.kind,
+      flowId: session.flowId,
+      text,
+      actions: this.confirmActions(),
+      selectedAction: session.selectedAction,
+    };
+  }
+
   private renderFormView(layout?: { formContentWidth?: number }): InteractiveFormViewModel | null {
     const session = this.activeFormSession;
     const field = this.currentFormField();
@@ -681,6 +933,12 @@ export class InteractiveSessionController {
       title: "User Input",
       content: lines.join("\n"),
       footer,
+      formId: session.form.formId,
+      definition: session.form,
+      values: { ...session.values },
+      fields: session.form.fields.map((candidate) => resolveFieldDefinition(candidate, session.values)),
+      currentFieldId: field.id,
+      error: session.validationError,
     };
   }
 
@@ -720,7 +978,7 @@ export class InteractiveSessionController {
       return;
     }
     if (key.name === "enter") {
-      await this.acceptConfirm();
+      await this.acceptActiveConfirm();
     }
   }
 
@@ -774,27 +1032,27 @@ export class InteractiveSessionController {
     const maxOffset = this.panelMaxScroll(panel);
     const current = this.scrollOffsetFor(panel);
     if (key.name === "up") {
-      this.setScrollOffset(panel, current - 1, maxOffset);
+      this.applyScrollOffset(panel, current - 1, maxOffset);
       return;
     }
     if (key.name === "down") {
-      this.setScrollOffset(panel, current + 1, maxOffset);
+      this.applyScrollOffset(panel, current + 1, maxOffset);
       return;
     }
     if (key.name === "pageup") {
-      this.setScrollOffset(panel, current - 10, maxOffset);
+      this.applyScrollOffset(panel, current - 10, maxOffset);
       return;
     }
     if (key.name === "pagedown") {
-      this.setScrollOffset(panel, current + 10, maxOffset);
+      this.applyScrollOffset(panel, current + 10, maxOffset);
       return;
     }
     if (key.name === "home") {
-      this.setScrollOffset(panel, 0, maxOffset);
+      this.applyScrollOffset(panel, 0, maxOffset);
       return;
     }
     if (key.name === "end") {
-      this.setScrollOffset(panel, maxOffset, maxOffset);
+      this.applyScrollOffset(panel, maxOffset, maxOffset);
     }
   }
 
@@ -903,7 +1161,7 @@ export class InteractiveSessionController {
     this.emitChange();
   }
 
-  private openInterruptConfirm(): void {
+  openInterruptConfirm(): void {
     const flowId = this.state.currentFlowId;
     if (!flowId || this.confirmSession) {
       return;
@@ -945,7 +1203,7 @@ export class InteractiveSessionController {
     this.emitChange();
   }
 
-  private confirmActions(): string[] {
+  private confirmActions(): InteractiveConfirmationAction[] {
     if (!this.confirmSession) {
       return ["cancel"];
     }
@@ -955,7 +1213,7 @@ export class InteractiveSessionController {
     if (this.confirmSession.kind === "exit") {
       return ["ok", "cancel"];
     }
-    const actions: string[] = [];
+    const actions: InteractiveConfirmationAction[] = [];
     if (this.confirmSession.availability.resume) {
       actions.push("resume");
     }
@@ -979,7 +1237,7 @@ export class InteractiveSessionController {
     this.emitChange();
   }
 
-  private async acceptConfirm(): Promise<void> {
+  private async acceptActiveConfirm(): Promise<void> {
     const session = this.confirmSession;
     if (!session) {
       return;
@@ -1115,7 +1373,7 @@ export class InteractiveSessionController {
     return this.state.logScrollOffset;
   }
 
-  private setScrollOffset(panel: "progress" | "summary" | "log" | "help", value: number, maxOffset: number): void {
+  private applyScrollOffset(panel: "progress" | "summary" | "log" | "help", value: number, maxOffset: number): void {
     const next = clamp(value, 0, maxOffset);
     if (panel === "progress") {
       this.state.progressScrollOffset = next;
@@ -1241,6 +1499,7 @@ export class InteractiveSessionController {
     }
     this.syncActiveSelectFieldValue();
     try {
+      session.validationError = null;
       validateUserInputValues(session.form, session.values);
       const result: UserInputResult = {
         formId: session.form.formId,
@@ -1252,7 +1511,9 @@ export class InteractiveSessionController {
       session.resolve(result);
       this.emitChange();
     } catch (error) {
-      this.appendLog((error as Error).message);
+      session.validationError = (error as Error).message;
+      this.appendLog(session.validationError);
+      this.emitChange();
     }
   }
 

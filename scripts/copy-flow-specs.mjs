@@ -13,6 +13,10 @@ const assets = [
     source: path.join(PACKAGE_ROOT, "src", "structured-artifact-schemas.json"),
     target: path.join(PACKAGE_ROOT, "dist", "structured-artifact-schemas.json"),
   },
+  {
+    source: path.join(PACKAGE_ROOT, "src", "interactive", "web", "static"),
+    target: path.join(PACKAGE_ROOT, "dist", "interactive", "web", "static"),
+  },
 ];
 
 for (const asset of assets) {
