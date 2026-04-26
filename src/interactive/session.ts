@@ -24,7 +24,7 @@ export interface InteractiveSession {
   requestUserInput(form: UserInputFormDefinition): Promise<UserInputResult>;
   setSummary(markdown: string): void;
   clearSummary(): void;
-  setScope(scopeKey: string, jiraIssueKey?: string | null): void;
+  setScope(scopeKey: string, jiraIssueKey?: string | null, gitBranchName?: string | null): void;
   appendLog(text: string): void;
   setFlowFailed(flowId: string): void;
   interruptActiveForm(message?: string): void;

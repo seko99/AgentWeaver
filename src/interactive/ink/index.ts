@@ -810,8 +810,8 @@ class InkInteractiveSession implements InteractiveSession {
     this.controller.clearSummary();
   }
 
-  setScope(scopeKey: string, jiraIssueKey?: string | null): void {
-    this.controller.setScope(scopeKey, jiraIssueKey);
+  setScope(scopeKey: string, jiraIssueKey?: string | null, gitBranchName?: string | null): void {
+    this.controller.setScope(scopeKey, jiraIssueKey, gitBranchName);
   }
 
   appendLog(text: string): void {

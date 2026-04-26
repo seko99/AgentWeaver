@@ -123,7 +123,6 @@ import type { UserInputFieldDefinition, UserInputFormDefinition, UserInputFormVa
 import { runDoctorCommand } from "./doctor/index.js";
 import {
   attachJiraContext,
-  detectGitBranchName,
   requestJiraContext,
   resolveProjectScope,
   type ResolvedScope,
@@ -157,6 +156,8 @@ const COMMANDS = [
   "run-go-tests-loop",
   "run-go-linter-loop",
 ] as const;
+
+const INTERACTIVE_SCOPE_WATCH_INTERVAL_MS = 1500;
 
 type CommandName = (typeof COMMANDS)[number];
 
@@ -2161,22 +2162,71 @@ async function runInteractiveWithSessionFactory(
   installSignalCleanup = false,
 ): Promise<number> {
   let currentScope = resolveProjectScope(scopeName, jiraRef);
-  const gitBranchName = detectGitBranchName();
   const flowCatalog = await loadInteractiveFlowCatalog(process.cwd());
   let activeAbortController: AbortController | null = null;
   let activeFlowId: string | null = null;
+  let pendingScopeSwitch: ResolvedScope | null = null;
+  const autoScopeSwitchEnabled = !scopeName?.trim() && !jiraRef?.trim();
+  let lastObservedGitScope = currentScope;
+  let ui!: InteractiveSession;
 
   let exiting = false;
-  const ui = createSession(
+  const applyScopeSwitch = (nextScope: ResolvedScope, reason: string): void => {
+    const previousScope = currentScope;
+    currentScope = nextScope;
+    ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null, currentScope.gitBranchName);
+    syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
+    ui.appendLog(
+      `[scope] ${reason}: ${previousScope.scopeKey} -> ${currentScope.scopeKey}`,
+    );
+  };
+  const handleObservedScope = (observedScope: ResolvedScope, reason: string): void => {
+    if (
+      observedScope.scopeKey === currentScope.scopeKey
+      && observedScope.gitBranchName === currentScope.gitBranchName
+    ) {
+      pendingScopeSwitch = null;
+      return;
+    }
+    if (activeAbortController) {
+      if (
+        !pendingScopeSwitch
+        || pendingScopeSwitch.scopeKey !== observedScope.scopeKey
+        || pendingScopeSwitch.gitBranchName !== observedScope.gitBranchName
+      ) {
+        pendingScopeSwitch = observedScope;
+        ui.appendLog(`[scope] ${reason}: switch to ${observedScope.scopeKey} pending until current flow finishes`);
+      }
+      return;
+    }
+    pendingScopeSwitch = null;
+    applyScopeSwitch(observedScope, reason);
+  };
+  const refreshScopeFromGit = (reason: string): void => {
+    if (!autoScopeSwitchEnabled) {
+      return;
+    }
+    const observedScope = resolveProjectScope(null, null);
+    if (
+      observedScope.scopeKey === lastObservedGitScope.scopeKey
+      && observedScope.gitBranchName === lastObservedGitScope.gitBranchName
+    ) {
+      return;
+    }
+    lastObservedGitScope = observedScope;
+    handleObservedScope(observedScope, reason);
+  };
+  ui = createSession(
     {
       scopeKey: currentScope.scopeKey,
       jiraIssueKey: currentScope.jiraIssueKey ?? null,
       summaryText: "",
       cwd: process.cwd(),
-      gitBranchName,
+      gitBranchName: currentScope.gitBranchName,
       version: packageVersion(),
       flows: interactiveFlowDefinitions(flowCatalog),
       getRunConfirmation: async (flowId) => {
+        refreshScopeFromGit("git scope refresh before launch confirmation");
         const flowEntry = findCatalogEntry(flowId, flowCatalog);
         if (!flowEntry) {
           throw new TaskRunnerError(`Unknown flow: ${flowId}`);
@@ -2185,6 +2235,7 @@ async function runInteractiveWithSessionFactory(
         return resumeLookup;
       },
       onRun: async (flowId, launchMode) => {
+        refreshScopeFromGit("git scope refresh before flow launch");
         const abortController = new AbortController();
         activeAbortController = abortController;
         activeFlowId = flowId;
@@ -2219,7 +2270,7 @@ async function runInteractiveWithSessionFactory(
             const jiraContext = await requestJiraContext((form) => ui.requestUserInput(form));
             currentScope = resolveProjectScope(null, jiraContext.jiraRef);
           }
-          ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null);
+          ui.setScope(currentScope.scopeKey, currentScope.jiraIssueKey ?? null, currentScope.gitBranchName);
           if (previousScopeKey !== currentScope.scopeKey || currentScope.jiraIssueKey) {
             syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
           }
@@ -2289,6 +2340,11 @@ async function runInteractiveWithSessionFactory(
           if (activeAbortController === abortController) {
             activeAbortController = null;
             activeFlowId = null;
+            if (pendingScopeSwitch && !exiting) {
+              const nextScope = pendingScopeSwitch;
+              pendingScopeSwitch = null;
+              applyScopeSwitch(nextScope, "git scope refresh after flow completion");
+            }
           }
         }
       },
@@ -2316,6 +2372,13 @@ async function runInteractiveWithSessionFactory(
     ui.appendLog("[scope] project scope active; task summary will appear after a Jira-backed flow runs");
   }
   syncInteractiveTaskSummary(ui, currentScope, forceRefresh);
+  const scopeWatchInterval = autoScopeSwitchEnabled
+    ? setInterval(() => {
+        if (!exiting) {
+          refreshScopeFromGit("git branch changed");
+        }
+      }, INTERACTIVE_SCOPE_WATCH_INTERVAL_MS)
+    : null;
 
   return await new Promise<number>((resolve, reject) => {
     let cleanupStarted = false;
@@ -2342,6 +2405,9 @@ async function runInteractiveWithSessionFactory(
           return;
         }
         cleanupStarted = true;
+        if (scopeWatchInterval) {
+          clearInterval(scopeWatchInterval);
+        }
         if (installSignalCleanup) {
           process.off("SIGINT", onSigint);
           process.off("SIGTERM", onSigterm);

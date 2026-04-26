@@ -292,9 +292,12 @@ export class InteractiveSessionController {
     this.emitChange();
   }
 
-  setScope(scopeKey: string, jiraIssueKey?: string | null): void {
+  setScope(scopeKey: string, jiraIssueKey?: string | null, gitBranchName?: string | null): void {
     this.state.scopeKey = scopeKey;
     this.state.jiraIssueKey = jiraIssueKey ?? null;
+    if (gitBranchName !== undefined) {
+      this.state.gitBranchName = gitBranchName;
+    }
     this.emitChange();
   }
 
@@ -727,7 +730,7 @@ export class InteractiveSessionController {
     const current = this.state.currentFlowId ?? selectHeaderLabel(this.selectedFlowTreeItem(), this.state.selectedFlowId);
     const pathParts = this.options.cwd.split(path.sep).filter(Boolean);
     const folderName = pathParts.slice(-3).join("/") || this.options.cwd;
-    const branchLabel = this.options.gitBranchName ? this.options.gitBranchName : "detached-head";
+    const branchLabel = this.state.gitBranchName ? this.state.gitBranchName : "detached-head";
     const runningSuffix = this.state.busy ? " [running]" : "";
     const versionLabel = this.state.version ? ` | Version ${this.state.version}` : "";
     const jiraLabel = this.state.jiraIssueKey ? ` | Jira ${this.state.jiraIssueKey}` : "";

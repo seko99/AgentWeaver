@@ -5,6 +5,7 @@ import { buildFlowTree, collectInitiallyExpandedFolderKeys, computeVisibleFlowIt
 export type InteractiveSessionState = {
   scopeKey: string;
   jiraIssueKey: string | null;
+  gitBranchName: string | null;
   summaryText: string;
   version: string;
   flowTreeKeys: string[];
@@ -36,6 +37,7 @@ export function createInitialInteractiveState(options: InteractiveSessionOptions
   return {
     scopeKey: options.scopeKey,
     jiraIssueKey: options.jiraIssueKey ?? null,
+    gitBranchName: options.gitBranchName,
     summaryText: options.summaryText.trim(),
     version: options.version ?? "",
     flowTreeKeys: flowTree.map((node) => node.key),
