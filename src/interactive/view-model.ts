@@ -33,6 +33,10 @@ export type InteractiveSessionViewModel = {
   flowItems: Array<{
     key: string;
     label: string;
+    kind: "folder" | "flow";
+    name: string;
+    depth: number;
+    expanded?: boolean;
   }>;
   selectedFlowIndex: number;
   progressTitle: string;

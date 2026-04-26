@@ -105,6 +105,9 @@ describe("interactive controller", () => {
     let view = controller.getViewModel();
     assert.ok(view.flowItems.length > 2);
     assert.equal(view.flowItems[0]?.label, "▸ custom");
+    assert.equal(view.flowItems[0]?.kind, "folder");
+    assert.equal(view.flowItems[0]?.depth, 0);
+    assert.equal(view.flowItems[0]?.expanded, false);
     assert.equal(view.flowItems[1]?.label, "▾ default");
     assert.equal(view.flowItems.some((item) => item.label.includes("custom-review")), false);
 
@@ -112,7 +115,9 @@ describe("interactive controller", () => {
     await controller.handleKeypress("", { name: "right" });
     view = controller.getViewModel();
     assert.equal(view.flowItems[0]?.label, "▾ custom");
+    assert.equal(view.flowItems[0]?.expanded, true);
     assert.equal(view.flowItems[1]?.label, "  ▸ review");
+    assert.equal(view.flowItems[1]?.depth, 1);
 
     controller.selectFlowIndex(1);
     await controller.handleKeypress("", { name: "right" });

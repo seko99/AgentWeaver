@@ -43,7 +43,9 @@
   "packageManager": "npm@9.2.0",
   "preferGlobal": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-flow-specs.mjs",
+    "build": "npm run build:web-css && tsc -p tsconfig.json && node scripts/copy-flow-specs.mjs",
+    "build:web-css": "tailwindcss -i ./src/interactive/web/static/styles.input.css -o ./src/interactive/web/static/styles.css --minify",
+    "dev:web-css": "tailwindcss -i ./src/interactive/web/static/styles.input.css -o ./src/interactive/web/static/styles.css --watch",
     "check": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run check && npm run build",
     "pack:check": "npm pack --dry-run",
@@ -54,9 +56,11 @@
     "node": ">=18.19.0"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.2.4",
     "@types/node": "^20.17.30",
     "@types/react": "^18.3.12",
     "@types/semver": "^7.7.1",
+    "tailwindcss": "^4.2.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
     "vitest": "^4.1.4"

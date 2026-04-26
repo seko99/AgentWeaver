@@ -198,9 +198,7 @@ describe("web interactive session", () => {
       assert.match(confirmation.viewModel.confirmText, /Run flow/);
       assert.equal(confirmation.viewModel.confirmation.kind, "run");
       assert.deepEqual(confirmation.viewModel.confirmation.actions, ["restart", "cancel"]);
-      client.send({ type: "confirm.select", action: "restart" });
-      assert.equal((await client.nextMessage()).type, "snapshot");
-      client.send({ type: "confirm.accept" });
+      client.send({ type: "confirm.accept", action: "restart" });
       assert.deepEqual(await runPromise, { flowId: "plan", mode: "restart" });
 
       const inputPromise = session.requestUserInput({

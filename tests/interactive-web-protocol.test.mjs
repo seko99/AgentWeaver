@@ -17,6 +17,7 @@ describe("interactive web protocol", () => {
       { type: "run.openConfirm", flowId: "plan" },
       { type: "confirm.select", action: "restart" },
       { type: "confirm.accept" },
+      { type: "confirm.accept", action: "restart" },
       { type: "confirm.cancel" },
       { type: "form.update", values: { name: "Ada" } },
       { type: "form.fieldUpdate", fieldId: "name", value: "Ada" },

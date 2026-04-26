@@ -13,7 +13,7 @@ export type ClientAction =
   | { type: "folder.toggle"; key: string; actionId?: string }
   | { type: "run.openConfirm"; flowId?: string; key?: string; actionId?: string }
   | { type: "confirm.select"; action: string; actionId?: string }
-  | { type: "confirm.accept"; actionId?: string }
+  | { type: "confirm.accept"; action?: string; actionId?: string }
   | { type: "confirm.cancel"; actionId?: string }
   | { type: "form.update"; values: UserInputFormValues; actionId?: string }
   | { type: "form.fieldUpdate"; fieldId: string; value: UserInputFormValues[string]; actionId?: string }
@@ -128,7 +128,11 @@ export function parseClientAction(raw: string): ClientAction {
   if (parsed.type === "confirm.select") {
     return { type: "confirm.select", action: requireNonEmptyString(parsed, "action"), ...(actionId ? { actionId } : {}) };
   }
-  if (parsed.type === "confirm.accept" || parsed.type === "confirm.cancel" || parsed.type === "form.cancel" || parsed.type === "log.clear") {
+  if (parsed.type === "confirm.accept") {
+    const action = optionalNonEmptyString(parsed, "action");
+    return { type: "confirm.accept", ...(action ? { action } : {}), ...(actionId ? { actionId } : {}) };
+  }
+  if (parsed.type === "confirm.cancel" || parsed.type === "form.cancel" || parsed.type === "log.clear") {
     return { type: parsed.type, ...(actionId ? { actionId } : {}) } as ClientAction;
   }
   if (parsed.type === "form.update") {
