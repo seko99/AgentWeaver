@@ -196,6 +196,8 @@ describe("web interactive session", () => {
       const confirmation = await client.nextMessage();
       assert.equal(confirmation.type, "snapshot");
       assert.match(confirmation.viewModel.confirmText, /Run flow/);
+      assert.equal(confirmation.viewModel.confirmation.kind, "run");
+      assert.deepEqual(confirmation.viewModel.confirmation.actions, ["restart", "cancel"]);
       client.send({ type: "confirm.select", action: "restart" });
       assert.equal((await client.nextMessage()).type, "snapshot");
       client.send({ type: "confirm.accept" });
@@ -209,7 +211,9 @@ describe("web interactive session", () => {
       const requested = await client.nextMessage();
       assert.equal(requested.type, "snapshot");
       assert.equal(requested.viewModel.form.formId, "demo");
-      client.send({ type: "form.update", values: { name: "Ada" } });
+      assert.equal(requested.viewModel.form.currentFieldId, "name");
+      assert.equal(requested.viewModel.form.fields[0].id, "name");
+      client.send({ type: "form.fieldUpdate", fieldId: "name", value: "Ada" });
       assert.equal((await client.nextMessage()).type, "snapshot");
       client.send({ type: "form.submit" });
       const result = await inputPromise;
@@ -258,6 +262,11 @@ describe("web interactive session", () => {
       const stale = await client.nextMessage();
       assert.equal(stale.type, "error");
       assert.match(stale.message, /No form is active/);
+      client.send({ type: "run.openConfirm", flowId: "missing", actionId: "bad-run" });
+      const invalid = await client.nextMessage();
+      assert.equal(invalid.type, "error");
+      assert.equal(invalid.actionId, "bad-run");
+      assert.match(invalid.message, /Unknown visible flow/);
     } finally {
       client.close();
       session.destroy();

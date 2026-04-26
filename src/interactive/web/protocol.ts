@@ -16,8 +16,10 @@ export type ClientAction =
   | { type: "confirm.accept"; actionId?: string }
   | { type: "confirm.cancel"; actionId?: string }
   | { type: "form.update"; values: UserInputFormValues; actionId?: string }
+  | { type: "form.fieldUpdate"; fieldId: string; value: UserInputFormValues[string]; actionId?: string }
   | { type: "form.submit"; values?: UserInputFormValues; actionId?: string }
   | { type: "form.cancel"; actionId?: string }
+  | { type: "interrupt.openConfirm"; actionId?: string }
   | { type: "flow.interrupt"; flowId?: string; actionId?: string }
   | { type: "log.clear"; actionId?: string }
   | { type: "help.toggle"; visible?: boolean; actionId?: string }
@@ -31,8 +33,10 @@ const ACTION_TYPES = new Set([
   "confirm.accept",
   "confirm.cancel",
   "form.update",
+  "form.fieldUpdate",
   "form.submit",
   "form.cancel",
+  "interrupt.openConfirm",
   "flow.interrupt",
   "log.clear",
   "help.toggle",
@@ -130,12 +134,30 @@ export function parseClientAction(raw: string): ClientAction {
   if (parsed.type === "form.update") {
     return { type: "form.update", values: requireValues(parsed), ...(actionId ? { actionId } : {}) };
   }
+  if (parsed.type === "form.fieldUpdate") {
+    const fieldId = requireNonEmptyString(parsed, "fieldId");
+    if (!("value" in parsed)) {
+      throw new Error("value is required.");
+    }
+    const value = parsed.value;
+    if (
+      typeof value !== "string"
+      && typeof value !== "boolean"
+      && (!Array.isArray(value) || value.some((item) => typeof item !== "string"))
+    ) {
+      throw new Error("value must be a string, boolean, or string array.");
+    }
+    return { type: "form.fieldUpdate", fieldId, value, ...(actionId ? { actionId } : {}) };
+  }
   if (parsed.type === "form.submit") {
     return {
       type: "form.submit",
       ...(parsed.values !== undefined ? { values: requireValues(parsed) } : {}),
       ...(actionId ? { actionId } : {}),
     };
+  }
+  if (parsed.type === "interrupt.openConfirm") {
+    return { type: "interrupt.openConfirm", ...(actionId ? { actionId } : {}) };
   }
   if (parsed.type === "flow.interrupt") {
     const flowId = optionalNonEmptyString(parsed, "flowId");

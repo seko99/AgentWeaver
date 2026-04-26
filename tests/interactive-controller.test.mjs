@@ -544,4 +544,175 @@ describe("interactive controller", () => {
 
     controller.destroy();
   });
+
+  it("exposes semantic run confirmation metadata and preserves invalid action state", async () => {
+    const runs = [];
+    const controller = createBusyController({
+      getRunConfirmation: async () => ({
+        hasExistingState: true,
+        requiresExplicitChoice: true,
+        resume: { available: true, reason: "Saved state is resumable." },
+        continue: { available: true, reason: "Continue from current artifacts." },
+        restart: { available: true, reason: "Start again." },
+        details: "Choose launch mode.",
+      }),
+      onRun: async (flowId, mode) => {
+        runs.push({ flowId, mode });
+      },
+    });
+    controller.mount();
+
+    await controller.openRunConfirm("first-flow");
+    let view = controller.getViewModel();
+    assert.equal(view.confirmation.kind, "run");
+    assert.equal(view.confirmation.flowId, "first-flow");
+    assert.deepEqual(view.confirmation.actions, ["resume", "continue", "restart", "cancel"]);
+    assert.equal(view.confirmation.selectedAction, "resume");
+    assert.match(view.confirmText, /Run flow "First Flow"\?/);
+
+    controller.selectConfirmAction("restart");
+    assert.equal(controller.getViewModel().confirmation.selectedAction, "restart");
+    assert.throws(() => controller.selectConfirmAction("stop"), /Invalid confirmation action/);
+    assert.equal(controller.getViewModel().confirmation.selectedAction, "restart");
+    controller.cancelConfirm();
+    assert.equal(controller.getViewModel().confirmation, null);
+
+    await controller.openRunConfirm("first-flow");
+    controller.selectConfirmAction("continue");
+    await controller.acceptConfirm();
+    assert.deepEqual(runs, [{ flowId: "first-flow", mode: "continue" }]);
+    controller.destroy();
+  });
+
+  it("opens interrupt confirmation and invokes the interrupt callback through acceptConfirm", async () => {
+    let releaseRun;
+    const interrupted = [];
+    const controller = createBusyController({
+      onRun: async () => {
+        await new Promise((resolve) => {
+          releaseRun = resolve;
+        });
+      },
+      onInterrupt: async (flowId) => {
+        interrupted.push(flowId);
+      },
+    });
+    controller.mount();
+    controller.selectFlowIndex(1);
+    await controller.openRunConfirm("first-flow");
+    const runningTask = controller.acceptConfirm();
+    await Promise.resolve();
+
+    controller.openInterruptConfirm();
+    let view = controller.getViewModel();
+    assert.equal(view.confirmation.kind, "interrupt");
+    assert.deepEqual(view.confirmation.actions, ["stop", "cancel"]);
+    controller.selectConfirmAction("cancel");
+    await controller.acceptConfirm();
+    assert.deepEqual(interrupted, []);
+
+    controller.openInterruptConfirm();
+    controller.selectConfirmAction("stop");
+    await controller.acceptConfirm();
+    assert.deepEqual(interrupted, ["first-flow"]);
+
+    releaseRun();
+    await runningTask;
+    controller.destroy();
+  });
+
+  it("updates all form field types directly and exposes validation errors without closing the form", async () => {
+    const controller = createController();
+    const request = controller.requestUserInput({
+      formId: "direct-form",
+      title: "Direct Form",
+      fields: [
+        { id: "name", type: "text", label: "Name", required: true },
+        { id: "notes", type: "text", label: "Notes", multiline: true },
+        { id: "enabled", type: "boolean", label: "Enabled" },
+        {
+          id: "mode",
+          type: "single-select",
+          label: "Mode",
+          required: true,
+          options: [
+            { value: "fast", label: "Fast" },
+            { value: "safe", label: "Safe" },
+          ],
+        },
+        {
+          id: "tags",
+          type: "multi-select",
+          label: "Tags",
+          required: true,
+          options: [
+            { value: "api", label: "API" },
+            { value: "ui", label: "UI" },
+          ],
+        },
+      ],
+    });
+
+    let view = controller.getViewModel();
+    assert.equal(view.form.formId, "direct-form");
+    assert.equal(view.form.currentFieldId, "name");
+    assert.equal(view.form.fields.length, 5);
+
+    assert.throws(() => controller.submitForm(), /Form validation failed/);
+    view = controller.getViewModel();
+    assert.equal(view.form.formId, "direct-form");
+    assert.match(view.form.error, /Field 'Name' is required/);
+    assert.match(view.logText, /Field 'Name' is required/);
+
+    assert.throws(() => controller.updateFormField("missing", "value"), /Unknown form field/);
+    assert.equal(controller.getViewModel().form.currentFieldId, "name");
+
+    controller.updateFormField("name", "Ada");
+    controller.updateFormField("notes", "Line 1\nLine 2");
+    controller.updateFormField("enabled", true);
+    controller.updateFormField("mode", "safe");
+    controller.updateFormField("tags", ["api", "ui"]);
+    assert.equal(controller.getViewModel().form.error, null);
+    controller.submitForm();
+
+    const result = await request;
+    assert.deepEqual(result.values, {
+      name: "Ada",
+      notes: "Line 1\nLine 2",
+      enabled: true,
+      mode: "safe",
+      tags: ["api", "ui"],
+    });
+    assert.equal(controller.getViewModel().form, null);
+  });
+
+  it("handles help, scroll, folder toggle, invalid selection, and log clearing through direct methods", () => {
+    const controller = createController();
+    controller.mount();
+
+    const initial = controller.getViewModel();
+    assert.throws(() => controller.selectFlowIndex(999), /Invalid flow index/);
+    assert.equal(controller.getViewModel().selectedFlowIndex, initial.selectedFlowIndex);
+    controller.selectFlowKey("flow:auto-common");
+    assert.equal(controller.getViewModel().flowItems[controller.getViewModel().selectedFlowIndex].key, "flow:auto-common");
+    controller.selectFlowId("auto-common");
+    assert.equal(controller.getViewModel().flowItems[controller.getViewModel().selectedFlowIndex].key, "flow:auto-common");
+
+    controller.toggleFolder("folder:custom");
+    assert.equal(controller.getViewModel().flowItems[0].label, "▾ custom");
+    assert.throws(() => controller.toggleFolder("folder:missing"), /Unknown visible folder key/);
+    assert.equal(controller.getViewModel().flowItems[0].label, "▾ custom");
+
+    controller.showHelp(true);
+    assert.equal(controller.getViewModel().helpVisible, true);
+    controller.setScrollOffset("help", 999);
+    assert.ok(controller.getViewModel().helpScrollOffset > 0);
+    controller.scrollPane("help", { delta: -999 });
+    assert.equal(controller.getViewModel().helpScrollOffset, 0);
+
+    controller.appendLog("before clear");
+    controller.clearLog();
+    assert.equal(controller.getViewModel().logText, "Log cleared.");
+    controller.destroy();
+  });
 });

@@ -1,4 +1,14 @@
-import type { UserInputFormDefinition, UserInputFormValues } from "../user-input.js";
+import type { UserInputFieldDefinition, UserInputFormDefinition, UserInputFormValues } from "../user-input.js";
+
+export type InteractiveConfirmationAction = "resume" | "continue" | "restart" | "cancel" | "ok" | "stop";
+
+export type InteractiveConfirmationViewModel = {
+  kind: "run" | "interrupt" | "exit";
+  flowId: string | null;
+  text: string;
+  actions: InteractiveConfirmationAction[];
+  selectedAction: InteractiveConfirmationAction;
+};
 
 export type InteractiveFormViewModel = {
   title: string;
@@ -7,6 +17,9 @@ export type InteractiveFormViewModel = {
   formId: string;
   definition: UserInputFormDefinition;
   values: UserInputFormValues;
+  fields: UserInputFieldDefinition[];
+  currentFieldId: string;
+  error: string | null;
 };
 
 export type InteractiveSessionViewModel = {
@@ -35,5 +48,6 @@ export type InteractiveSessionViewModel = {
   logText: string;
   logScrollOffset: number;
   confirmText: string | null;
+  confirmation: InteractiveConfirmationViewModel | null;
   form: InteractiveFormViewModel | null;
 };
