@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentWeaver Operator Console</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="identity">
+        <h1 id="app-title">AgentWeaver</h1>
+        <p id="header-text">Waiting for session snapshot.</p>
+      </div>
+      <div class="status-strip" aria-label="Session status">
+        <span id="connection-state" class="connection connection-connecting">Connecting</span>
+        <span id="session-status">Idle</span>
+      </div>
+      <div class="topbar-actions">
+        <button id="run-button" type="button">Run</button>
+        <button id="interrupt-button" type="button">Interrupt</button>
+        <button id="help-button" type="button" aria-pressed="false">Help</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="flows-pane" aria-label="Flows">
+        <div class="pane-heading">
+          <h2 id="flows-title">Flows</h2>
+        </div>
+        <div id="flows-list" class="flows-list" role="tree" tabindex="0"></div>
+      </aside>
+
+      <section class="details-pane" aria-label="Selected flow details">
+        <div class="pane-heading">
+          <h2>Flow Details</h2>
+        </div>
+        <pre id="description-text" class="text-panel compact">No flow selected.</pre>
+        <div class="split-panels">
+          <section class="work-panel" aria-label="Progress">
+            <div class="pane-heading">
+              <h2 id="progress-title">Progress</h2>
+            </div>
+            <pre id="progress-text" class="text-panel">No progress yet.</pre>
+          </section>
+          <section class="work-panel" aria-label="Task summary">
+            <div class="pane-heading">
+              <h2 id="summary-title">Task Summary</h2>
+            </div>
+            <pre id="summary-text" class="text-panel">No task summary yet.</pre>
+          </section>
+        </div>
+      </section>
+
+      <section class="log-pane" aria-label="Activity log">
+        <div class="pane-heading">
+          <h2 id="log-title">Activity</h2>
+          <button id="clear-log-button" type="button">Clear Log</button>
+        </div>
+        <pre id="log-text" class="text-panel log-output"></pre>
+      </section>
+
+      <section id="help-panel" class="help-panel" aria-label="Help" hidden>
+        <div class="pane-heading">
+          <h2>Help</h2>
+          <button id="close-help-button" type="button">Close</button>
+        </div>
+        <pre id="help-text" class="text-panel">No help is available.</pre>
+      </section>
+    </main>
+  </div>
+
+  <div id="modal-root" class="modal-root" aria-live="polite"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
