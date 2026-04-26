@@ -187,6 +187,16 @@ describe("interactive controller", () => {
     assert.match(view.form?.content ?? "", /Hint: DEMO-1234/);
   });
 
+  it("updates the scope and branch label together", () => {
+    const controller = createController();
+
+    controller.setScope("ag-112@abcd1234", null, "AG-112");
+
+    const view = controller.getViewModel();
+    assert.match(view.header, /Scope ag-112@abcd1234/);
+    assert.match(view.header, /AG-112$/);
+  });
+
   it("renders text input box at the provided modal width before typing", () => {
     const controller = createController();
     controller.requestUserInput({

@@ -184,7 +184,7 @@ export function createWebInteractiveSession(
     requestUserInput: (form) => controller.requestUserInput(form),
     setSummary: (markdown) => controller.setSummary(markdown),
     clearSummary: () => controller.clearSummary(),
-    setScope: (scopeKey, jiraIssueKey) => controller.setScope(scopeKey, jiraIssueKey),
+    setScope: (scopeKey, jiraIssueKey, gitBranchName) => controller.setScope(scopeKey, jiraIssueKey, gitBranchName),
     appendLog: (text) => controller.appendLog(text),
     setFlowFailed: (flowId) => controller.setFlowFailed(flowId),
     interruptActiveForm: (message = "Flow interrupted by user.") => {

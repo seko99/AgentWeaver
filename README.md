@@ -361,6 +361,7 @@ Artifacts and flow state are stored under the current project scope. In practice
 - Jira-backed runs usually use the Jira issue key as scope
 - non-Jira runs can fall back to a git-derived scope
 - `--scope <name>` lets you override the default for supported commands
+- interactive and web sessions automatically switch the branch-derived scope after the git branch changes, unless the session was started with an explicit Jira argument or `--scope`
 
 The runtime uses artifacts as the contract between stages, including markdown outputs and structured JSON files validated against schemas.
 

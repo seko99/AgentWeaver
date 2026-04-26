@@ -44,6 +44,7 @@ describe("interactive state bootstrap", () => {
     assert.equal(state.focusedPane, "flows");
     assert.equal(state.summaryVisible, true);
     assert.equal(state.flowTreeKeys[0], "folder:default");
+    assert.equal(state.gitBranchName, "feature/ink");
   });
 
   it("keeps technical subfolders collapsed by default and selects the first visible flow", () => {
